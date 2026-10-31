@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Text the reader needs. Ruling R13 and R18: reader keys live here, never in the shared
+  strings.xml, so parallel units cannot collide on one file. Android merges every values/*.xml,
+  so the keys still resolve as com.shinsaikou.i18n.R.string.*.
+
+  Keys a vendored reader file references keep upstream's name and upstream's English text. Keys that are
+  fresh are marked as such.
+-->
+<resources>
+    <!-- Fresh. Contract 07 section 3.3: an adjacent chapter failed while a chapter is already open. -->
+    <string name="reader_chapter_load_error">Could not load the chapter</string>
+
+    <!-- Fresh. Plan unit K2 item 4: a reader restored into a chapter that is gone, and so is the one it was started on. -->
+    <string name="reader_chapter_gone">This chapter is no longer in the chapter list</string>
+
+    <!-- Fresh. Contract 07 section 4.4: a page whose format no registered decoder reads. -->
+    <string name="reader_unsupported_format">Unsupported image format: %1$s</string>
+
+    <!-- Fresh. A page whose bytes arrived but could not be turned into a picture. -->
+    <string name="reader_page_decode_error">The image is damaged or could not be read</string>
+
+    <!--
+      Fresh. Phase 4 unit BN: a note on one page of a chapter. Upstream has no page notes, so the words
+      are Saikou's: the page sheet's fourth button, the one-field dialog it opens, and the bottom
+      bar's marker while the page on screen has a note.
+    -->
+    <string name="action_page_note">Note</string>
+    <string name="page_note_title">Page note</string>
+    <string name="page_note_empty_removes">Leave it empty to remove the note</string>
+    <string name="page_note_marker">This page has a note</string>
+
+    <!-- Fresh. Phase 5 unit FX, R128 carry-over 1: a note saved after its entry was removed from the database. -->
+    <string name="note_not_saved_entry_removed">Couldn\'t save the note: this entry was removed</string>
+
+    <!--
+      Every key below is vendored text: a vendored reader file references it by upstream's name and
+      this is upstream v0.20.4's English string, so a later translation import lines up.
+    -->
+    <string name="action_apply">Apply</string>
+    <string name="action_bar_up_description">Navigate up</string>
+    <string name="action_bookmark">Bookmark chapter</string>
+    <string name="action_menu">Menu</string>
+    <string name="action_menu_overflow_description">More options</string>
+    <string name="action_next_chapter">Next chapter</string>
+    <string name="action_open_in_browser">Open in browser</string>
+    <string name="action_open_in_web_view">Open in WebView</string>
+    <string name="action_previous_chapter">Previous chapter</string>
+    <string name="action_remove_bookmark">Unbookmark chapter</string>
+    <string name="action_revert_to_default">Revert to default</string>
+    <string name="action_save">Save</string>
+    <string name="action_settings">Settings</string>
+    <string name="automatic_background">Auto</string>
+    <string name="black_background">Black</string>
+    <string name="color_filter_a_value">Alpha</string>
+    <string name="color_filter_b_value">Blue</string>
+    <string name="color_filter_g_value">Green</string>
+    <string name="color_filter_r_value">Red</string>
+    <string name="confirm_set_image_as_cover">Use this image as cover art?</string>
+    <string name="cover_updated">Cover updated</string>
+    <string name="custom_filter">Custom filter</string>
+    <string name="decode_image_error">The image couldn\'t be loaded</string>
+    <string name="disabled_nav">Disabled</string>
+    <string name="edge_nav">Edge</string>
+    <string name="filter_mode_darken">Burn / Darken</string>
+    <string name="filter_mode_lighten">Dodge / Lighten</string>
+    <string name="filter_mode_multiply">Multiply</string>
+    <string name="filter_mode_overlay">Overlay</string>
+    <string name="filter_mode_screen">Screen</string>
+    <string name="gray_background">Gray</string>
+    <string name="kindlish_nav">Kindle-ish</string>
+    <string name="label_default">Default</string>
+    <string name="label_downloaded">Downloaded</string>
+    <string name="left_to_right_viewer">Paged (left to right)</string>
+    <string name="l_nav">L shaped</string>
+    <string name="loader_not_implemented_error">Source not found</string>
+    <string name="loading">Loading…</string>
+    <string name="nav_zone_left">Left</string>
+    <string name="nav_zone_next">Next</string>
+    <string name="nav_zone_prev">Prev</string>
+    <string name="nav_zone_right">Right</string>
+    <string name="pager_viewer">Paged</string>
+    <string name="picture_saved">Picture saved</string>
+    <string name="pref_always_show_chapter_transition">Always show chapter transition</string>
+    <string name="pref_category_for_this_series">For this series</string>
+    <string name="pref_category_general">General</string>
+    <string name="pref_category_reading_mode">Reading mode</string>
+    <string name="pref_color_filter_mode">Color filter blend mode</string>
+    <string name="pref_crop_borders">Crop borders</string>
+    <string name="pref_custom_brightness">Custom brightness</string>
+    <string name="pref_custom_color_filter">Custom color filter</string>
+    <string name="pref_cutout_short">Show content in cutout area</string>
+    <string name="pref_double_tap_zoom">Double tap to zoom</string>
+    <string name="pref_dual_page_invert">Invert split page placement</string>
+    <string name="pref_dual_page_split">Split wide pages</string>
+    <string name="pref_flash_duration">Flash duration</string>
+    <string name="pref_flash_duration_summary">%1$s ms</string>
+    <string name="pref_flash_page">Flash on page change</string>
+    <string name="pref_flash_page_interval">Flash every</string>
+    <string name="pref_flash_style_black">Black</string>
+    <string name="pref_flash_style_white">White</string>
+    <string name="pref_flash_style_white_black">White and Black</string>
+    <string name="pref_flash_with">Flash with</string>
+    <string name="pref_fullscreen">Fullscreen</string>
+    <string name="pref_grayscale">Grayscale</string>
+    <string name="pref_high">High</string>
+    <string name="pref_highest">Highest</string>
+    <string name="pref_image_scale_type">Scale type</string>
+    <string name="pref_inverted_colors">Inverted</string>
+    <string name="pref_keep_screen_on">Keep screen on</string>
+    <string name="pref_landscape_zoom">Automatically zoom into wide images</string>
+    <string name="pref_low">Low</string>
+    <string name="pref_lowest">Lowest</string>
+    <string name="pref_navigate_pan">Pan wide images</string>
+    <string name="pref_page_rotate">Rotate wide pages to fit</string>
+    <string name="pref_page_rotate_invert">Flip orientation of rotated wide pages</string>
+    <string name="pref_page_transitions">Animate page transitions</string>
+    <string name="pref_reader_theme">Background color</string>
+    <string name="pref_read_with_long_tap">Show actions on long tap</string>
+    <string name="pref_read_with_tapping_inverted">Invert tap zones</string>
+    <string name="pref_show_page_number">Show page number</string>
+    <string name="pref_vertical_navigator">Use vertical chapter navigator in</string>
+    <string name="pref_vertical_navigator_height">Vertical navigator height</string>
+    <string name="pref_viewer_nav">Tap zones</string>
+    <string name="pref_webtoon_disable_zoom_out">Disable zoom out</string>
+    <string name="pref_webtoon_side_padding">Side padding</string>
+    <string name="pref_webtoon_vertical_navigator_on_left">Place vertical navigator on the left side</string>
+    <string name="pref_zoom_start">Zoom start position</string>
+    <string name="right_and_left_nav">Right and Left</string>
+    <string name="right_to_left_viewer">Paged (right to left)</string>
+    <string name="rotation_force_landscape">Locked landscape</string>
+    <string name="rotation_force_portrait">Locked portrait</string>
+    <string name="rotation_free">Free</string>
+    <string name="rotation_landscape">Landscape</string>
+    <string name="rotation_portrait">Portrait</string>
+    <string name="rotation_reverse_portrait">Reverse portrait</string>
+    <string name="rotation_type">Rotation</string>
+    <string name="scale_type_fit_height">Fit height</string>
+    <string name="scale_type_fit_screen">Fit screen</string>
+    <string name="scale_type_fit_width">Fit width</string>
+    <string name="scale_type_original_size">Original size</string>
+    <string name="scale_type_smart_fit">Smart fit</string>
+    <string name="scale_type_stretch">Stretch</string>
+    <string name="set_as_cover">Set as cover</string>
+    <string name="spen_next_page">Next page</string>
+    <string name="spen_previous_page">Previous page</string>
+    <string name="tapping_inverted_both">Both</string>
+    <string name="tapping_inverted_horizontal">Horizontal</string>
+    <string name="tapping_inverted_none">None</string>
+    <string name="tapping_inverted_vertical">Vertical</string>
+    <string name="transition_current">Current:</string>
+    <string name="transition_finished">Finished:</string>
+    <string name="transition_next">Next:</string>
+    <string name="transition_no_next">There\'s no next chapter</string>
+    <string name="transition_no_previous">There\'s no previous chapter</string>
+    <string name="transition_pages_error">Failed to load pages: %1$s</string>
+    <string name="transition_pages_loading">Loading pages…</string>
+    <string name="transition_previous">Previous:</string>
+    <string name="unknown_error">Unknown error</string>
+    <string name="vertical_plus_viewer">Long strip with gaps</string>
+    <string name="vertical_viewer">Paged (vertical)</string>
+    <string name="viewer">Reading mode</string>
+    <string name="webtoon_viewer">Long strip</string>
+    <string name="white_background">White</string>
+    <string name="zoom_start_automatic">Automatic</string>
+    <string name="zoom_start_center">Center</string>
+    <string name="zoom_start_left">Left</string>
+    <string name="zoom_start_right">Right</string>
+
+    <plurals name="missing_chapters_warning">
+    <item quantity="one">Skipping %d chapter, either the source is missing it or it has been filtered out</item>
+    <item quantity="other">Skipping %d chapters, either the source is missing them or they have been filtered out</item>
+    </plurals>
+    <plurals name="pref_pages">
+    <item quantity="one">1 page</item>
+    <item quantity="other">%1$s pages</item>
+    </plurals>
+</resources>

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- LibraryUpdateWorker.canRunAutomatically reads ConnectivityManager on API 27 and below.
+         :app declares this too, but a library module has to declare what its own code calls. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <application>
+        <receiver
+            android:name="com.shinsaikou.libraryupdate.LibraryUpdateCancelReceiver"
+            android:exported="false" />
+
+        <!-- LibraryUpdateWorker calls setForegroundAsync with a dataSync ForegroundInfo. WorkManager hosts
+             that notification in its own service, so the type has to be declared by every module
+             that asks for it, not only by :app. -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
+    </application>
+</manifest>

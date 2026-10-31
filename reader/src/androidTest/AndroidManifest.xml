@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Test only. A bare ComponentActivity gives PagerChapterTransitionTest a window to lay a real pager
+  out in, with the view tree owners the transition holder's Compose view needs.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <activity
+            android:name="androidx.activity.ComponentActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Saikou.Reader" />
+    </application>
+</manifest>

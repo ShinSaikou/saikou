@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Long-press shortcuts. Each action string is the one MainIntents already maps in
+    MainIntents.destinationOf, so the launcher and the notifications reach the navigation host
+    through exactly one mapping. targetPackage is the applicationId, substituted at merge time.
+-->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <shortcut
+        android:shortcutId="library"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_library"
+        android:shortcutShortLabel="@string/shortcut_library_short"
+        android:shortcutLongLabel="@string/shortcut_library_long">
+        <intent
+            android:action="com.shinsaikou.SHORTCUT_LIBRARY"
+            android:targetPackage="${applicationId}"
+            android:targetClass="com.shinsaikou.ui.main.MainActivity" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="updates"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_updates"
+        android:shortcutShortLabel="@string/shortcut_updates_short"
+        android:shortcutLongLabel="@string/shortcut_updates_long">
+        <intent
+            android:action="com.shinsaikou.SHORTCUT_UPDATES"
+            android:targetPackage="${applicationId}"
+            android:targetClass="com.shinsaikou.ui.main.MainActivity" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="history"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_history"
+        android:shortcutShortLabel="@string/shortcut_history_short"
+        android:shortcutLongLabel="@string/shortcut_history_long">
+        <intent
+            android:action="com.shinsaikou.SHORTCUT_HISTORY"
+            android:targetPackage="${applicationId}"
+            android:targetClass="com.shinsaikou.ui.main.MainActivity" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="browse"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_browse"
+        android:shortcutShortLabel="@string/shortcut_browse_short"
+        android:shortcutLongLabel="@string/shortcut_browse_long">
+        <intent
+            android:action="com.shinsaikou.SHORTCUT_BROWSE"
+            android:targetPackage="${applicationId}"
+            android:targetClass="com.shinsaikou.ui.main.MainActivity" />
+    </shortcut>
+</shortcuts>

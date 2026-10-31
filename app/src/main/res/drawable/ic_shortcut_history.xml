@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Adaptive rather than a bare glyph, so the shortcut carries its own ground and stays
+    legible whatever colour the launcher puts behind it.
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@drawable/ic_launcher_background" />
+    <foreground android:drawable="@drawable/ic_shortcut_history_foreground" />
+</adaptive-icon>

@@ -1,0 +1,310 @@
+-- Vendored from upstream v0.20.4: data/src/main/sqldelight/tachiyomi/data/chapters.sq (modified: yes)
+-- Modified: memo loses its SQL default, volume and deleted_at are added, the index set is the one
+-- in 05-data 2.5, and the timestamp and change-log triggers are 2.17 and 2.18. Queries are 3.5, plus
+-- getDeletedChaptersByMangaId for a downloaded chapter the source lists again, and
+-- getScanlatorsByMangaId leaves soft-deleted rows out. Schema version 2 (phase 3 unit C) adds the
+-- bookmark-note clock, the restore clock and the key of a hard delete. update's clearVolume is phase
+-- 4 unit VG's, for a name that lost its volume marker, and its clearDeletedAt phase 4 unit CR's, for
+-- that chapter's restore. syncGetMangaIdsByIds is phase 4 unit NB's, for the push's whole-entry cut.
+-- insertSyncing, insertSyncingTen and resetIsSyncingByMangaId are phase 5 unit SC2's, for a
+-- restore's chapters, and backupGetChaptersByMangaIds for the export's pages. syncGetSourceOrders
+-- and syncSetSourceOrder renumber an entry's chapters after a pull inserted some. Schema version 4
+-- drops five indexes (migrations/3.sqm): url alone, which only the uncalled getChapterByUrl used,
+-- so that query went too; manga_id alone, a prefix of (manga_id, read) and (manga_id, url), which
+-- take every one of its lookups and scans; the partial last_page_read, which no plan used; and
+-- read and date_fetch, which served only updatesView.sq's getUpdatesByReadStatus and
+-- getRecentUpdates, deleted with them because nothing called them.
+
+import kotlin.Boolean;
+import kotlinx.serialization.json.JsonObject;
+
+CREATE TABLE chapters(
+    _id INTEGER NOT NULL PRIMARY KEY,
+    manga_id INTEGER NOT NULL,
+    url TEXT NOT NULL,
+    name TEXT NOT NULL,
+    scanlator TEXT,
+    read INTEGER AS Boolean NOT NULL,
+    bookmark INTEGER AS Boolean NOT NULL,
+    last_page_read INTEGER NOT NULL,
+    chapter_number REAL NOT NULL,
+    source_order INTEGER NOT NULL,
+    date_fetch INTEGER NOT NULL,
+    date_upload INTEGER NOT NULL,
+    last_modified_at INTEGER NOT NULL DEFAULT 0,
+    version INTEGER NOT NULL DEFAULT 0,
+    is_syncing INTEGER NOT NULL DEFAULT 0,
+    memo BLOB AS JsonObject NOT NULL,
+    volume REAL,
+    deleted_at INTEGER,
+    bookmark_notes_modified_at INTEGER,
+    restored_at INTEGER,
+    FOREIGN KEY(manga_id) REFERENCES mangas (_id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_chapters_manga_id_url ON chapters(manga_id, url);
+CREATE INDEX idx_chapters_manga_id_read ON chapters(manga_id, read);
+CREATE INDEX idx_chapters_manga_id_bookmark ON chapters(manga_id, bookmark) WHERE bookmark = 1;
+CREATE INDEX idx_chapters_date_upload ON chapters(date_upload);
+CREATE INDEX idx_chapters_is_syncing ON chapters(is_syncing) WHERE is_syncing = 1;
+CREATE INDEX idx_chapters_deleted_at ON chapters(deleted_at) WHERE deleted_at IS NOT NULL;
+
+-- The WHEN guard stops the timestamp trigger from firing on its own nested update.
+CREATE TRIGGER update_last_modified_at_chapters AFTER UPDATE ON chapters
+WHEN new.last_modified_at = old.last_modified_at
+BEGIN
+    UPDATE chapters SET last_modified_at = strftime('%s', 'now') * 1000 WHERE _id = new._id;
+END;
+
+CREATE TRIGGER update_chapter_version AFTER UPDATE ON chapters
+WHEN new.is_syncing = 0 AND (
+    new.read != old.read OR new.bookmark != old.bookmark OR
+    new.last_page_read != old.last_page_read OR
+    new.url != old.url OR new.name != old.name OR new.scanlator IS NOT old.scanlator OR
+    new.chapter_number != old.chapter_number OR new.date_upload != old.date_upload OR
+    new.volume IS NOT old.volume OR new.deleted_at IS NOT old.deleted_at
+)
+BEGIN
+    UPDATE chapters SET version = version + 1 WHERE _id = new._id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    SELECT 'chapter', new._id, CASE WHEN new.deleted_at IS NULL THEN 'upsert' ELSE 'delete' END,
+           strftime('%s', 'now') * 1000
+    WHERE (SELECT favorite FROM mangas WHERE _id = new.manga_id) = 1;
+END;
+
+CREATE TRIGGER update_manga_version_from_chapter AFTER UPDATE ON chapters
+WHEN new.is_syncing = 0 AND (
+    new.read != old.read OR new.bookmark != old.bookmark OR new.last_page_read != old.last_page_read
+)
+BEGIN
+    UPDATE mangas SET version = version + 1
+    WHERE _id = new.manga_id AND is_syncing = 0;
+END;
+
+CREATE TRIGGER insert_chapter_change AFTER INSERT ON chapters
+WHEN new.is_syncing = 0 AND (SELECT favorite FROM mangas WHERE _id = new.manga_id) = 1
+BEGIN
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('chapter', new._id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+-- The row is gone when the push reads the log, so the delete records the natural key: the
+-- manga's (source, url) and the chapter's url.
+CREATE TRIGGER delete_chapter_change AFTER DELETE ON chapters
+WHEN old.is_syncing = 0 AND (SELECT favorite FROM mangas WHERE _id = old.manga_id) = 1
+BEGIN
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at, key_source,
+        key_manga_url, key_chapter_url)
+    SELECT 'chapter', old._id, 'delete', strftime('%s', 'now') * 1000, source, url, old.url
+    FROM mangas
+    WHERE _id = old.manga_id;
+END;
+
+-- A restore's clock (phase 3 Q6): a chapter is deleted while its newest deleted_at is newer than
+-- its newest restored_at. The stamp also passes the tombstone it clears, because deleted_at is the
+-- app's clock in milliseconds and strftime's is whole seconds.
+CREATE TRIGGER update_chapter_restored_at AFTER UPDATE OF deleted_at ON chapters
+WHEN new.is_syncing = 0 AND old.deleted_at IS NOT NULL AND new.deleted_at IS NULL
+BEGIN
+    UPDATE chapters
+    SET restored_at = max(strftime('%s', 'now') * 1000, coalesce(restored_at, 0) + 1, old.deleted_at + 1)
+    WHERE _id = new._id;
+END;
+
+getChapterById:
+SELECT *
+FROM chapters
+WHERE _id = :id;
+
+getChaptersByIds:
+SELECT *
+FROM chapters
+WHERE _id IN :ids;
+
+getChaptersByMangaId:
+SELECT C.*
+FROM chapters C
+LEFT JOIN excluded_scanlators ES ON C.manga_id = ES.manga_id AND C.scanlator = ES.scanlator
+WHERE C.manga_id = :mangaId AND C.deleted_at IS NULL
+  AND (:applyScanlatorFilter = 0 OR ES.scanlator IS NULL);
+
+-- getChaptersByMangaId with applyScanlatorFilter 0 for a page of entries (phase 5 unit SC2). The
+-- order is the one getChaptersByMangaId has from its plan, idx_chapters_manga_id_read (unread, then
+-- read, each by id), stated here so the export does not depend on the planner; the same index
+-- serves it without a sort.
+backupGetChaptersByMangaIds:
+SELECT *
+FROM chapters
+WHERE manga_id IN :mangaIds AND deleted_at IS NULL
+ORDER BY manga_id, read, _id;
+
+getScanlatorsByMangaId:
+SELECT DISTINCT scanlator
+FROM chapters
+WHERE manga_id = :mangaId AND deleted_at IS NULL AND scanlator IS NOT NULL AND scanlator != '';
+
+getBookmarkedChaptersByMangaId:
+SELECT *
+FROM chapters
+WHERE bookmark = 1 AND manga_id = :mangaId AND deleted_at IS NULL;
+
+getChapterByUrlAndMangaId:
+SELECT *
+FROM chapters
+WHERE url = :chapterUrl AND manga_id = :mangaId
+LIMIT 1;
+
+removeChaptersWithIds:
+DELETE FROM chapters
+WHERE _id IN :chapterIds;
+
+-- A tombstone passes the row's last restore (R82), as mangas.sq's softDelete does.
+softDelete:
+UPDATE chapters
+SET deleted_at = max(:now, coalesce(restored_at, 0) + 1)
+WHERE _id IN :chapterIds;
+
+-- The soft-deleted rows of one manga: the chapters a sync kept because they had a download.
+getDeletedChaptersByMangaId:
+SELECT *
+FROM chapters
+WHERE manga_id = :mangaId AND deleted_at IS NOT NULL;
+
+resetIsSyncing:
+UPDATE chapters
+SET is_syncing = 0
+WHERE is_syncing = 1;
+
+insert:
+INSERT INTO chapters(manga_id, url, name, scanlator, read, bookmark, last_page_read, chapter_number,
+    source_order, date_fetch, date_upload, last_modified_at, version, memo, volume, deleted_at)
+VALUES (:mangaId, :url, :name, :scanlator, :read, :bookmark, :lastPageRead, :chapterNumber,
+    :sourceOrder, :dateFetch, :dateUpload, 0, :version, :memo, :volume, :deletedAt);
+
+-- A restore's chapter (phase 5 unit SC2): insert's columns with the row's latch up, so
+-- insert_chapter_change, whose WHEN reads new.is_syncing, logs nothing. The restore lowers the latch
+-- with resetIsSyncingByMangaId once the entry's writes are done; the full export the restore forces
+-- (restoredSinceSync, R86) carries the rows instead of one log row each. last_modified_at goes in as
+-- -1, a placeholder only the lowering sees: it writes the 0 insert writes, and the change from -1 is
+-- what keeps update_last_modified_at_chapters from stamping the row (see resetIsSyncingByMangaId).
+insertSyncing:
+INSERT INTO chapters(manga_id, url, name, scanlator, read, bookmark, last_page_read, chapter_number,
+    source_order, date_fetch, date_upload, last_modified_at, version, is_syncing, memo, volume, deleted_at)
+VALUES (:mangaId, :url, :name, :scanlator, :read, :bookmark, :lastPageRead, :chapterNumber,
+    :sourceOrder, :dateFetch, :dateUpload, -1, :version, 1, :memo, :volume, :deletedAt);
+
+-- insertSyncing for ten chapters in one statement (phase 5 unit SC2's item 4): 5,000 chapters of one
+-- entry in one transaction took 96 ms this way on saikou_pixel9_4g, against 200 ms for insertSyncing
+-- and a last-id read per row and 159 ms for insertSyncing alone (medians of seven rounds). The
+-- restore inserts an entry's chapters ten at a time through it and the rest through insertSyncing,
+-- with insertSyncing's latch and last_modified_at placeholder.
+insertSyncingTen:
+INSERT INTO chapters(manga_id, url, name, scanlator, read, bookmark, last_page_read, chapter_number,
+    source_order, date_fetch, date_upload, last_modified_at, version, is_syncing, memo, volume, deleted_at)
+VALUES
+    (:mangaId0, :url0, :name0, :scanlator0, :read0, :bookmark0, :lastPageRead0, :chapterNumber0,
+        :sourceOrder0, :dateFetch0, :dateUpload0, -1, :version0, 1, :memo0, :volume0, :deletedAt0),
+    (:mangaId1, :url1, :name1, :scanlator1, :read1, :bookmark1, :lastPageRead1, :chapterNumber1,
+        :sourceOrder1, :dateFetch1, :dateUpload1, -1, :version1, 1, :memo1, :volume1, :deletedAt1),
+    (:mangaId2, :url2, :name2, :scanlator2, :read2, :bookmark2, :lastPageRead2, :chapterNumber2,
+        :sourceOrder2, :dateFetch2, :dateUpload2, -1, :version2, 1, :memo2, :volume2, :deletedAt2),
+    (:mangaId3, :url3, :name3, :scanlator3, :read3, :bookmark3, :lastPageRead3, :chapterNumber3,
+        :sourceOrder3, :dateFetch3, :dateUpload3, -1, :version3, 1, :memo3, :volume3, :deletedAt3),
+    (:mangaId4, :url4, :name4, :scanlator4, :read4, :bookmark4, :lastPageRead4, :chapterNumber4,
+        :sourceOrder4, :dateFetch4, :dateUpload4, -1, :version4, 1, :memo4, :volume4, :deletedAt4),
+    (:mangaId5, :url5, :name5, :scanlator5, :read5, :bookmark5, :lastPageRead5, :chapterNumber5,
+        :sourceOrder5, :dateFetch5, :dateUpload5, -1, :version5, 1, :memo5, :volume5, :deletedAt5),
+    (:mangaId6, :url6, :name6, :scanlator6, :read6, :bookmark6, :lastPageRead6, :chapterNumber6,
+        :sourceOrder6, :dateFetch6, :dateUpload6, -1, :version6, 1, :memo6, :volume6, :deletedAt6),
+    (:mangaId7, :url7, :name7, :scanlator7, :read7, :bookmark7, :lastPageRead7, :chapterNumber7,
+        :sourceOrder7, :dateFetch7, :dateUpload7, -1, :version7, 1, :memo7, :volume7, :deletedAt7),
+    (:mangaId8, :url8, :name8, :scanlator8, :read8, :bookmark8, :lastPageRead8, :chapterNumber8,
+        :sourceOrder8, :dateFetch8, :dateUpload8, -1, :version8, 1, :memo8, :volume8, :deletedAt8),
+    (:mangaId9, :url9, :name9, :scanlator9, :read9, :bookmark9, :lastPageRead9, :chapterNumber9,
+        :sourceOrder9, :dateFetch9, :dateUpload9, -1, :version9, 1, :memo9, :volume9, :deletedAt9);
+
+-- Lowers the latch insertSyncing raised, one statement per restored entry (phase 5 unit SC2). It
+-- changes no column update_chapter_version or update_manga_version_from_chapter compares, so neither
+-- moves a version or logs a row; update_chapter_restored_at is OF deleted_at and does not fire.
+-- last_modified_at goes from insertSyncing's -1 to 0, the value insert gives a chapter, so a
+-- restored chapter's clock is what it was before the latch, and update_last_modified_at_chapters,
+-- whose WHEN wants the column unchanged, does not stamp it. A chapter the restore merged had its
+-- latch lowered by its own update first, so the is_syncing = 1 filter leaves its clock alone.
+resetIsSyncingByMangaId:
+UPDATE chapters
+SET is_syncing = 0, last_modified_at = 0
+WHERE manga_id = :mangaId AND is_syncing = 1;
+
+selectLastInsertedRowId:
+SELECT last_insert_rowid();
+
+-- :clearVolume = 1 writes a null volume, which the coalescing cannot: a chapter whose name lost its
+-- volume marker (phase 4 unit VG). :clearDeletedAt = 1 writes a null deleted_at the same way: a
+-- soft-deleted chapter the source lists again (phase 4 unit CR), which update_chapter_restored_at
+-- stamps. Each is this statement, not a second one, so the chapter's version moves once for the one
+-- edit, as the sync merge's version comparison expects.
+update:
+UPDATE chapters SET
+    manga_id = coalesce(:mangaId, manga_id), url = coalesce(:url, url), name = coalesce(:name, name),
+    scanlator = coalesce(:scanlator, scanlator), read = coalesce(:read, read),
+    bookmark = coalesce(:bookmark, bookmark), last_page_read = coalesce(:lastPageRead, last_page_read),
+    chapter_number = coalesce(:chapterNumber, chapter_number),
+    source_order = coalesce(:sourceOrder, source_order), date_fetch = coalesce(:dateFetch, date_fetch),
+    date_upload = coalesce(:dateUpload, date_upload), version = coalesce(:version, version),
+    is_syncing = coalesce(:isSyncing, is_syncing), memo = coalesce(:memo, memo),
+    volume = CASE WHEN :clearVolume = 1 THEN NULL ELSE coalesce(:volume, volume) END,
+    deleted_at = CASE WHEN :clearDeletedAt = 1 THEN NULL ELSE coalesce(:deletedAt, deleted_at) END
+WHERE _id = :chapterId;
+
+-- Phase 3 sync (unit E2): an apply writes a merged row whole under the row's is_syncing latch, as
+-- mangas.sq's sync statements do. source_order is set on an insert only; no rule merges it (R81).
+syncSetIsSyncing:
+UPDATE chapters
+SET is_syncing = :isSyncing
+WHERE _id = :chapterId;
+
+syncInsert:
+INSERT INTO chapters(manga_id, url, name, scanlator, read, bookmark, last_page_read, chapter_number,
+    source_order, date_fetch, date_upload, last_modified_at, version, is_syncing, memo, volume,
+    deleted_at, restored_at, bookmark_notes_modified_at)
+VALUES (:mangaId, :url, :name, :scanlator, :read, :bookmark, :lastPageRead, :chapterNumber,
+    :sourceOrder, :dateFetch, :dateUpload, 0, :version, 1, :memo, :volume,
+    :deletedAt, :restoredAt, :bookmarkNotesModifiedAt);
+
+syncUpdate:
+UPDATE chapters SET
+    read = :read, bookmark = :bookmark, last_page_read = :lastPageRead, date_fetch = :dateFetch,
+    version = :version, name = :name, scanlator = :scanlator, chapter_number = :chapterNumber,
+    date_upload = :dateUpload, volume = :volume, deleted_at = :deletedAt, restored_at = :restoredAt,
+    bookmark_notes_modified_at = :bookmarkNotesModifiedAt
+WHERE _id = :chapterId;
+
+syncSetNotesModifiedAt:
+UPDATE chapters
+SET bookmark_notes_modified_at = :modifiedAt
+WHERE _id = :chapterId;
+
+-- A manga's live chapters and the write of one's place, for the renumbering after a pull inserted
+-- chapters into it. No trigger reads source_order, so the write logs nothing and moves no version.
+syncGetSourceOrders:
+SELECT _id, source_order
+FROM chapters
+WHERE manga_id = :mangaId AND deleted_at IS NULL;
+
+syncSetSourceOrder:
+UPDATE chapters
+SET source_order = :sourceOrder
+WHERE _id = :chapterId;
+
+-- Every chapter of a manga, soft-deleted ones included, for a full export or a snapshot.
+syncGetByMangaId:
+SELECT *
+FROM chapters
+WHERE manga_id = :mangaId;
+
+-- The entry each of a push batch's chapters belongs to, for the push's whole-entry cut (phase 4
+-- unit NB).
+syncGetMangaIdsByIds:
+SELECT _id, manga_id
+FROM chapters
+WHERE _id IN :ids;

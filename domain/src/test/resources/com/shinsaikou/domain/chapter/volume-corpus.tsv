@@ -1,0 +1,61 @@
+# The volume parser's corpus (phase 4 unit VG): manga title, chapter name as the source sends it,
+# and the volume VolumeRecognition must read from it, or - for none. Every title is invented.
+# VolumeRecognitionTest reads every row; SyncVolumePushTest names a 3,000-entry library's chapters
+# from these rows in turn, so the share of names with a volume there is the share here.
+#
+# Volume markers, each form of upstream's volume tokens (v, ver, vol, version, volume).
+Glass Orchard	Vol.1 Ch.1	1
+Glass Orchard	Vol.1 Ch.2: The Gate	1
+Glass Orchard	Vol. 2 Ch. 10 - Rain	2
+Glass Orchard	Vol.02 Chapter 011	2
+Glass Orchard	Vol.12 Ch.105.5	12
+Glass Orchard	vol.0 ch.0: Prologue	0
+Paper Lantern Road	Volume 3 Chapter 21	3
+Paper Lantern Road	VOLUME 4 CHAPTER 30	4
+Paper Lantern Road	Volume.5 Chapter 41	5
+Paper Lantern Road	[Vol.6] Chapter 50	6
+Paper Lantern Road	Vol_07 Ch_061	7
+Paper Lantern Road	Vol-8 Ch-70	8
+Paper Lantern Road	vol9 ch80	9
+Paper Lantern Road	Vol.10 Ch.90	10
+Tin Harbour	Tin Harbour v01 c001	1
+Tin Harbour	Tin Harbour v01 c002	1
+Tin Harbour	v.2 c.010	2
+Tin Harbour	V3 Ch.20	3
+Tin Harbour	Ch.21 (Vol.3)	3
+Tin Harbour	Chapter 35: Volume 4 Begins	4
+Tin Harbour	Vol.100 Ch.1000	100
+Tin Harbour	Vol.3 Ch.12 v2	3
+# A title that carries a marker of its own is removed first, as for the chapter number.
+Moon Shelf Vol 9	Moon Shelf Vol 9 Chapter 3	-
+Moon Shelf Vol 9	Moon Shelf Vol 9 Vol.1 Chapter 3	1
+# A revision marker reads as a volume: v, ver and version are upstream's volume tokens.
+Salt Bridge	Ch. 12 v2	2
+Salt Bridge	Chapter 13 ver.2	2
+Salt Bridge	Chapter 14 (version 3)	3
+#
+# No marker: a chapter number alone, a title with digits, words that end in a token.
+Glass Orchard	Chapter 1	-
+Glass Orchard	Ch. 12: The Long Night	-
+Glass Orchard	Chapter 45: Level 2	-
+Glass Orchard	Chapter 9: Revolution 2	-
+Glass Orchard	Chapter 3: Evolve 2	-
+Glass Orchard	Episode 5	-
+Glass Orchard	Oneshot	-
+Glass Orchard	#12	-
+Glass Orchard	Chapter 20: V-Day	-
+Glass Orchard	Vol.TBD Ch.100	-
+Glass Orchard	Chapter 101: 1v1	-
+Glass Orchard	Chapter 102: Vs 2 Rivals	-
+# A number glued to another token.
+Salt Bridge	Chapter 7 (rev2)	-
+Salt Bridge	Chapter 8 [c2v3]	-
+Salt Bridge	Chapter 9 prev2	-
+# Seasons are not volumes: s and season stay out (the report gives the reasons).
+Night Ferry	S2 Episode 10	-
+Night Ferry	s2 ep. 11	-
+Night Ferry	Season 2 Episode 12	-
+Night Ferry	[Season 3] Ep. 1	-
+Night Ferry	Chapter 5: The King's 2 Swords	-
+Night Ferry	Chapter 6: Heroes 3 Days Later	-
+Night Ferry	Season 2 Vol.3 Ep. 12	3

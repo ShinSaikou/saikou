@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Contract 07 section 2.5. The three reader backgrounds; ReaderBackground decodes which applies. -->
+<resources>
+    <color name="reader_background_black">#000000</color>
+    <color name="reader_background_white">#FFFFFF</color>
+    <color name="reader_background_gray">#202125</color>
+</resources>

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Vendored from upstream v0.20.4: app/src/main/res/layout/reader_error.xml (modified: yes)
+
+  Modified: the "open in web view" button is deleted, not hidden. `:reader` cannot see the WebView
+  activity, `:app` owns it, and a stub that silently does nothing is worse than an absent branch
+  (decision D24). The two string keys are :i18n's, merged into the same resource table.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_gravity="center"
+    android:gravity="center"
+    android:orientation="vertical">
+
+    <TextView
+        android:id="@+id/error_message"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="8dp"
+        android:text="@string/decode_image_error"
+        android:textAppearance="?attr/textAppearanceBodyMedium" />
+
+    <eu.kanade.tachiyomi.ui.reader.viewer.ReaderButton
+        android:id="@+id/action_retry"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="8dp"
+        android:text="@string/action_retry" />
+
+</LinearLayout>

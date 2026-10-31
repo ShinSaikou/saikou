@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Checks and unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      # JDK 17 compiles; the Gradle daemon runs on 21 (gradle/gradle-daemon-jvm.properties).
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+
+      - uses: android-actions/setup-android@v4
+      - run: sdkmanager "platforms;android-37.0"
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Module graph, vendoring markers and unit tests
+        run: ./gradlew checkModuleGraph checkVendoringMarkers testDebugUnitTest
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.x"
+
+      - name: Tools tests
+        run: python3 -m unittest discover -s tools -p 'test_*.py'

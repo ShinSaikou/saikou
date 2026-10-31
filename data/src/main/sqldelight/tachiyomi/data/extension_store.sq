@@ -1,0 +1,53 @@
+-- Vendored from upstream v0.20.4: data/src/main/sqldelight/tachiyomi/data/extension_store.sq (modified: yes) adds updateIfSigningKey
+-- One row per configured index. signing_key holds the index's declared signing key; it is never
+-- logged, never shown, and never appears in a test fixture other than as 64 zeros.
+-- Device-local table: no sync triggers.
+
+import kotlin.Boolean;
+
+CREATE TABLE extension_store(
+    index_url TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    badge_label TEXT NOT NULL,
+    signing_key TEXT NOT NULL,
+    contact_website TEXT NOT NULL,
+    contact_discord TEXT,
+    is_legacy INTEGER AS Boolean NOT NULL,
+    extension_list_url TEXT
+);
+
+get:
+SELECT *
+FROM extension_store
+WHERE index_url = :indexUrl;
+
+getAll:
+SELECT *
+FROM extension_store;
+
+getCount:
+SELECT count(*)
+FROM extension_store;
+
+upsert:
+INSERT INTO extension_store(index_url, name, badge_label, signing_key, contact_website, contact_discord,
+    is_legacy, extension_list_url)
+VALUES (:indexUrl, :name, :badgeLabel, :signingKey, :contactWebsite, :contactDiscord, :isLegacy, :extensionListUrl)
+ON CONFLICT(index_url)
+DO UPDATE SET name = :name, badge_label = :badgeLabel, signing_key = :signingKey,
+    contact_website = :contactWebsite, contact_discord = :contactDiscord, is_legacy = :isLegacy,
+    extension_list_url = :extensionListUrl
+WHERE index_url = :indexUrl;
+
+-- Writes a refreshed descriptor only over a row that still exists with the key the refresh checked:
+-- a repository removed, or re-keyed, while its index was being fetched is left as it is now.
+updateIfSigningKey:
+UPDATE extension_store
+SET name = :name, badge_label = :badgeLabel, signing_key = :signingKey,
+    contact_website = :contactWebsite, contact_discord = :contactDiscord, is_legacy = :isLegacy,
+    extension_list_url = :extensionListUrl
+WHERE index_url = :indexUrl AND signing_key = :expectedSigningKey;
+
+delete:
+DELETE FROM extension_store
+WHERE index_url = :indexUrl;

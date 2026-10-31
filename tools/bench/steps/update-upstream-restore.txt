@@ -1,0 +1,15 @@
+# Restores a scenario's backup into upstream v0.20.4 through its own Restore backup screen (ruling R66).
+# Run by library_update_seed.sh from the base snapshot, with the backup pushed to /sdcard/Download
+# and its file name in BACKUP_NAME. Written in tools/bench/ui_steps.py's language, not run_steps.
+wait text=Library timeout=60
+tap text=More
+tap text=Settings
+tap text=Data and storage
+tap text=Restore backup
+# The system picker, from the storage root down to Download.
+tap text=sdk_gphone64_x86_64 timeout=30
+tap text=Download
+tap text={{BACKUP_NAME}}
+tap text=Restore
+# Notifications.ID_RESTORE_COMPLETE.
+notification ${UPSTREAM_PACKAGE}|-504 timeout=600

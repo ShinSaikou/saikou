@@ -1,0 +1,17 @@
+# Opens the reader on the benchmark's paged chapter and holds it there while page_turn.sh taps.
+# Contract 01 section 7.5. Used with tools/bench/page_turn.sh.
+#
+# Not `am start`. ReaderActivity is not an exported activity, so the shell is refused with a
+# permission denial (carry-over 11); instrumentation runs in the application's own uid and can
+# start it. Ending the instrumentation kills the application with it, so the test sleeps rather
+# than returning, and common.sh runs this line in the background.
+#
+# No row id appears here. The seeder inserts the rows and SQLite picks their ids, so a literal in
+# this file would name a different entry on the next device, or one of the owner's own. The test
+# resolves the ids the same way the seeder assigned them, from the fixture's own title.
+#
+# holdSeconds has to outlast this bench and the meminfo poll that follows it: meminfo is supposed
+# to read a process that is showing a chapter, and a hold that ended first would leave it reading
+# the launcher.
+am instrument -w -r -e class com.shinsaikou.bench.BenchContentTest#holdThePagedReader -e saikou.bench.holdSeconds 300 {{SAIKOU_INSTRUMENTATION}}
+assert-foreground {{SAIKOU_PACKAGE}}/com.shinsaikou.reader.ReaderActivity

@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Text the engine modules need: the Local source, the library update pass and the download
+  engine. Contract 06 section 6.2 lists the keys; the chapter-description plurals and
+  the three notification channel names are added here because the notifier of section 2.5 cannot
+  build its text without them. The backup keys of 6.2 belong to :backup and are not declared here.
+  action_cancel is already in the shared strings.xml and is not repeated.
+  English text derived from upstream v0.20.4 i18n/src/commonMain/moko-resources/base/strings.xml.
+-->
+<resources>
+    <!-- Local source -->
+    <string name="local_source">Local source</string>
+    <string name="local_filter_order_by">Order by</string>
+    <string name="title">Title</string>
+    <string name="date">Date</string>
+
+    <!-- Library update notifications -->
+    <string name="channel_library_progress">Library progress</string>
+    <string name="channel_new_chapters">New chapters</string>
+    <string name="channel_library_errors">Library update errors</string>
+    <string name="notification_updating_library">Updating library</string>
+    <string name="notification_new_chapters">New chapters found</string>
+    <plurals name="notification_new_chapters_summary">
+        <item quantity="one">For %1$d title</item>
+        <item quantity="other">For %1$d titles</item>
+    </plurals>
+    <string name="notification_update_error">%1$d update(s) failed</string>
+    <string name="notification_update_error_action">Show errors</string>
+    <plurals name="notification_chapters_generic">
+        <item quantity="one">%1$d new chapter</item>
+        <item quantity="other">%1$d new chapters</item>
+    </plurals>
+    <string name="notification_chapters_single">Chapter %1$s</string>
+    <string name="notification_chapters_single_and_more">Chapter %1$s and %2$d more</string>
+    <string name="notification_chapters_multiple">Chapters %1$s</string>
+    <string name="notification_chapters_multiple_and_more">Chapters %1$s and %2$d more</string>
+    <string name="action_mark_as_read">Mark as read</string>
+    <string name="action_view_chapters">View chapters</string>
+
+    <!-- Sync notifications (phase 3 unit G) -->
+    <string name="channel_sync_progress">Sync progress</string>
+    <string name="notification_syncing_library">Syncing library</string>
+    <!-- Sync's notices (fixes unit sync-notices): the Google sign-in's coming expiry and a background sync stopped for a reason the owner can act on. The channel follows channel_library_errors and channel_download_errors. -->
+    <string name="channel_sync_errors">Sync errors</string>
+    <string name="notification_sync_sign_in_ending">Google sign-in for sync ends soon</string>
+    <string name="notification_sync_stopped">Sync stopped</string>
+    <string name="notification_sync_sign_in_again">Sign in again</string>
+    <string name="notification_sync_open_settings">Open sync settings</string>
+
+    <!-- The browser sign-in (phase 3 unit O): the hold's notifications and the page the browser shows -->
+    <string name="channel_sign_in">Sign-in</string>
+    <string name="notification_sign_in_waiting">Waiting for sign-in in the browser</string>
+    <string name="notification_sign_in_waiting_detail">Tap to return to Saikou</string>
+    <string name="notification_sign_in_done">Signed in, tap to return</string>
+    <string name="sign_in_page_signed_in">Signed in. Switch back to Saikou to finish.</string>
+    <string name="sign_in_page_not_signed_in">Sign-in did not finish. Switch back to Saikou.</string>
+
+    <!-- A tracker's notice: a background push met a sign-in the service no longer accepts. It opens Settings > Tracking, and its action is tracking_sign_in_again. -->
+    <string name="channel_tracking">Tracking</string>
+    <string name="notification_tracker_sign_in_expired">%1$s needs a new sign-in</string>
+    <string name="notification_tracker_sign_in_expired_detail">Your reading progress is kept and sent once you sign in again.</string>
+
+    <!-- Downloads -->
+    <string name="downloads_phase2">Downloading arrives in a later phase</string>
+    <string name="channel_download_progress">Download progress</string>
+    <string name="channel_download_errors">Download errors</string>
+    <string name="notification_downloader_title">Downloader</string>
+    <!-- The download progress notification's text: the chapter downloading, then the chapters left, that one included. -->
+    <plurals name="notification_download_chapter_left">
+        <item quantity="one">%1$s · %2$d left</item>
+        <item quantity="other">%1$s · %2$d left</item>
+    </plurals>
+    <!-- The same, with notification content hidden. -->
+    <plurals name="notification_download_left">
+        <item quantity="one">%1$d chapter left</item>
+        <item quantity="other">%1$d chapters left</item>
+    </plurals>
+    <string name="notification_download_pause">Pause</string>
+    <string name="notification_download_cancel_all">Cancel all</string>
+    <plurals name="notification_download_errors">
+        <item quantity="one">%1$d chapter failed to download</item>
+        <item quantity="other">%1$d chapters failed to download</item>
+    </plurals>
+    <string name="notification_download_storage_full">Downloads stopped: less than 200 MB of storage is free</string>
+    <string name="notification_download_storage_full_detail">The chapters stay queued. Free some space, then start the queue again</string>
+
+    <!-- The adoption of upstream's downloads -->
+    <string name="notification_adoption_title">Copying downloads from a folder</string>
+    <plurals name="notification_adoption_finished">
+        <item quantity="one">%1$d chapter copied from the folder</item>
+        <item quantity="other">%1$d chapters copied from the folder</item>
+    </plurals>
+    <string name="notification_adoption_finished_detail">The download settings list what was not copied</string>
+
+    <!-- Export downloads, into the storage location's downloads folder -->
+    <string name="notification_export_title">Exporting downloads</string>
+    <string name="notification_export_finished_format">Downloads exported: %1$d copied, %2$d already there, %3$d not copied</string>
+    <string name="notification_export_finished_detail">They are in the downloads folder of your storage location</string>
+    <string name="notification_export_unreachable">The storage location cannot be reached, so nothing was exported</string>
+    <string name="notification_export_stopped">The export of downloads stopped before it finished</string>
+    <string name="notification_export_problem_detail">Tap to open the download settings, choose the folder again or export again</string>
+</resources>

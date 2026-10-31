@@ -1,0 +1,21 @@
+# Upstream v0.21.0's restore of a bench backup (upstream-compare-20k). v0.21.0 opens the system document
+# picker (PR #3948), so the file is reached through its Downloads root. Completion: the restore of a
+# 500 or 2,000 entry backup takes the upstream app seconds, and its notification can be shed when it
+# is fast, so the steps wait a fixed minute and then check the library shows the fixture's entries.
+wait text=Library timeout=60
+tap text=More
+tap text=Settings
+tap text=Data and storage
+tap text=Restore backup
+wait desc=Show roots timeout=30
+tap desc=Show roots
+tap text=Downloads timeout=30
+scroll-to text={{BACKUP_NAME}} timeout=30
+tap text={{BACKUP_NAME}}
+tap text=Restore timeout=120
+sleep 60
+key 4
+key 4
+key 4
+tap-if text=Library timeout=5
+wait text^=Fixture timeout=120

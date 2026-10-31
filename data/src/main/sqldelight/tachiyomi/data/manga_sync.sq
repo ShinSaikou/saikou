@@ -1,0 +1,131 @@
+-- Vendored from upstream v0.20.4: data/src/main/sqldelight/tachiyomi/data/manga_sync.sq (modified: yes)
+-- Modified: the change-log triggers of 05-data 2.18 are added; the table and its queries are
+-- otherwise upstream's, except that update assigns instead of coalescing (3.8). Schema version 2 (phase
+-- 3 unit C) logs every write against the manga, guards the delete, and moves the manga's
+-- trackers_modified_at clock on a bind and an unbind, which change the set of bound trackers (R82).
+-- Phase 3 unit T3 adds insertIfBoundTo, and phase 4 unit TR deleteIfBoundTo, statements over the same
+-- table and triggers. Phase 5 unit SC2 adds backupGetTracksByMangaIds, for the export's pages.
+
+import kotlin.Boolean;
+
+CREATE TABLE manga_sync(
+    _id INTEGER NOT NULL PRIMARY KEY,
+    manga_id INTEGER NOT NULL,
+    sync_id INTEGER NOT NULL,
+    remote_id INTEGER NOT NULL,
+    library_id INTEGER,
+    title TEXT NOT NULL,
+    last_chapter_read REAL NOT NULL,
+    total_chapters INTEGER NOT NULL,
+    status INTEGER NOT NULL,
+    score REAL NOT NULL,
+    remote_url TEXT NOT NULL,
+    start_date INTEGER NOT NULL,
+    finish_date INTEGER NOT NULL,
+    private INTEGER AS Boolean DEFAULT 0 NOT NULL,
+    UNIQUE (manga_id, sync_id) ON CONFLICT REPLACE,
+    FOREIGN KEY(manga_id) REFERENCES mangas (_id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_manga_sync_manga_id ON manga_sync(manga_id);
+
+-- entity_id is the manga id: a manga's tracks travel as one value, so a delete is an upsert of
+-- that value.
+CREATE TRIGGER upsert_track_change AFTER INSERT ON manga_sync
+WHEN (SELECT is_syncing FROM mangas WHERE _id = new.manga_id) = 0
+BEGIN
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('track', new.manga_id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+-- The tracker set's clock moves on a bind, never on a progress write (R82). insert lands on
+-- UNIQUE (manga_id, sync_id) ON CONFLICT REPLACE, so an insert of a pair already bound is progress,
+-- and the REPLACE removes the old row without firing delete_track_change (recursive_triggers is
+-- off). Only a BEFORE trigger still sees the bound row, so the check runs here. update keeps the
+-- pair in every caller and moves no clock.
+CREATE TRIGGER bind_track_modified_at BEFORE INSERT ON manga_sync
+WHEN (SELECT is_syncing FROM mangas WHERE _id = new.manga_id) = 0 AND NOT EXISTS (
+    SELECT 1 FROM manga_sync WHERE manga_id = new.manga_id AND sync_id = new.sync_id
+)
+BEGIN
+    UPDATE mangas
+    SET trackers_modified_at = max(strftime('%s', 'now') * 1000, coalesce(trackers_modified_at, 0) + 1)
+    WHERE _id = new.manga_id;
+END;
+
+CREATE TRIGGER update_track_change AFTER UPDATE ON manga_sync
+WHEN (SELECT is_syncing FROM mangas WHERE _id = new.manga_id) = 0
+BEGIN
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('track', new.manga_id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+CREATE TRIGGER delete_track_change AFTER DELETE ON manga_sync
+WHEN (SELECT is_syncing FROM mangas WHERE _id = old.manga_id) = 0
+BEGIN
+    UPDATE mangas
+    SET trackers_modified_at = max(strftime('%s', 'now') * 1000, coalesce(trackers_modified_at, 0) + 1)
+    WHERE _id = old.manga_id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('track', old.manga_id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+delete:
+DELETE FROM manga_sync
+WHERE manga_id = :mangaId AND sync_id = :syncId;
+
+-- Deletes the pair's row only while it still names :boundRemoteId, the entry the caller acted on
+-- (phase 4 unit TR, R100 carry-over 1). The track sheet's remove acts on the row the owner opened
+-- its dialog on; a rebind synced in before the confirm is kept instead of being deleted. When it
+-- deletes, delete_track_change fires as for delete; when it matches nothing, no trigger fires.
+deleteIfBoundTo:
+DELETE FROM manga_sync
+WHERE manga_id = :mangaId AND sync_id = :syncId AND remote_id = :boundRemoteId;
+
+getTracks:
+SELECT *
+FROM manga_sync;
+
+getTrackById:
+SELECT *
+FROM manga_sync
+WHERE _id = :id;
+
+getTracksByMangaId:
+SELECT *
+FROM manga_sync
+WHERE manga_id = :mangaId;
+
+-- getTracksByMangaId for a page of entries (phase 5 unit SC2), in its plan's order, by row id.
+backupGetTracksByMangaIds:
+SELECT *
+FROM manga_sync
+WHERE manga_id IN :mangaIds
+ORDER BY manga_id, _id;
+
+insert:
+INSERT INTO manga_sync(manga_id, sync_id, remote_id, library_id, title, last_chapter_read, total_chapters,
+    status, score, remote_url, start_date, finish_date, private)
+VALUES (:mangaId, :syncId, :remoteId, :libraryId, :title, :lastChapterRead, :totalChapters,
+    :status, :score, :remoteUrl, :startDate, :finishDate, :private);
+
+-- Stores a service's answer for a pair only while the pair's row still names :boundRemoteId, the
+-- entry the answer is for (phase 3 unit T3). The retry worker and the track sheet's refresh read the
+-- row, call the service, then store; a rebind landing in between is kept instead of being replaced
+-- by the old entry's answer. The row is present whenever this inserts, so bind_track_modified_at
+-- stays silent, as it does for insert's store of a pair already bound.
+insertIfBoundTo:
+INSERT INTO manga_sync(manga_id, sync_id, remote_id, library_id, title, last_chapter_read, total_chapters,
+    status, score, remote_url, start_date, finish_date, private)
+SELECT manga_id, sync_id, :remoteId, :libraryId, :title, :lastChapterRead, :totalChapters,
+    :status, :score, :remoteUrl, :startDate, :finishDate, :private
+FROM manga_sync
+WHERE manga_id = :mangaId AND sync_id = :syncId AND remote_id = :boundRemoteId;
+
+update:
+UPDATE manga_sync
+SET manga_id = :mangaId, sync_id = :syncId, remote_id = :mediaId, library_id = :libraryId,
+    title = :title, last_chapter_read = :lastChapterRead, total_chapters = :totalChapter, status = :status,
+    score = :score, remote_url = :trackingUrl, start_date = :startDate, finish_date = :finishDate,
+    private = :private
+WHERE _id = :id;

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  What the crash screen's provider (CrashLogProvider) hands to another app: the crash directory and
+  nothing else.
+-->
+<paths>
+    <files-path name="crash" path="crash/" />
+</paths>

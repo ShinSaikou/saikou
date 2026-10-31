@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        The brand field, the top stop of the launcher icon's gradient (brand/icon-background.svg).
+        Used for the platform splash so the launcher icon lands on its own ground rather than on a
+        white or black one.
+    -->
+    <color name="brand_field">#DA4223</color>
+</resources>

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The in-app updater: the prompt over the main screen, the two rows under the version in Settings >
+  Advanced, and the download's and the install's notifications. Every %1$s is the app's name and
+  every %2$s a version such as 0.0.2. All fresh; a file of its own so parallel units never collide
+  on one file (R13).
+-->
+<resources>
+    <!-- The prompt -->
+    <string name="app_update_available">%1$s %2$s is available</string>
+    <string name="app_update_no_notes">This release has no notes.</string>
+    <string name="app_update_update">Update</string>
+    <string name="app_update_not_now">Not now</string>
+    <string name="app_update_skip">Skip this version</string>
+    <string name="app_update_downloading_toast">Downloading %1$s %2$s. Android asks to install it when it is done.</string>
+    <string name="app_update_install_not_allowed">%1$s can update itself once you allow it to install apps</string>
+
+    <!-- Settings > Advanced, under the version row -->
+    <string name="pref_app_update_check">Check for updates</string>
+    <string name="pref_app_update_check_detail">Ask GitHub now whether a newer version is out</string>
+    <string name="pref_app_update_checking">Checking for updates…</string>
+    <string name="pref_app_update_auto_check">Check for updates automatically</string>
+    <string name="pref_app_update_auto_check_detail">Ask GitHub for the latest release at most once a day, when the app opens</string>
+    <string name="pref_app_update_auto_check_debug">A debug build never checks by itself; Check for updates still asks</string>
+    <string name="app_update_up_to_date">You have the latest version</string>
+    <string name="app_update_no_apk">%1$s %2$s is out, but it has no APK for this device</string>
+    <string name="app_update_check_failed">Could not reach GitHub to check for updates</string>
+
+    <!-- Notifications -->
+    <string name="channel_app_update_progress">App update progress</string>
+    <string name="channel_app_update">App updates</string>
+    <string name="notification_app_update_downloading">Downloading %1$s %2$s</string>
+    <string name="notification_app_update_ready">%1$s %2$s is ready to install</string>
+    <string name="notification_app_update_ready_text">Tap to install</string>
+    <string name="notification_app_update_failed">%1$s %2$s was not installed</string>
+    <string name="app_update_download_failed">The download did not finish. Tap to check for updates again.</string>
+    <string name="app_update_refused_digest">The download does not match the release\'s checksum, so it was deleted.</string>
+    <string name="app_update_refused_unreadable">The download is not an app Android can read, so it was deleted.</string>
+    <string name="app_update_refused_package">The download is a different app, so it was deleted.</string>
+    <string name="app_update_refused_signer">The download is not signed with the same key as the installed app, so it was deleted.</string>
+    <string name="app_update_refused_not_newer">The download is not newer than the installed app, so it was deleted.</string>
+    <string name="app_update_install_failed">Android could not install it.</string>
+    <string name="app_update_install_failed_storage">There is not enough storage to install it.</string>
+    <string name="app_update_install_failed_incompatible">It is not compatible with this device.</string>
+    <string name="app_update_install_failed_conflict">It conflicts with the installed app.</string>
+    <string name="app_update_install_failed_blocked">Android blocked the install.</string>
+</resources>

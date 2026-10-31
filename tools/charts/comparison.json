@@ -1,0 +1,59 @@
+{
+  "measured": "2026-10-14",
+  "setup": "Android emulator, Pixel 9 profile (API 36, 4 GB), network off. Saikou 0.0.1 release build against the official Mihon v0.21.0 APK. Library: 20,124 entries and about 3.6 million chapters from one 87 MB backup; Saikou restored that file, Mihon (which runs out of memory on it) restored the same data split into eleven backups. Memory and storage were measured after each app's restore. One sample per scenario, except the library update: two runs each, against a local test server that answers in 0.4 to 0.8 s and allows 5 requests per second per source.",
+  "apps": {
+    "saikou": "Saikou 0.0.1",
+    "other": "Mihon v0.21.0"
+  },
+  "panels": [
+    {
+      "title": "Library update",
+      "detail": "2,000 entries across 20 sources",
+      "unit": "s",
+      "saikou": 41.457,
+      "other": 255.268
+    },
+    {
+      "title": "Cold start to library",
+      "detail": "20,124 entries",
+      "unit": "s",
+      "saikou": 1.241,
+      "other": 1.783
+    },
+    {
+      "title": "Statistics screen",
+      "detail": "20,124 entries",
+      "unit": "s",
+      "saikou": 0.202,
+      "other": 1.377
+    },
+    {
+      "title": "Restore one backup",
+      "detail": "87 MB file, 20,124 entries",
+      "unit": "s",
+      "saikou": 139.315,
+      "other": null,
+      "other_note": "Runs out of memory before it starts"
+    },
+    {
+      "title": "Memory with the library open",
+      "detail": "PSS, 20,124 entries",
+      "unit": "MB",
+      "saikou": 141,
+      "other": 151
+    },
+    {
+      "title": "Storage after the restore",
+      "detail": "20,124 entries",
+      "unit": "MB",
+      "saikou": 1461,
+      "other": 987
+    }
+  ],
+  "notes": [
+    "Lower is better in every panel.",
+    "Mihon restored the eleven smaller backups in 86.5 s in total; Saikou was not timed on them.",
+    "Storage was measured before schema 4 dropped unused chapter indexes, about 300 MB at this size.",
+    "Mihon v0.20.4 took 246.0 s on the same library update bench. Mihon releases after v0.21.0 were not measured."
+  ]
+}

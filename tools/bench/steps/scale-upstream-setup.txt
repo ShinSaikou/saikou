@@ -1,0 +1,33 @@
+# Upstream v0.20.4's first run on a fresh install, for phase 5 unit SC0's context numbers beside
+# restore_40k_ms and library_open_ms_40k. The AVD snapshot the brief names,
+# update-bench-upstream-2000x20, is no longer on saikou_pixel9_4g (its snapshot list on 2026-10-08 holds
+# only the update-bench-saikou-* and gate-update-saikou-* ones), so the published APK is installed
+# fresh and set up here, and nothing is saved back. These are the first-run screens of
+# update-upstream-setup.txt (frozen, R66) and nothing after them: no extension repository, no
+# extension, no library settings, because the restore adds the library itself and nothing fetches.
+# The driver creates the storage folder, ${UPSTREAM_STORAGE_DIR}, and grants the notification
+# permission before this runs.
+# Written in tools/bench/ui_steps.py's language.
+# The welcome page takes a tap made while it is still settling as nothing (the first attempt's run
+# stayed on it), so it is waited for and given two seconds.
+wait text=Welcome! timeout=60
+sleep 2
+tap text=Next
+tap text=Select a folder
+tap text=sdk_gphone64_x86_64 timeout=30
+tap text=${UPSTREAM_STORAGE_DIR}
+tap text=USE THIS FOLDER
+tap text=ALLOW
+tap text=Next
+# Install apps permission, through the system's own toggle. The first Grant on the page is its row.
+tap text=Grant
+check text=Allow from this source
+tap desc=Navigate up
+# Background battery usage: the one Grant left.
+tap text=Grant
+tap text=Allow
+uncheck text=Send crash logs
+uncheck text=Allow analytics
+tap text=Next
+tap text=Get started
+wait text=Library timeout=30

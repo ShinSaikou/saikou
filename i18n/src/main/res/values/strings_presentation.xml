@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Labels for the appearance enums :presentation-core declares (AppTheme, ThemeMode, TabletUiMode).
+  The vendored tachiyomi.presentation.core components themselves hold no text: every one of them
+  takes its strings as parameters. English text derived from upstream v0.20.4 i18n/src/commonMain/moko-resources/base/strings.xml.
+-->
+<resources>
+    <!-- Saikou's own scheme; the stored value is still DEFAULT. -->
+    <string name="theme_default">Saikou</string>
+    <string name="theme_dynamic">Dynamic</string>
+    <!-- Upstream's named themes, its names and English text. -->
+    <string name="theme_catppuccin">Catppuccin</string>
+    <string name="theme_tokyonight">Tokyo Night</string>
+    <string name="theme_greenapple">Green Apple</string>
+    <string name="theme_lavender">Lavender</string>
+    <string name="theme_midnightdusk">Midnight Dusk</string>
+    <string name="theme_monochrome">Monochrome</string>
+    <string name="theme_nord">Nord</string>
+    <string name="theme_strawberrydaiquiri">Strawberry Daiquiri</string>
+    <string name="theme_tako">Tako</string>
+    <string name="theme_tealturquoise">Teal &amp; Turquoise</string>
+    <string name="theme_yinyang">Yin &amp; Yang</string>
+    <string name="theme_yotsuba">Yotsuba</string>
+    <string name="theme_tidalwave">Tidal Wave</string>
+
+    <string name="theme_mode_system">Follow system</string>
+    <string name="theme_mode_light">Light</string>
+    <string name="theme_mode_dark">Dark</string>
+
+    <string name="tablet_ui_automatic">Automatic</string>
+    <string name="tablet_ui_always">Always</string>
+    <string name="tablet_ui_landscape">Landscape</string>
+    <string name="tablet_ui_never">Never</string>
+</resources>

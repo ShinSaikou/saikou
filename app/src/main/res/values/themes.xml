@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Material Components DayNight theme under the Compose content, per contract 01 section 2. -->
+    <style name="Theme.Saikou" parent="Theme.Material3.DayNight.NoActionBar">
+        <!--
+            The platform splash, API 31 and up. Only the ground is set: the system draws the
+            launcher icon on it, and the icon's own field is this same red, so what shows is the
+            mark on the brand colour. Devices below 31 ignore it and show no splash, which is the
+            behaviour they had already.
+        -->
+        <item name="android:windowSplashScreenBackground" tools:targetApi="31">@color/brand_field</item>
+    </style>
+</resources>

@@ -1,0 +1,29 @@
+-- Vendored from upstream v0.20.4: data/src/main/sqldelight/tachiyomi/view/libraryView.sq (modified: yes)
+-- Modified: the deleted_at IS NULL guards on mangas and chapters (05-data 2.16). Schema version 3
+-- (phase 5 unit SC4): the chapter aggregate is read from library_summary, which triggers keep
+-- (library_summary.sq), in place of a GROUP BY over every chapter row on each read; the columns and
+-- their names are the ones the aggregate gave.
+
+CREATE VIEW libraryView AS
+SELECT
+    M.*,
+    coalesce(S.total_count, 0) AS totalCount,
+    coalesce(S.read_count, 0) AS readCount,
+    coalesce(S.latest_upload, 0) AS latestUpload,
+    coalesce(S.chapter_fetched_at, 0) AS chapterFetchedAt,
+    coalesce(S.last_read, 0) AS lastRead,
+    coalesce(S.bookmark_count, 0) AS bookmarkCount,
+    coalesce(MC.categories, '0') AS categories
+FROM mangas M
+LEFT JOIN library_summary S ON S.manga_id = M._id
+LEFT JOIN (
+    SELECT mangas_categories.manga_id, group_concat(mangas_categories.category_id) AS categories
+    FROM mangas_categories
+    GROUP BY mangas_categories.manga_id
+) AS MC ON MC.manga_id = M._id
+WHERE M.favorite = 1
+AND M.deleted_at IS NULL;
+
+library:
+SELECT *
+FROM libraryView;

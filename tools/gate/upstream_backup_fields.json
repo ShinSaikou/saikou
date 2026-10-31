@@ -1,0 +1,846 @@
+{
+  "schemaVersion": 1,
+  "comment": "Every serialized field of the reference tree's backup models and the entry order of UpdateStrategy, read from its Kotlin sources by tools/gate/upstream_backup_fields.py; regenerate with that script, never by hand. number is the proto number, numberedBy says whether it came from @ProtoNumber or from the field's position; type is as written without a trailing ?, which nullable carries; default is the default as written, or null when the field has none. :backup's UpstreamBackupFieldsTest holds Saikou's vendored models against this file in both directions.",
+  "reference": {
+    "name": "Upstream v0.20.4",
+    "commit": "df6507256acce8e7f3660783a3db6dbd1a31b6b5"
+  },
+  "modelsDir": "app/src/main/java/eu/kanade/tachiyomi/data/backup/models",
+  "files": [
+    "Backup.kt",
+    "BackupCategory.kt",
+    "BackupChapter.kt",
+    "BackupExtensionStore.kt",
+    "BackupHistory.kt",
+    "BackupManga.kt",
+    "BackupPreference.kt",
+    "BackupSource.kt",
+    "BackupTracking.kt"
+  ],
+  "messages": {
+    "Backup": {
+      "file": "Backup.kt",
+      "serialName": "eu.kanade.tachiyomi.data.backup.models.Backup",
+      "sealed": false,
+      "extends": null,
+      "fields": [
+        {
+          "number": 1,
+          "numberedBy": "annotation",
+          "name": "backupManga",
+          "type": "List<BackupManga>",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "number": 2,
+          "numberedBy": "annotation",
+          "name": "backupCategories",
+          "type": "List<BackupCategory>",
+          "nullable": false,
+          "default": "emptyList()"
+        },
+        {
+          "number": 101,
+          "numberedBy": "annotation",
+          "name": "backupSources",
+          "type": "List<BackupSource>",
+          "nullable": false,
+          "default": "emptyList()"
+        },
+        {
+          "number": 104,
+          "numberedBy": "annotation",
+          "name": "backupPreferences",
+          "type": "List<BackupPreference>",
+          "nullable": false,
+          "default": "emptyList()"
+        },
+        {
+          "number": 105,
+          "numberedBy": "annotation",
+          "name": "backupSourcePreferences",
+          "type": "List<BackupSourcePreferences>",
+          "nullable": false,
+          "default": "emptyList()"
+        },
+        {
+          "number": 106,
+          "numberedBy": "annotation",
+          "name": "backupExtensionStores",
+          "type": "List<BackupExtensionStore>",
+          "nullable": false,
+          "default": "emptyList()"
+        }
+      ]
+    },
+    "BackupCategory": {
+      "file": "BackupCategory.kt",
+      "serialName": "eu.kanade.tachiyomi.data.backup.models.BackupCategory",
+      "sealed": false,
+      "extends": null,
+      "fields": [
+        {
+          "number": 1,
+          "numberedBy": "annotation",
+          "name": "name",
+          "type": "String",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "number": 2,
+          "numberedBy": "annotation",
+          "name": "order",
+          "type": "Long",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "number": 3,
+          "numberedBy": "annotation",
+          "name": "id",
+          "type": "Long",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "number": 100,
+          "numberedBy": "annotation",
+          "name": "flags",
+          "type": "Long",
+          "nullable": false,
+          "default": "0"
+        }
+      ]
+    },
+    "BackupChapter": {
+      "file": "BackupChapter.kt",
+      "serialName": "eu.kanade.tachiyomi.data.backup.models.BackupChapter",
+      "sealed": false,
+      "extends": null,
+      "fields": [
+        {
+          "number": 1,
+          "numberedBy": "annotation",
+          "name": "url",
+          "type": "String",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "number": 2,
+          "numberedBy": "annotation",
+          "name": "name",
+          "type": "String",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "number": 3,
+          "numberedBy": "annotation",
+          "name": "scanlator",
+          "type": "String",
+          "nullable": true,
+          "default": "null"
+        },
+        {
+          "number": 4,
+          "numberedBy": "annotation",
+          "name": "read",
+          "type": "Boolean",
+          "nullable": false,
+          "default": "false"
+        },
+        {
+          "number": 5,
+          "numberedBy": "annotation",
+          "name": "bookmark",
+          "type": "Boolean",
+          "nullable": false,
+          "default": "false"
+        },
+        {
+          "number": 6,
+          "numberedBy": "annotation",
+          "name": "lastPageRead",
+          "type": "Long",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "number": 7,
+          "numberedBy": "annotation",
+          "name": "dateFetch",
+          "type": "Long",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "number": 8,
+          "numberedBy": "annotation",
+          "name": "dateUpload",
+          "type": "Long",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "number": 9,
+          "numberedBy": "annotation",
+          "name": "chapterNumber",
+          "type": "Float",
+          "nullable": false,
+          "default": "0F"
+        },
+        {
+          "number": 10,
+          "numberedBy": "annotation",
+          "name": "sourceOrder",
+          "type": "Long",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "number": 11,
+          "numberedBy": "annotation",
+          "name": "lastModifiedAt",
+          "type": "Long",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "number": 12,
+          "numberedBy": "annotation",
+          "name": "version",
+          "type": "Long",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "number": 13,
+          "numberedBy": "annotation",
+          "name": "memo",
+          "type": "ByteArray",
+          "nullable": false,
+          "default": "JsonObjectEmptyBytes"
+        }
+      ]
+    },
+    "BackupExtensionStore": {
+      "file": "BackupExtensionStore.kt",
+      "serialName": "eu.kanade.tachiyomi.data.backup.models.BackupExtensionStore",
+      "sealed": false,
+      "extends": null,
+      "fields": [
+        {
+          "number": 1,
+          "numberedBy": "annotation",
+          "name": "indexUrl",
+          "type": "String",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "number": 2,
+          "numberedBy": "annotation",
+          "name": "name",
+          "type": "String",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "number": 3,
+          "numberedBy": "annotation",
+          "name": "badgeLabel",
+          "type": "String",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "number": 5,
+          "numberedBy": "annotation",
+          "name": "signingKey",
+          "type": "String",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "number": 4,
+          "numberedBy": "annotation",
+          "name": "contactWebsite",
+          "type": "String",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "number": 6,
+          "numberedBy": "annotation",
+          "name": "contactDiscord",
+          "type": "String",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "number": 7,
+          "numberedBy": "annotation",
+          "name": "isLegacy",
+          "type": "Boolean",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "number": 8,
+          "numberedBy": "annotation",
+          "name": "extensionListUrl",
+          "type": "String",
+          "nullable": true,
+          "default": null
+        }
+      ]
+    },
+    "BackupHistory": {
+      "file": "BackupHistory.kt",
+      "serialName": "eu.kanade.tachiyomi.data.backup.models.BackupHistory",
+      "sealed": false,
+      "extends": null,
+      "fields": [
+        {
+          "number": 1,
+          "numberedBy": "annotation",
+          "name": "url",
+          "type": "String",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "number": 2,
+          "numberedBy": "annotation",
+          "name": "lastRead",
+          "type": "Long",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "number": 3,
+          "numberedBy": "annotation",
+          "name": "readDuration",
+          "type": "Long",
+          "nullable": false,
+          "default": "0"
+        }
+      ]
+    },
+    "BackupManga": {
+      "file": "BackupManga.kt",
+      "serialName": "eu.kanade.tachiyomi.data.backup.models.BackupManga",
+      "sealed": false,
+      "extends": null,
+      "fields": [
+        {
+          "number": 1,
+          "numberedBy": "annotation",
+          "name": "source",
+          "type": "Long",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "number": 2,
+          "numberedBy": "annotation",
+          "name": "url",
+          "type": "String",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "number": 3,
+          "numberedBy": "annotation",
+          "name": "title",
+          "type": "String",
+          "nullable": false,
+          "default": "\"\""
+        },
+        {
+          "number": 4,
+          "numberedBy": "annotation",
+          "name": "artist",
+          "type": "String",
+          "nullable": true,
+          "default": "null"
+        },
+        {
+          "number": 5,
+          "numberedBy": "annotation",
+          "name": "author",
+          "type": "String",
+          "nullable": true,
+          "default": "null"
+        },
+        {
+          "number": 6,
+          "numberedBy": "annotation",
+          "name": "description",
+          "type": "String",
+          "nullable": true,
+          "default": "null"
+        },
+        {
+          "number": 7,
+          "numberedBy": "annotation",
+          "name": "genre",
+          "type": "List<String>",
+          "nullable": false,
+          "default": "emptyList()"
+        },
+        {
+          "number": 8,
+          "numberedBy": "annotation",
+          "name": "status",
+          "type": "Int",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "number": 9,
+          "numberedBy": "annotation",
+          "name": "thumbnailUrl",
+          "type": "String",
+          "nullable": true,
+          "default": "null"
+        },
+        {
+          "number": 13,
+          "numberedBy": "annotation",
+          "name": "dateAdded",
+          "type": "Long",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "number": 14,
+          "numberedBy": "annotation",
+          "name": "viewer",
+          "type": "Int",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "number": 16,
+          "numberedBy": "annotation",
+          "name": "chapters",
+          "type": "List<BackupChapter>",
+          "nullable": false,
+          "default": "emptyList()"
+        },
+        {
+          "number": 17,
+          "numberedBy": "annotation",
+          "name": "categories",
+          "type": "List<Long>",
+          "nullable": false,
+          "default": "emptyList()"
+        },
+        {
+          "number": 18,
+          "numberedBy": "annotation",
+          "name": "tracking",
+          "type": "List<BackupTracking>",
+          "nullable": false,
+          "default": "emptyList()"
+        },
+        {
+          "number": 100,
+          "numberedBy": "annotation",
+          "name": "favorite",
+          "type": "Boolean",
+          "nullable": false,
+          "default": "true"
+        },
+        {
+          "number": 101,
+          "numberedBy": "annotation",
+          "name": "chapterFlags",
+          "type": "Int",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "number": 103,
+          "numberedBy": "annotation",
+          "name": "viewer_flags",
+          "type": "Int",
+          "nullable": true,
+          "default": "null"
+        },
+        {
+          "number": 104,
+          "numberedBy": "annotation",
+          "name": "history",
+          "type": "List<BackupHistory>",
+          "nullable": false,
+          "default": "emptyList()"
+        },
+        {
+          "number": 105,
+          "numberedBy": "annotation",
+          "name": "updateStrategy",
+          "type": "UpdateStrategy",
+          "nullable": false,
+          "default": "UpdateStrategy.ALWAYS_UPDATE"
+        },
+        {
+          "number": 106,
+          "numberedBy": "annotation",
+          "name": "lastModifiedAt",
+          "type": "Long",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "number": 107,
+          "numberedBy": "annotation",
+          "name": "favoriteModifiedAt",
+          "type": "Long",
+          "nullable": true,
+          "default": "null"
+        },
+        {
+          "number": 108,
+          "numberedBy": "annotation",
+          "name": "excludedScanlators",
+          "type": "List<String>",
+          "nullable": false,
+          "default": "emptyList()"
+        },
+        {
+          "number": 109,
+          "numberedBy": "annotation",
+          "name": "version",
+          "type": "Long",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "number": 110,
+          "numberedBy": "annotation",
+          "name": "notes",
+          "type": "String",
+          "nullable": false,
+          "default": "\"\""
+        },
+        {
+          "number": 111,
+          "numberedBy": "annotation",
+          "name": "initialized",
+          "type": "Boolean",
+          "nullable": false,
+          "default": "false"
+        },
+        {
+          "number": 112,
+          "numberedBy": "annotation",
+          "name": "memo",
+          "type": "ByteArray",
+          "nullable": false,
+          "default": "JsonObjectEmptyBytes"
+        }
+      ]
+    },
+    "BackupPreference": {
+      "file": "BackupPreference.kt",
+      "serialName": "eu.kanade.tachiyomi.data.backup.models.BackupPreference",
+      "sealed": false,
+      "extends": null,
+      "fields": [
+        {
+          "number": 1,
+          "numberedBy": "annotation",
+          "name": "key",
+          "type": "String",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "number": 2,
+          "numberedBy": "annotation",
+          "name": "value",
+          "type": "PreferenceValue",
+          "nullable": false,
+          "default": null
+        }
+      ]
+    },
+    "BackupSourcePreferences": {
+      "file": "BackupPreference.kt",
+      "serialName": "eu.kanade.tachiyomi.data.backup.models.BackupSourcePreferences",
+      "sealed": false,
+      "extends": null,
+      "fields": [
+        {
+          "number": 1,
+          "numberedBy": "annotation",
+          "name": "sourceKey",
+          "type": "String",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "number": 2,
+          "numberedBy": "annotation",
+          "name": "prefs",
+          "type": "List<BackupPreference>",
+          "nullable": false,
+          "default": null
+        }
+      ]
+    },
+    "PreferenceValue": {
+      "file": "BackupPreference.kt",
+      "serialName": "eu.kanade.tachiyomi.data.backup.models.PreferenceValue",
+      "sealed": true,
+      "extends": null,
+      "fields": []
+    },
+    "IntPreferenceValue": {
+      "file": "BackupPreference.kt",
+      "serialName": "eu.kanade.tachiyomi.data.backup.models.IntPreferenceValue",
+      "sealed": false,
+      "extends": "PreferenceValue",
+      "fields": [
+        {
+          "number": 1,
+          "numberedBy": "position",
+          "name": "value",
+          "type": "Int",
+          "nullable": false,
+          "default": null
+        }
+      ]
+    },
+    "LongPreferenceValue": {
+      "file": "BackupPreference.kt",
+      "serialName": "eu.kanade.tachiyomi.data.backup.models.LongPreferenceValue",
+      "sealed": false,
+      "extends": "PreferenceValue",
+      "fields": [
+        {
+          "number": 1,
+          "numberedBy": "position",
+          "name": "value",
+          "type": "Long",
+          "nullable": false,
+          "default": null
+        }
+      ]
+    },
+    "FloatPreferenceValue": {
+      "file": "BackupPreference.kt",
+      "serialName": "eu.kanade.tachiyomi.data.backup.models.FloatPreferenceValue",
+      "sealed": false,
+      "extends": "PreferenceValue",
+      "fields": [
+        {
+          "number": 1,
+          "numberedBy": "position",
+          "name": "value",
+          "type": "Float",
+          "nullable": false,
+          "default": null
+        }
+      ]
+    },
+    "StringPreferenceValue": {
+      "file": "BackupPreference.kt",
+      "serialName": "eu.kanade.tachiyomi.data.backup.models.StringPreferenceValue",
+      "sealed": false,
+      "extends": "PreferenceValue",
+      "fields": [
+        {
+          "number": 1,
+          "numberedBy": "position",
+          "name": "value",
+          "type": "String",
+          "nullable": false,
+          "default": null
+        }
+      ]
+    },
+    "BooleanPreferenceValue": {
+      "file": "BackupPreference.kt",
+      "serialName": "eu.kanade.tachiyomi.data.backup.models.BooleanPreferenceValue",
+      "sealed": false,
+      "extends": "PreferenceValue",
+      "fields": [
+        {
+          "number": 1,
+          "numberedBy": "position",
+          "name": "value",
+          "type": "Boolean",
+          "nullable": false,
+          "default": null
+        }
+      ]
+    },
+    "StringSetPreferenceValue": {
+      "file": "BackupPreference.kt",
+      "serialName": "eu.kanade.tachiyomi.data.backup.models.StringSetPreferenceValue",
+      "sealed": false,
+      "extends": "PreferenceValue",
+      "fields": [
+        {
+          "number": 1,
+          "numberedBy": "position",
+          "name": "value",
+          "type": "Set<String>",
+          "nullable": false,
+          "default": null
+        }
+      ]
+    },
+    "BackupSource": {
+      "file": "BackupSource.kt",
+      "serialName": "eu.kanade.tachiyomi.data.backup.models.BackupSource",
+      "sealed": false,
+      "extends": null,
+      "fields": [
+        {
+          "number": 1,
+          "numberedBy": "annotation",
+          "name": "name",
+          "type": "String",
+          "nullable": false,
+          "default": "\"\""
+        },
+        {
+          "number": 2,
+          "numberedBy": "annotation",
+          "name": "sourceId",
+          "type": "Long",
+          "nullable": false,
+          "default": null
+        }
+      ]
+    },
+    "BackupTracking": {
+      "file": "BackupTracking.kt",
+      "serialName": "eu.kanade.tachiyomi.data.backup.models.BackupTracking",
+      "sealed": false,
+      "extends": null,
+      "fields": [
+        {
+          "number": 1,
+          "numberedBy": "annotation",
+          "name": "syncId",
+          "type": "Int",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "number": 2,
+          "numberedBy": "annotation",
+          "name": "libraryId",
+          "type": "Long",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "number": 3,
+          "numberedBy": "annotation",
+          "name": "mediaIdInt",
+          "type": "Int",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "number": 4,
+          "numberedBy": "annotation",
+          "name": "trackingUrl",
+          "type": "String",
+          "nullable": false,
+          "default": "\"\""
+        },
+        {
+          "number": 5,
+          "numberedBy": "annotation",
+          "name": "title",
+          "type": "String",
+          "nullable": false,
+          "default": "\"\""
+        },
+        {
+          "number": 6,
+          "numberedBy": "annotation",
+          "name": "lastChapterRead",
+          "type": "Float",
+          "nullable": false,
+          "default": "0F"
+        },
+        {
+          "number": 7,
+          "numberedBy": "annotation",
+          "name": "totalChapters",
+          "type": "Int",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "number": 8,
+          "numberedBy": "annotation",
+          "name": "score",
+          "type": "Float",
+          "nullable": false,
+          "default": "0F"
+        },
+        {
+          "number": 9,
+          "numberedBy": "annotation",
+          "name": "status",
+          "type": "Int",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "number": 10,
+          "numberedBy": "annotation",
+          "name": "startedReadingDate",
+          "type": "Long",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "number": 11,
+          "numberedBy": "annotation",
+          "name": "finishedReadingDate",
+          "type": "Long",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "number": 12,
+          "numberedBy": "annotation",
+          "name": "private",
+          "type": "Boolean",
+          "nullable": false,
+          "default": "false"
+        },
+        {
+          "number": 100,
+          "numberedBy": "annotation",
+          "name": "mediaId",
+          "type": "Long",
+          "nullable": false,
+          "default": "0"
+        }
+      ]
+    }
+  },
+  "enums": {
+    "UpdateStrategy": {
+      "file": "source-api/src/main/kotlin/eu/kanade/tachiyomi/source/model/UpdateStrategy.kt",
+      "entries": [
+        "ALWAYS_UPDATE",
+        "ONLY_FETCH_ONCE"
+      ]
+    }
+  }
+}

@@ -1,0 +1,16 @@
+# Contract 01, section 4.5
+local.properties
+keystore.properties
+*.keystore
+*.jks
+build/
+.gradle/
+.kotlin/
+.worktrees/
+captures/
+.idea/
+*.iml
+*.hprof
+.DS_Store
+tools/out/
+__pycache__/

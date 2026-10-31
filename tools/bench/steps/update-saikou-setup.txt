@@ -1,0 +1,42 @@
+# One-time setup of Saikou for the library update bench (ruling R66), run by library_update_seed.sh
+# on a fresh install before it saves update-bench-saikou-base.
+# Written in tools/bench/ui_steps.py's language, not common.sh's run_steps: every line is a label on
+# Saikou's own screens or the system's, found in a uiautomator dump and tapped.
+#
+# The seed script grants the notification permission before this runs, and serves the fixture's
+# repository on the host.
+
+# First run: the background work prompt, then the system's own battery exemption dialog.
+wait text=Keep background work running timeout=60
+tap text=Allow
+wait text=Let app always run in background?
+tap id=android:id/button1
+wait desc=More options timeout=30
+
+# The fixture repository, through Saikou's own extension-store link, which fills the address in.
+# Then the extension, installed privately from it. Saikou trusts it by the repository's signing key,
+# so it lands under Installed and nothing asks to trust it.
+am start -a android.intent.action.VIEW -d 'saikou://extension-store?url=http://10.0.2.2:18794/repo/index.min.json' com.shinsaikou
+tap text=Add
+wait text=Library update fixture timeout=30
+tap desc=Back
+tap text=Browse
+tap text=Extensions
+tap text=Install timeout=60
+wait text=Details timeout=60
+wait text=Installed
+gone text=Needs trust
+
+# Settings > Library: Automatic library update stays Off (its default); Refresh entry details stays
+# off (its default) and applies to automatic runs only. A manual update skips no entry here.
+tap text=More
+tap text=Settings
+tap text=Library
+check text=Off
+tap desc=Back
+# Settings > Data > Automatic backup interval: Off (the default is 12 h), so no backup job runs in
+# a window.
+tap text=Data
+check text=Off
+tap desc=Back
+tap desc=Back

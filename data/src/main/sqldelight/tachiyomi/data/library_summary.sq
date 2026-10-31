@@ -1,0 +1,371 @@
+-- Fresh: schema version 3 (phase 5 unit SC4). Each manga's chapter aggregate, which libraryView
+-- computed with a GROUP BY over every chapter row on each read, kept here by triggers so the
+-- library query is a plain join. A table of its own rather than columns on mangas, so a count that
+-- moves fires no mangas trigger, bumps no version and logs no change: the summary is derived,
+-- device-local and never synced or backed up.
+--
+-- The meaning is libraryView's old aggregate exactly: live chapters only (deleted_at IS NULL), a
+-- chapter whose scanlator is excluded for its manga not counted, last_read the latest
+-- history.last_read over the counted chapters, and 0 where the aggregate had no row. A manga with
+-- no counted chapter has no row or a row of zeros; the view coalesces either to 0.
+--
+-- One recompute, the INSERT ... SELECT ... ON CONFLICT DO UPDATE below, reads the one manga's
+-- chapters and history again; it is recomputeLibrarySummary for callers. It costs the length of
+-- the entry, so a trigger that runs it once per row of a statement over one long entry costs the
+-- square of it (5,000 chapters marked read took 12 s on the host). The writes made in bulk (read and
+-- bookmark, history written or removed) therefore move the counts by the row's own change where
+-- that is exact, and recompute only where it is not (SC4's fix round). An upsert rather
+-- than INSERT OR REPLACE: a trigger's OR clause gives way to the outer statement's conflict
+-- handling, and under history's upsert the JVM driver's SQLite failed the summary's primary key
+-- instead of replacing the row. The recompute reads the one manga's chapters
+-- through a manga_id-led chapters index (about 50 rows) and writes one row, or nothing once the manga is
+-- gone (a cascade from a manga delete runs it after the manga row is deleted, and the summary row
+-- goes with the manga's own cascade). backfillLibrarySummary is the migration's backfill, run again
+-- by Settings, Advanced, "Rebuild library counts".
+
+CREATE TABLE library_summary(
+    manga_id INTEGER NOT NULL PRIMARY KEY REFERENCES mangas(_id) ON DELETE CASCADE,
+    total_count INTEGER NOT NULL DEFAULT 0,
+    read_count INTEGER NOT NULL DEFAULT 0,
+    bookmark_count INTEGER NOT NULL DEFAULT 0,
+    latest_upload INTEGER NOT NULL DEFAULT 0,
+    chapter_fetched_at INTEGER NOT NULL DEFAULT 0,
+    last_read INTEGER NOT NULL DEFAULT 0
+);
+
+-- A counted chapter added: the deltas, with no read of the manga's other chapters. A new chapter has
+-- no history yet (history references it), so last_read stays. On a row of zeros the two maxima
+-- take the chapter's own values, as the aggregate over that one chapter would.
+CREATE TRIGGER library_summary_chapter_insert AFTER INSERT ON chapters
+WHEN (
+    SELECT count(*) FROM excluded_scanlators ES WHERE ES.manga_id = new.manga_id AND ES.scanlator = new.scanlator
+) = 0 AND new.deleted_at IS NULL
+BEGIN
+    INSERT INTO library_summary(manga_id, total_count, read_count, bookmark_count, latest_upload,
+        chapter_fetched_at, last_read)
+    VALUES (new.manga_id, 1, new.read, new.bookmark, new.date_upload, new.date_fetch, 0)
+    ON CONFLICT(manga_id) DO UPDATE SET
+        total_count = total_count + 1,
+        read_count = read_count + excluded.read_count,
+        bookmark_count = bookmark_count + excluded.bookmark_count,
+        latest_upload = CASE WHEN total_count = 0 THEN excluded.latest_upload
+            ELSE max(latest_upload, excluded.latest_upload) END,
+        chapter_fetched_at = CASE WHEN total_count = 0 THEN excluded.chapter_fetched_at
+            ELSE max(chapter_fetched_at, excluded.chapter_fetched_at) END;
+END;
+
+-- A change to a column the aggregate reads other than read and bookmark: the dates it takes the
+-- maximum of, the chapter going from live to deleted or back (a tombstone moved forward changes
+-- nothing), its scanlator or its manga. These recompute; a chapter moved to another manga recomputes
+-- both. A read or bookmark change made in the same row is in the recompute, and the flags trigger
+-- below stands aside for it. Lowering the restore's latch (resetIsSyncingByMangaId) writes no
+-- column named here or below, so it fires nothing.
+CREATE TRIGGER library_summary_chapter_update
+AFTER UPDATE OF date_upload, date_fetch, deleted_at, scanlator, manga_id ON chapters
+WHEN new.date_upload != old.date_upload OR new.date_fetch != old.date_fetch
+    OR (new.deleted_at IS NULL) != (old.deleted_at IS NULL)
+    OR new.scanlator IS NOT old.scanlator OR new.manga_id != old.manga_id
+BEGIN
+    INSERT INTO library_summary(manga_id, total_count, read_count, bookmark_count,
+        latest_upload, chapter_fetched_at, last_read)
+    SELECT M._id, count(C._id), coalesce(sum(C.read), 0), coalesce(sum(C.bookmark), 0),
+        coalesce(max(C.date_upload), 0), coalesce(max(C.date_fetch), 0), coalesce(max(H.last_read), 0)
+    FROM mangas M
+    LEFT JOIN chapters C ON C.manga_id = M._id AND C.deleted_at IS NULL AND (
+        C.scanlator IS NULL
+        OR C.scanlator NOT IN (SELECT ES.scanlator FROM excluded_scanlators ES WHERE ES.manga_id = C.manga_id)
+    )
+    LEFT JOIN history H ON H.chapter_id = C._id
+    WHERE M._id = new.manga_id
+    GROUP BY M._id
+    ON CONFLICT(manga_id) DO UPDATE SET total_count = excluded.total_count,
+        read_count = excluded.read_count, bookmark_count = excluded.bookmark_count,
+        latest_upload = excluded.latest_upload, chapter_fetched_at = excluded.chapter_fetched_at,
+        last_read = excluded.last_read;
+
+    INSERT INTO library_summary(manga_id, total_count, read_count, bookmark_count,
+        latest_upload, chapter_fetched_at, last_read)
+    SELECT M._id, count(C._id), coalesce(sum(C.read), 0), coalesce(sum(C.bookmark), 0),
+        coalesce(max(C.date_upload), 0), coalesce(max(C.date_fetch), 0), coalesce(max(H.last_read), 0)
+    FROM mangas M
+    LEFT JOIN chapters C ON C.manga_id = M._id AND C.deleted_at IS NULL AND (
+        C.scanlator IS NULL
+        OR C.scanlator NOT IN (SELECT ES.scanlator FROM excluded_scanlators ES WHERE ES.manga_id = C.manga_id)
+    )
+    LEFT JOIN history H ON H.chapter_id = C._id
+    WHERE M._id = old.manga_id AND old.manga_id != new.manga_id
+    GROUP BY M._id
+    ON CONFLICT(manga_id) DO UPDATE SET total_count = excluded.total_count,
+        read_count = excluded.read_count, bookmark_count = excluded.bookmark_count,
+        latest_upload = excluded.latest_upload, chapter_fetched_at = excluded.chapter_fetched_at,
+        last_read = excluded.last_read;
+END;
+
+-- Read or bookmark alone, on a counted chapter (live, its scanlator not excluded for its manga):
+-- the counts move by the row's change, with no read of the manga's other chapters. Mark all as
+-- read, mark previous as read and a bookmark selection write only these columns. A chapter that is
+-- not counted moves nothing, as it is in no count. A counted chapter's manga has a row (the insert
+-- trigger, the backfill and the recompute write it), so the UPDATE finds it.
+CREATE TRIGGER library_summary_chapter_flags
+AFTER UPDATE OF read, bookmark ON chapters
+WHEN (new.read != old.read OR new.bookmark != old.bookmark)
+    AND new.date_upload = old.date_upload AND new.date_fetch = old.date_fetch
+    AND new.deleted_at IS NULL AND old.deleted_at IS NULL
+    AND new.scanlator IS old.scanlator AND new.manga_id = old.manga_id
+    AND (
+        SELECT count(*) FROM excluded_scanlators ES WHERE ES.manga_id = new.manga_id AND ES.scanlator = new.scanlator
+    ) = 0
+BEGIN
+    UPDATE library_summary
+    SET read_count = read_count + new.read - old.read,
+        bookmark_count = bookmark_count + new.bookmark - old.bookmark
+    WHERE manga_id = new.manga_id;
+END;
+
+CREATE TRIGGER library_summary_chapter_delete AFTER DELETE ON chapters
+WHEN old.deleted_at IS NULL
+BEGIN
+    INSERT INTO library_summary(manga_id, total_count, read_count, bookmark_count,
+        latest_upload, chapter_fetched_at, last_read)
+    SELECT M._id, count(C._id), coalesce(sum(C.read), 0), coalesce(sum(C.bookmark), 0),
+        coalesce(max(C.date_upload), 0), coalesce(max(C.date_fetch), 0), coalesce(max(H.last_read), 0)
+    FROM mangas M
+    LEFT JOIN chapters C ON C.manga_id = M._id AND C.deleted_at IS NULL AND (
+        C.scanlator IS NULL
+        OR C.scanlator NOT IN (SELECT ES.scanlator FROM excluded_scanlators ES WHERE ES.manga_id = C.manga_id)
+    )
+    LEFT JOIN history H ON H.chapter_id = C._id
+    WHERE M._id = old.manga_id
+    GROUP BY M._id
+    ON CONFLICT(manga_id) DO UPDATE SET total_count = excluded.total_count,
+        read_count = excluded.read_count, bookmark_count = excluded.bookmark_count,
+        latest_upload = excluded.latest_upload, chapter_fetched_at = excluded.chapter_fetched_at,
+        last_read = excluded.last_read;
+END;
+
+-- History: the chapter's manga, found through the chapter. last_read is the latest history of the
+-- counted chapters, so a value written can only raise it: an insert, or an update that raises a
+-- chapter's last_read, takes the maximum (on a counted chapter only). An update that lowers it, or
+-- clears it, and a delete recompute only when the old value was the summary's, as only then can
+-- the maximum fall; a NULL never counted. A deleted 0 cannot lower a maximum that is never below 0
+-- (last_read is a date in milliseconds), so the start-up sweep's delete of reset rows
+-- (removeResettedHistory) recomputes nothing. An update moving a history row to another chapter
+-- recomputes both mangas. A history row cascaded from a chapter delete finds no chapter and
+-- recomputes nothing; the chapter's own trigger does.
+CREATE TRIGGER library_summary_history_insert AFTER INSERT ON history
+WHEN new.last_read IS NOT NULL
+BEGIN
+    UPDATE library_summary SET last_read = max(last_read, new.last_read)
+    WHERE manga_id = (
+        SELECT C.manga_id FROM chapters C
+        WHERE C._id = new.chapter_id AND C.deleted_at IS NULL AND (
+            SELECT count(*) FROM excluded_scanlators ES WHERE ES.manga_id = C.manga_id AND ES.scanlator = C.scanlator
+        ) = 0
+    );
+END;
+
+CREATE TRIGGER library_summary_history_update AFTER UPDATE OF last_read, chapter_id ON history
+WHEN new.last_read IS NOT old.last_read OR new.chapter_id != old.chapter_id
+BEGIN
+    UPDATE library_summary SET last_read = max(last_read, new.last_read)
+    WHERE new.chapter_id = old.chapter_id AND new.last_read IS NOT NULL AND (old.last_read IS NULL OR new.last_read >= old.last_read)
+    AND manga_id = (
+        SELECT C.manga_id FROM chapters C
+        WHERE C._id = new.chapter_id AND C.deleted_at IS NULL AND (
+            SELECT count(*) FROM excluded_scanlators ES WHERE ES.manga_id = C.manga_id AND ES.scanlator = C.scanlator
+        ) = 0
+    );
+
+    INSERT INTO library_summary(manga_id, total_count, read_count, bookmark_count,
+        latest_upload, chapter_fetched_at, last_read)
+    SELECT M._id, count(C._id), coalesce(sum(C.read), 0), coalesce(sum(C.bookmark), 0),
+        coalesce(max(C.date_upload), 0), coalesce(max(C.date_fetch), 0), coalesce(max(H.last_read), 0)
+    FROM mangas M
+    LEFT JOIN chapters C ON C.manga_id = M._id AND C.deleted_at IS NULL AND (
+        C.scanlator IS NULL
+        OR C.scanlator NOT IN (SELECT ES.scanlator FROM excluded_scanlators ES WHERE ES.manga_id = C.manga_id)
+    )
+    LEFT JOIN history H ON H.chapter_id = C._id
+    WHERE M._id = (
+        SELECT HC.manga_id FROM chapters HC
+        WHERE HC._id = new.chapter_id AND (
+            old.chapter_id != new.chapter_id
+            OR ((new.last_read IS NULL OR (old.last_read IS NOT NULL AND new.last_read < old.last_read))
+                AND old.last_read >= (SELECT S.last_read FROM library_summary S WHERE S.manga_id = HC.manga_id))
+        )
+    )
+    GROUP BY M._id
+    ON CONFLICT(manga_id) DO UPDATE SET total_count = excluded.total_count,
+        read_count = excluded.read_count, bookmark_count = excluded.bookmark_count,
+        latest_upload = excluded.latest_upload, chapter_fetched_at = excluded.chapter_fetched_at,
+        last_read = excluded.last_read;
+
+    INSERT INTO library_summary(manga_id, total_count, read_count, bookmark_count,
+        latest_upload, chapter_fetched_at, last_read)
+    SELECT M._id, count(C._id), coalesce(sum(C.read), 0), coalesce(sum(C.bookmark), 0),
+        coalesce(max(C.date_upload), 0), coalesce(max(C.date_fetch), 0), coalesce(max(H.last_read), 0)
+    FROM mangas M
+    LEFT JOIN chapters C ON C.manga_id = M._id AND C.deleted_at IS NULL AND (
+        C.scanlator IS NULL
+        OR C.scanlator NOT IN (SELECT ES.scanlator FROM excluded_scanlators ES WHERE ES.manga_id = C.manga_id)
+    )
+    LEFT JOIN history H ON H.chapter_id = C._id
+    WHERE M._id = (SELECT manga_id FROM chapters WHERE _id = old.chapter_id) AND old.chapter_id != new.chapter_id
+    GROUP BY M._id
+    ON CONFLICT(manga_id) DO UPDATE SET total_count = excluded.total_count,
+        read_count = excluded.read_count, bookmark_count = excluded.bookmark_count,
+        latest_upload = excluded.latest_upload, chapter_fetched_at = excluded.chapter_fetched_at,
+        last_read = excluded.last_read;
+END;
+
+CREATE TRIGGER library_summary_history_delete AFTER DELETE ON history
+WHEN old.last_read > 0
+BEGIN
+    INSERT INTO library_summary(manga_id, total_count, read_count, bookmark_count,
+        latest_upload, chapter_fetched_at, last_read)
+    SELECT M._id, count(C._id), coalesce(sum(C.read), 0), coalesce(sum(C.bookmark), 0),
+        coalesce(max(C.date_upload), 0), coalesce(max(C.date_fetch), 0), coalesce(max(H.last_read), 0)
+    FROM mangas M
+    LEFT JOIN chapters C ON C.manga_id = M._id AND C.deleted_at IS NULL AND (
+        C.scanlator IS NULL
+        OR C.scanlator NOT IN (SELECT ES.scanlator FROM excluded_scanlators ES WHERE ES.manga_id = C.manga_id)
+    )
+    LEFT JOIN history H ON H.chapter_id = C._id
+    WHERE M._id = (
+        SELECT HC.manga_id FROM chapters HC
+        WHERE HC._id = old.chapter_id
+            AND old.last_read >= (SELECT S.last_read FROM library_summary S WHERE S.manga_id = HC.manga_id)
+    )
+    GROUP BY M._id
+    ON CONFLICT(manga_id) DO UPDATE SET total_count = excluded.total_count,
+        read_count = excluded.read_count, bookmark_count = excluded.bookmark_count,
+        latest_upload = excluded.latest_upload, chapter_fetched_at = excluded.chapter_fetched_at,
+        last_read = excluded.last_read;
+END;
+
+-- An exclusion added, changed or removed: the manga's chapters of that scanlator move in or out.
+CREATE TRIGGER library_summary_exclusion_insert AFTER INSERT ON excluded_scanlators
+BEGIN
+    INSERT INTO library_summary(manga_id, total_count, read_count, bookmark_count,
+        latest_upload, chapter_fetched_at, last_read)
+    SELECT M._id, count(C._id), coalesce(sum(C.read), 0), coalesce(sum(C.bookmark), 0),
+        coalesce(max(C.date_upload), 0), coalesce(max(C.date_fetch), 0), coalesce(max(H.last_read), 0)
+    FROM mangas M
+    LEFT JOIN chapters C ON C.manga_id = M._id AND C.deleted_at IS NULL AND (
+        C.scanlator IS NULL
+        OR C.scanlator NOT IN (SELECT ES.scanlator FROM excluded_scanlators ES WHERE ES.manga_id = C.manga_id)
+    )
+    LEFT JOIN history H ON H.chapter_id = C._id
+    WHERE M._id = new.manga_id
+    GROUP BY M._id
+    ON CONFLICT(manga_id) DO UPDATE SET total_count = excluded.total_count,
+        read_count = excluded.read_count, bookmark_count = excluded.bookmark_count,
+        latest_upload = excluded.latest_upload, chapter_fetched_at = excluded.chapter_fetched_at,
+        last_read = excluded.last_read;
+END;
+
+CREATE TRIGGER library_summary_exclusion_update AFTER UPDATE ON excluded_scanlators
+BEGIN
+    INSERT INTO library_summary(manga_id, total_count, read_count, bookmark_count,
+        latest_upload, chapter_fetched_at, last_read)
+    SELECT M._id, count(C._id), coalesce(sum(C.read), 0), coalesce(sum(C.bookmark), 0),
+        coalesce(max(C.date_upload), 0), coalesce(max(C.date_fetch), 0), coalesce(max(H.last_read), 0)
+    FROM mangas M
+    LEFT JOIN chapters C ON C.manga_id = M._id AND C.deleted_at IS NULL AND (
+        C.scanlator IS NULL
+        OR C.scanlator NOT IN (SELECT ES.scanlator FROM excluded_scanlators ES WHERE ES.manga_id = C.manga_id)
+    )
+    LEFT JOIN history H ON H.chapter_id = C._id
+    WHERE M._id = new.manga_id
+    GROUP BY M._id
+    ON CONFLICT(manga_id) DO UPDATE SET total_count = excluded.total_count,
+        read_count = excluded.read_count, bookmark_count = excluded.bookmark_count,
+        latest_upload = excluded.latest_upload, chapter_fetched_at = excluded.chapter_fetched_at,
+        last_read = excluded.last_read;
+
+    INSERT INTO library_summary(manga_id, total_count, read_count, bookmark_count,
+        latest_upload, chapter_fetched_at, last_read)
+    SELECT M._id, count(C._id), coalesce(sum(C.read), 0), coalesce(sum(C.bookmark), 0),
+        coalesce(max(C.date_upload), 0), coalesce(max(C.date_fetch), 0), coalesce(max(H.last_read), 0)
+    FROM mangas M
+    LEFT JOIN chapters C ON C.manga_id = M._id AND C.deleted_at IS NULL AND (
+        C.scanlator IS NULL
+        OR C.scanlator NOT IN (SELECT ES.scanlator FROM excluded_scanlators ES WHERE ES.manga_id = C.manga_id)
+    )
+    LEFT JOIN history H ON H.chapter_id = C._id
+    WHERE M._id = old.manga_id AND old.manga_id != new.manga_id
+    GROUP BY M._id
+    ON CONFLICT(manga_id) DO UPDATE SET total_count = excluded.total_count,
+        read_count = excluded.read_count, bookmark_count = excluded.bookmark_count,
+        latest_upload = excluded.latest_upload, chapter_fetched_at = excluded.chapter_fetched_at,
+        last_read = excluded.last_read;
+END;
+
+CREATE TRIGGER library_summary_exclusion_delete AFTER DELETE ON excluded_scanlators
+BEGIN
+    INSERT INTO library_summary(manga_id, total_count, read_count, bookmark_count,
+        latest_upload, chapter_fetched_at, last_read)
+    SELECT M._id, count(C._id), coalesce(sum(C.read), 0), coalesce(sum(C.bookmark), 0),
+        coalesce(max(C.date_upload), 0), coalesce(max(C.date_fetch), 0), coalesce(max(H.last_read), 0)
+    FROM mangas M
+    LEFT JOIN chapters C ON C.manga_id = M._id AND C.deleted_at IS NULL AND (
+        C.scanlator IS NULL
+        OR C.scanlator NOT IN (SELECT ES.scanlator FROM excluded_scanlators ES WHERE ES.manga_id = C.manga_id)
+    )
+    LEFT JOIN history H ON H.chapter_id = C._id
+    WHERE M._id = old.manga_id
+    GROUP BY M._id
+    ON CONFLICT(manga_id) DO UPDATE SET total_count = excluded.total_count,
+        read_count = excluded.read_count, bookmark_count = excluded.bookmark_count,
+        latest_upload = excluded.latest_upload, chapter_fetched_at = excluded.chapter_fetched_at,
+        last_read = excluded.last_read;
+END;
+
+-- The triggers' recompute for one manga, for a caller that wrote its chapters with the triggers
+-- skipped or needs the row put right.
+recomputeLibrarySummary:
+INSERT INTO library_summary(manga_id, total_count, read_count, bookmark_count,
+    latest_upload, chapter_fetched_at, last_read)
+SELECT M._id, count(C._id), coalesce(sum(C.read), 0), coalesce(sum(C.bookmark), 0),
+    coalesce(max(C.date_upload), 0), coalesce(max(C.date_fetch), 0), coalesce(max(H.last_read), 0)
+FROM mangas M
+LEFT JOIN chapters C ON C.manga_id = M._id AND C.deleted_at IS NULL AND (
+    C.scanlator IS NULL
+    OR C.scanlator NOT IN (SELECT ES.scanlator FROM excluded_scanlators ES WHERE ES.manga_id = C.manga_id)
+)
+LEFT JOIN history H ON H.chapter_id = C._id
+WHERE M._id = :mangaId
+GROUP BY M._id
+ON CONFLICT(manga_id) DO UPDATE SET total_count = excluded.total_count,
+    read_count = excluded.read_count, bookmark_count = excluded.bookmark_count,
+    latest_upload = excluded.latest_upload, chapter_fetched_at = excluded.chapter_fetched_at,
+    last_read = excluded.last_read;
+
+-- The migration's backfill (migrations/2.sqm runs the same INSERT): libraryView's old aggregate in
+-- one pass over the chapters. A chapter whose manga row is missing is left out, as the old view's
+-- join from mangas left it out. The repair runs clearLibrarySummary and then this in one
+-- transaction (MangaRepositoryImpl.rebuildLibrarySummary), so a drifted table is written again
+-- whole.
+backfillLibrarySummary:
+INSERT INTO library_summary(manga_id, total_count, read_count, bookmark_count, latest_upload,
+    chapter_fetched_at, last_read)
+SELECT
+    chapters.manga_id,
+    count(*),
+    sum(chapters.read),
+    sum(chapters.bookmark),
+    coalesce(max(chapters.date_upload), 0),
+    coalesce(max(chapters.date_fetch), 0),
+    coalesce(max(history.last_read), 0)
+FROM chapters
+LEFT JOIN excluded_scanlators
+    ON chapters.manga_id = excluded_scanlators.manga_id
+    AND chapters.scanlator = excluded_scanlators.scanlator
+LEFT JOIN history ON chapters._id = history.chapter_id
+WHERE excluded_scanlators.scanlator IS NULL
+AND chapters.deleted_at IS NULL
+AND chapters.manga_id IN (SELECT _id FROM mangas)
+GROUP BY chapters.manga_id;
+
+clearLibrarySummary:
+DELETE FROM library_summary;

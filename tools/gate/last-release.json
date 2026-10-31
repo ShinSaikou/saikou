@@ -1,0 +1,4 @@
+{
+  "comment": "The versionCode on the owner's devices (Q19). The gate fails a release whose versionCode is below it; tools/release/install_release.py refuses one that is not above it and rewrites this value after every named device took the install. It was 1 at 49c3732 (0.1.0). The closed-test release is 0.0.1 with versionCode 2 (owner, 2026-10-01); the code is a plain counter raised by one per release, and the earlier major-times-10000 formula is dropped.",
+  "versionCode": 2
+}

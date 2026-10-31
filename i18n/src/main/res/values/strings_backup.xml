@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Text the backup module needs. Contract 06 section 6.2 lists the keys the engine unit left for
+  :backup; the two channel names, the export progress title and the share action are added here
+  because the notifier of section 1.6 cannot build its notifications without them.
+  action_cancel is already in the shared strings.xml and is not repeated (ruling R13).
+  English text derived from upstream v0.20.4 i18n/src/commonMain/moko-resources/base/strings.xml.
+-->
+<resources>
+    <!-- Reading a file -->
+    <string name="invalid_backup_file_json">This is a JSON backup from an old release. Restore it in that release first, then export it again.</string>
+    <string name="invalid_backup_file_unknown">This file could not be read as a backup.</string>
+
+    <!-- Notification channels -->
+    <string name="channel_backup_progress">Backup progress</string>
+    <string name="channel_backup_complete">Backup complete</string>
+
+    <!-- Restoring -->
+    <string name="restore_in_progress">Restoring backup</string>
+    <string name="restore_completed">Restore complete</string>
+    <string name="restore_cancelled">Restore cancelled</string>
+    <string name="restore_failed">Restore failed</string>
+    <string name="restore_failed_resume">Restore the same file again to continue where it stopped.</string>
+    <string name="restore_error_count">%1$d entries could not be restored</string>
+    <plurals name="restore_missing_sources_count">
+        <item quantity="one">%d source needs an extension</item>
+        <item quantity="other">%d sources need an extension</item>
+    </plurals>
+    <string name="import_report_title">Restore report</string>
+    <string name="import_export_error_log">Export error log</string>
+
+    <!-- Before a restore (unit restore-report): upstream's RestoreBackupScreen lists -->
+    <string name="backup_restore_missing_sources">Missing sources:</string>
+    <string name="backup_restore_missing_trackers">Trackers not logged into:</string>
+    <string name="backup_restore_content_full">You may need to install any missing extensions and log in to tracking services afterwards to use them.</string>
+    <string name="backup_restore_unsupported_tracker_format">Tracker %1$d is not available in Saikou; its rows are restored and kept</string>
+
+    <!-- The restore report (unit restore-report) -->
+    <string name="import_report_last_format">Last restore: %1$s</string>
+    <string name="import_report_counts_format">%1$d entries restored, %2$d merged with entries already in the library, %3$d could not be restored</string>
+    <string name="import_report_cancelled">The restore was stopped before it finished</string>
+    <string name="import_report_missing_sources">Missing sources</string>
+    <string name="import_report_missing_trackers">Trackers not logged into</string>
+    <string name="import_report_open_extensions">Open Extensions</string>
+    <plurals name="import_report_source_entries">
+        <item quantity="one">%d entry in your library</item>
+        <item quantity="other">%d entries in your library</item>
+    </plurals>
+    <string name="import_report_unknown_tracker_format">Tracker %1$d is unknown; its rows were skipped</string>
+    <string name="import_report_errors">Errors</string>
+    <string name="import_report_nothing_missing">Nothing is missing</string>
+    <string name="import_report_none">No restore has finished on this device yet</string>
+    <string name="import_report_copy_downloads_detail">A backup holds no downloads. Copy them from another reader\'s downloads folder, or a Saikou export; the folder is only read</string>
+    <string name="import_export_error_log_saved">Error log saved.</string>
+    <string name="import_export_error_log_failed">The error log could not be saved. Try again, or choose another place.</string>
+    <!-- Error groups the backup options do not already name -->
+    <string name="import_error_kind_categories_of_manga">Categories of library entries</string>
+    <string name="import_error_kind_excluded_scanlators">Excluded scanlators</string>
+    <string name="import_error_kind_preference_type_mismatch">App settings of a different type</string>
+    <string name="import_error_kind_unknown_tracker">Unknown trackers</string>
+    <string name="import_error_kind_batch_fallback">Entries restored one at a time</string>
+
+    <!-- Creating -->
+    <string name="creating_backup">Creating backup</string>
+    <string name="backup_created">Backup created</string>
+    <string name="backup_failed">Backup failed</string>
+    <string name="backup_private_settings_hint">Include private settings to carry tracker logins. Leave it off and the file contains none, which looks the same as never having logged in.</string>
+
+    <string name="action_share">Share</string>
+</resources>

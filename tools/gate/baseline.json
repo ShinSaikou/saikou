@@ -1,0 +1,258 @@
+{
+  "schemaVersion": 1,
+  "kind": "baseline",
+  "recordedAt": "2026-09-11T16:30:00Z",
+  "subject": {
+    "package": "upstream",
+    "versionName": "0.20.4",
+    "commit": "df65072",
+    "artifact": "the x86_64 APK of the upstream project's v0.20.4 release"
+  },
+  "devices": {
+    "pixel8a_2g": {
+      "avd": "saikou_pixel8a_2g",
+      "api": 36,
+      "ramMb": 2048,
+      "image": "system-images;android-36;google_apis_playstore;x86_64",
+      "screen": "1080x2400 at 420dpi"
+    },
+    "pixel9_4g": {
+      "avd": "saikou_pixel9_4g",
+      "api": 36,
+      "ramMb": 4096,
+      "image": "system-images;android-36;google_apis_playstore;x86_64",
+      "screen": "1080x2424 at 420dpi"
+    },
+    "tablet_4g": {
+      "avd": "saikou_tablet_4g",
+      "api": 36,
+      "ramMb": 4096,
+      "image": "system-images;android-36;google_apis_playstore;x86_64",
+      "screen": "2560x1600 at 320dpi, landscape"
+    },
+    "lowram_1_5g": {
+      "avd": "saikou_lowram_1_5g",
+      "api": 28,
+      "ramMb": 1536,
+      "image": "system-images;android-28;google_apis;x86_64",
+      "screen": "1080x2400 at 420dpi"
+    }
+  },
+  "rows": [
+    {
+      "id": "cold_start_ms",
+      "device": "pixel8a_2g",
+      "value": 881,
+      "unit": "ms",
+      "samples": [
+        871,
+        890,
+        883,
+        889,
+        896,
+        878,
+        869,
+        874,
+        890,
+        879
+      ],
+      "method": "am start -W TotalTime, median of 10, dexopt speed",
+      "recordedAt": "2026-09-11T15:58:25Z"
+    },
+    {
+      "id": "cold_start_ms",
+      "device": "pixel9_4g",
+      "value": 905.5,
+      "unit": "ms",
+      "samples": [
+        902,
+        888,
+        883,
+        898,
+        932,
+        909,
+        915,
+        917,
+        896,
+        910
+      ],
+      "method": "am start -W TotalTime, median of 10, dexopt speed",
+      "recordedAt": "2026-09-11T16:23:23Z"
+    },
+    {
+      "id": "compat_reference_runs_pass",
+      "device": "any",
+      "value": null,
+      "unit": "bool",
+      "reason": "the two reference extension runs need Saikou's loader and the recorded fixtures; neither exists yet",
+      "method": "tools/compat/compat_job.py --full --replay",
+      "recordedAt": "2026-09-11T16:30:00Z"
+    },
+    {
+      "id": "compat_sample_loaded_ratio",
+      "device": "any",
+      "value": null,
+      "unit": "ratio",
+      "reason": "measures the sampled jars against the classes Saikou's own release APK defines; the baseline application has no equivalent row, so there is nothing to record here",
+      "method": "tools/compat/compat_job.py --full",
+      "recordedAt": "2026-09-11T16:30:00Z"
+    },
+    {
+      "id": "page_turn_jank_pct",
+      "device": "pixel8a_2g",
+      "value": 8.31,
+      "unit": "percent",
+      "samples": null,
+      "method": "gfxinfo Janky frames percent over 40 taps (perfetto: the frame timeline presents every frame early: this display is not paced, so the trace cannot tell a janky frame from a smooth one ; the trace is kept beside this fragment)",
+      "recordedAt": "2026-09-11T16:13:32Z"
+    },
+    {
+      "id": "page_turn_jank_pct",
+      "device": "pixel9_4g",
+      "value": 8.68,
+      "unit": "percent",
+      "samples": null,
+      "method": "gfxinfo Janky frames percent over 40 taps (perfetto: the frame timeline presents every frame early: this display is not paced, so the trace cannot tell a janky frame from a smooth one ; the trace is kept beside this fragment)",
+      "recordedAt": "2026-09-11T16:25:31Z"
+    },
+    {
+      "id": "peak_pss_mb",
+      "device": "pixel8a_2g",
+      "value": 410,
+      "unit": "mb",
+      "samples": [
+        279,
+        286,
+        286,
+        286,
+        286,
+        286,
+        286,
+        286,
+        286,
+        348,
+        347,
+        347,
+        348,
+        410,
+        409,
+        409,
+        409,
+        409,
+        409,
+        409,
+        409,
+        409,
+        409,
+        409,
+        409,
+        409,
+        409,
+        409,
+        409,
+        409
+      ],
+      "method": "dumpsys meminfo TOTAL PSS, peak over 60s at 2s",
+      "recordedAt": "2026-09-11T16:17:14Z"
+    },
+    {
+      "id": "peak_pss_mb",
+      "device": "pixel9_4g",
+      "value": 384,
+      "unit": "mb",
+      "samples": [
+        259,
+        260,
+        260,
+        260,
+        260,
+        260,
+        260,
+        260,
+        260,
+        321,
+        321,
+        321,
+        321,
+        384,
+        382,
+        382,
+        382,
+        382,
+        382,
+        382,
+        382,
+        382,
+        382,
+        382,
+        382,
+        382,
+        382,
+        382,
+        382,
+        382
+      ],
+      "method": "dumpsys meminfo TOTAL PSS, peak over 60s at 2s",
+      "recordedAt": "2026-09-11T16:27:11Z"
+    },
+    {
+      "id": "reader_crash_count",
+      "device": "pixel8a_2g",
+      "value": 0,
+      "unit": "count",
+      "samples": null,
+      "method": "process id changes over the meminfo window",
+      "recordedAt": "2026-09-11T16:17:14Z"
+    },
+    {
+      "id": "reader_crash_count",
+      "device": "pixel9_4g",
+      "value": 0,
+      "unit": "count",
+      "samples": null,
+      "method": "process id changes over the meminfo window",
+      "recordedAt": "2026-09-11T16:27:11Z"
+    },
+    {
+      "id": "tablet_landscape_webtoon_jank_pct",
+      "device": "tablet_4g",
+      "value": 2.06,
+      "unit": "percent",
+      "samples": null,
+      "method": "gfxinfo Janky frames percent over 40 swipes (perfetto: the frame timeline presents every frame early: this display is not paced, so the trace cannot tell a janky frame from a smooth one ; the trace is kept beside this fragment)",
+      "recordedAt": "2026-09-11T16:33:49Z"
+    },
+    {
+      "id": "webtoon_jank_pct",
+      "device": "pixel8a_2g",
+      "value": 2.17,
+      "unit": "percent",
+      "samples": null,
+      "method": "gfxinfo Janky frames percent over 40 swipes (perfetto: the frame timeline presents every frame early: this display is not paced, so the trace cannot tell a janky frame from a smooth one ; the trace is kept beside this fragment)",
+      "recordedAt": "2026-09-11T16:08:43Z"
+    },
+    {
+      "id": "webtoon_jank_pct",
+      "device": "pixel9_4g",
+      "value": 2.18,
+      "unit": "percent",
+      "samples": null,
+      "method": "gfxinfo Janky frames percent over 40 swipes (perfetto: the frame timeline presents every frame early: this display is not paced, so the trace cannot tell a janky frame from a smooth one ; the trace is kept beside this fragment)",
+      "recordedAt": "2026-09-11T16:24:35Z"
+    },
+    {
+      "id": "library_update_2000x20_ms",
+      "device": "pixel9_4g",
+      "value": 246009,
+      "unit": "ms",
+      "samples": [
+        246657,
+        245553,
+        246009
+      ],
+      "method": "tools/bench/library_update.sh upstream 2000x20 (unit A's harness, frozen by R66, run from a checkout at bd95cd5), duration_ms as the fixture server's window, median of three runs in one quiet window on 2026-09-25 (plan unit C, decided 2026-09-25), each from the update-bench-upstream-2000x20 snapshot; evidence in design/plans/phase2-units/evidence/phase2-baseline/day1/",
+      "recordedAt": "2026-09-25T03:32:36Z"
+    }
+  ],
+  "content": "Generated chapters loaded through upstream's Local source: one entry of 60 JPEGs at 800x1200 read in Paged (left to right), one entry of 10 PNGs at 800x20000 read in Long strip. No network and no third-party source is involved."
+}

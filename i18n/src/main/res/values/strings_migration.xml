@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Migrating one entry to another source (phase 4 unit MA): upstream's migrate dialog, its flag labels
+  and the duplicate dialog's Migrate button. Upstream's keys carry upstream v0.20.4's English text; the
+  failure line is fresh. A file of its own so parallel units never collide on one file (R13).
+
+  Migrating many entries (phase 4 unit MB): Browse's Migrate page and its per-source picker, upstream's
+  config screen, its sheet and the migration list, upstream's keys with their dots as underscores and
+  upstream's English; the lines after "Saikou's words" have no upstream counterpart.
+
+  The downloads a migration carries over (unit migrate-downloads): the flag's label is upstream's
+  downloaded_chapters row; what a Migrate could not move, and its two answers, are Saikou's words.
+-->
+<resources>
+    <string name="migration_dialog_what_to_include">Select data to include</string>
+    <string name="migrate">Migrate</string>
+    <string name="copy">Copy</string>
+    <string name="custom_cover">Custom cover</string>
+    <string name="action_notes">Notes</string>
+    <string name="downloaded_chapters">Downloaded chapters</string>
+    <string name="delete_downloaded">Delete downloaded</string>
+    <string name="action_show_manga">Show entry</string>
+    <string name="migration_single_failed">Could not migrate this entry</string>
+
+    <string name="label_migration">Migrate</string>
+    <string name="migration_help_guide">Source migration guide</string>
+    <string name="migration_selection_prompt">Select a source to migrate from</string>
+    <string name="action_sort_alpha">Alphabetically</string>
+    <string name="action_sort_count">Total entries</string>
+    <string name="action_asc">Ascending</string>
+    <string name="action_desc">Descending</string>
+    <string name="not_installed">Not installed</string>
+    <string name="empty_screen">Well, this is awkward</string>
+    <string name="internal_error">InternalError: Check crash logs for further information</string>
+
+    <string name="migrationConfigScreen_selectedHeader">Selected</string>
+    <string name="migrationConfigScreen_availableHeader">Available</string>
+    <string name="migrationConfigScreen_selectNoneLabel">Select none</string>
+    <string name="migrationConfigScreen_selectEnabledLabel">Select enabled sources</string>
+    <string name="migrationConfigScreen_selectPinnedLabel">Select pinned sources</string>
+    <string name="migrationConfigScreen_continueButtonText">Continue</string>
+    <string name="migrationConfigScreen_dataToMigrateHeader">Data to migrate</string>
+    <string name="migrationConfigScreen_removeDownloadsTitle">Delete downloads of current entry after migration</string>
+    <string name="migrationConfigScreen_additionalSearchQueryLabel">Additional keywords (optional)</string>
+    <string name="migrationConfigScreen_additionalSearchQuerySupportingText">Helps narrow down search results by adding additional keywords</string>
+    <string name="migrationConfigScreen_hideUnmatchedTitle">Hide entries without a match</string>
+    <string name="migrationConfigScreen_hideWithoutUpdatesTitle">Hide entries without newer chapters</string>
+    <string name="migrationConfigScreen_hideWithoutUpdatesSubtitle">Only show entry if the match has additional chapters</string>
+    <string name="migrationConfigScreen_enhancedOptionsWarning">These options are slow and dangerous and may lead to restrictions from sources</string>
+    <string name="migrationConfigScreen_deepSearchModeTitle">Advanced search mode</string>
+    <string name="migrationConfigScreen_deepSearchModeSubtitle">Breaks down the title into keywords for a wider search</string>
+    <string name="migrationConfigScreen_prioritizeByChaptersTitle">Match based on chapter number</string>
+    <string name="migrationConfigScreen_prioritizeByChaptersSubtitle">If enabled, chooses the match furthest ahead. Otherwise, picks the first match by source priority.</string>
+
+    <string name="migrationListScreenTitle">Migration</string>
+    <string name="migrationListScreenTitleWithProgress">Migration (%1$d/%2$d)</string>
+    <string name="migrationListScreen_noMatchFoundText">No alternatives found</string>
+    <string name="migrationListScreen_latestChapterLabel">Latest: %1$s</string>
+    <string name="migrationListScreen_unknownLatestChapter">Unknown</string>
+    <string name="migrationListScreen_searchManuallyActionLabel">Search manually</string>
+    <string name="migrationListScreen_skipActionLabel">Don\'t migrate</string>
+    <string name="migrationListScreen_migrateNowActionLabel">Migrate now</string>
+    <string name="migrationListScreen_copyNowActionLabel">Copy now</string>
+    <string name="migrationListScreen_exitDialogTitle">Stop migrating?</string>
+    <string name="migrationListScreen_matchWithoutChapterToast">No chapters found, this entry cannot be used for migration</string>
+    <plurals name="migrationListScreen_migrateDialog_migrateTitle">
+        <item quantity="one">Migrate %1$d entry?</item>
+        <item quantity="other">Migrate %1$d entries?</item>
+    </plurals>
+    <plurals name="migrationListScreen_migrateDialog_copyTitle">
+        <item quantity="one">Copy %1$d entry?</item>
+        <item quantity="other">Copy %1$d entries?</item>
+    </plurals>
+    <plurals name="migrationListScreen_migrateDialog_skipText">
+        <item quantity="one">An entry was skipped</item>
+        <item quantity="other">%1$d entries were skipped</item>
+    </plurals>
+
+    <!-- Saikou's words. -->
+    <plurals name="migration_failed_count">
+        <item quantity="one">An entry could not be migrated and stays in the list</item>
+        <item quantity="other">%1$d entries could not be migrated and stay in the list</item>
+    </plurals>
+    <plurals name="migration_held_count">
+        <item quantity="one">An entry was not migrated because another entry was just migrated onto its match</item>
+        <item quantity="other">%1$d entries were not migrated because other entries were just migrated onto their matches</item>
+    </plurals>
+    <plurals name="migration_downloads_not_moved">
+        <item quantity="one">A downloaded chapter could not be moved to the new entry</item>
+        <item quantity="other">%1$d downloaded chapters could not be moved to the new entry</item>
+    </plurals>
+    <plurals name="migration_downloads_not_moved_batch">
+        <item quantity="one">A downloaded chapter could not be moved to its new entry</item>
+        <item quantity="other">%1$d downloaded chapters could not be moved to their new entries</item>
+    </plurals>
+    <plurals name="migration_downloads_kept">
+        <item quantity="one">A downloaded chapter of the old entry stays on this device</item>
+        <item quantity="other">%1$d downloaded chapters of the old entry stay on this device</item>
+    </plurals>
+    <plurals name="migration_downloads_kept_batch">
+        <item quantity="one">A downloaded chapter of an old entry stays on this device</item>
+        <item quantity="other">%1$d downloaded chapters of the old entries stay on this device</item>
+    </plurals>
+    <string name="migration_downloads_delete">Delete them</string>
+    <string name="migration_downloads_keep">Keep them</string>
+    <string name="migration_pick_in_batch">This entry is part of this migration and cannot be a target</string>
+</resources>

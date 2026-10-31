@@ -1,0 +1,26 @@
+-- Fresh: schema version 3 to 4, the chapter index diet. Version 3 is the committed schemas/3.db;
+-- verifyMigrations applies this file to it and diffs the result against the .sq files, so the
+-- five indexes gone here are gone from chapters.sq too. At 3.59 million chapters they held about
+-- 371 MB of a restored library's database, and every chapter insert maintained them.
+--
+-- EXPLAIN QUERY PLAN over every .sq statement, trigger body and the mangas delete cascade, on a
+-- populated database with no statistics, with a full ANALYZE and with what PRAGMA optimize leaves,
+-- found no plan that becomes a scan or gains a sort without them:
+-- - idx_chapters_url served only getChapterByUrl, which nothing called and which went with it; a
+--   chapter is found by (manga_id, url) through idx_chapters_manga_id_url.
+-- - idx_chapters_manga_id is a prefix of idx_chapters_manga_id_read and idx_chapters_manga_id_url,
+--   and its lookups and covering scans move to the first, which is as narrow.
+-- - idx_chapters_last_page_read, partial on last_page_read != 0, was in no plan: a != test is not
+--   an index constraint, and the OR it sits in cannot use it.
+-- - idx_chapters_read (partial on read = 1) and idx_chapters_date_fetch served only
+--   updatesView.sq's getUpdatesByReadStatus and getRecentUpdates, which nothing called and which
+--   went with them (upstream's updates widget reads the first; Saikou has no widget). syncCountLibrary's
+--   read count, the one other user of idx_chapters_read, searches (manga_id, read) per entry instead.
+--   A widget port that wants either back recreates it in a migration of its own.
+-- IF EXISTS so an install missing one of them still upgrades.
+
+DROP INDEX IF EXISTS idx_chapters_url;
+DROP INDEX IF EXISTS idx_chapters_manga_id;
+DROP INDEX IF EXISTS idx_chapters_last_page_read;
+DROP INDEX IF EXISTS idx_chapters_read;
+DROP INDEX IF EXISTS idx_chapters_date_fetch;

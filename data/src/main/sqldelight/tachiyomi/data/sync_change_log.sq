@@ -1,0 +1,61 @@
+-- Fresh: 05-data section 2.15 declares this table; it lives beside the other schema files in the
+-- tachiyomi.data package so the generated Database class stays in one place.
+
+-- AUTOINCREMENT is required: seq is a cursor the sync engine resumes from and must never be
+-- reused. Written by the triggers in the other .sq files and by one statement here,
+-- logChaptersWithoutProgressOnFavorite, which MangaRepositoryImpl.partialUpdate runs on a library add.
+--
+-- The key_ columns (schema version 2, phase 3 unit C) are set only on the 'delete' row of a hard
+-- delete, because the row is gone when the push reads the log: a manga records key_source and
+-- key_manga_url; a chapter, and a history row by its chapter, add key_chapter_url; a category
+-- records its sync key in key_category. Every other row leaves them NULL.
+CREATE TABLE sync_change_log(
+    seq INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    entity_type TEXT NOT NULL,
+    entity_id INTEGER NOT NULL,
+    change_type TEXT NOT NULL,
+    changed_at INTEGER NOT NULL,
+    key_source INTEGER,
+    key_manga_url TEXT,
+    key_chapter_url TEXT,
+    key_category TEXT
+);
+
+CREATE INDEX idx_sync_change_log_entity ON sync_change_log(entity_type, entity_id);
+CREATE INDEX idx_sync_change_log_changed_at ON sync_change_log(changed_at);
+
+getAfter:
+SELECT *
+FROM sync_change_log
+WHERE seq > :afterSeq
+ORDER BY seq
+LIMIT :limit;
+
+getLatestSeq:
+SELECT coalesce(max(seq), 0)
+FROM sync_change_log;
+
+getChangedIds:
+SELECT DISTINCT entity_id
+FROM sync_change_log
+WHERE entity_type = :entityType AND seq > :afterSeq;
+
+pruneUpTo:
+DELETE FROM sync_change_log
+WHERE seq <= :upToSeq;
+
+-- A library add's chapters without progress (phase 4 unit NB). Chapter changes log only while the
+-- manga is a favourite, and log_manga_progress_on_favorite logs only the chapters that carry
+-- progress when favorite goes from 0 to 1, so MangaRepositoryImpl.partialUpdate runs this after a
+-- local flip, in the same transaction, to log the rest. The predicate is the trigger's negated
+-- (written by De Morgan, since the SQLDelight grammar takes no NOT before a parenthesis; the three
+-- columns are NOT NULL, so the two forms are the same test), so with it every chapter the entry
+-- holds is logged once, in the trigger's shape (an unkeyed delete for a soft-deleted chapter, R85
+-- item 9), and another device receives the whole chapter list with the entry rather than taking it
+-- for new at its next library update.
+logChaptersWithoutProgressOnFavorite:
+INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+SELECT 'chapter', _id, CASE WHEN deleted_at IS NULL THEN 'upsert' ELSE 'delete' END,
+       strftime('%s', 'now') * 1000
+FROM chapters
+WHERE manga_id = :mangaId AND read != 1 AND bookmark != 1 AND last_page_read = 0;

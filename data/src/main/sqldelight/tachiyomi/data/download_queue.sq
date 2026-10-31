@@ -1,0 +1,80 @@
+-- Fresh: 05-data section 2.12 declares this table; it lives beside the other schema files in the
+-- tachiyomi.data package so the generated Database class stays in one place.
+-- Device-local table: no sync triggers.
+
+CREATE TABLE download_queue(
+    _id INTEGER NOT NULL PRIMARY KEY,
+    chapter_id INTEGER NOT NULL UNIQUE,
+    manga_id INTEGER NOT NULL,
+    state INTEGER NOT NULL DEFAULT 0,
+    queue_order INTEGER NOT NULL,
+    total_pages INTEGER NOT NULL DEFAULT 0,
+    downloaded_pages INTEGER NOT NULL DEFAULT 0,
+    error_message TEXT,
+    date_added INTEGER NOT NULL,
+    date_started INTEGER,
+    date_completed INTEGER,
+    FOREIGN KEY(chapter_id) REFERENCES chapters (_id) ON DELETE CASCADE,
+    FOREIGN KEY(manga_id) REFERENCES mangas (_id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_download_queue_manga_id ON download_queue(manga_id);
+CREATE INDEX idx_download_queue_state ON download_queue(state);
+CREATE INDEX idx_download_queue_queue_order ON download_queue(queue_order);
+
+getAll:
+SELECT *
+FROM download_queue
+ORDER BY queue_order;
+
+getByChapterId:
+SELECT *
+FROM download_queue
+WHERE chapter_id = :chapterId;
+
+getActive:
+SELECT *
+FROM download_queue
+WHERE state IN (0, 1, 2)
+ORDER BY queue_order;
+
+getByMangaId:
+SELECT *
+FROM download_queue
+WHERE manga_id = :mangaId
+ORDER BY queue_order;
+
+getMaxQueueOrder:
+SELECT coalesce(max(queue_order), 0)
+FROM download_queue;
+
+-- A chapter already queued (0) or downloading (1) is left exactly as it is: resetting a chapter
+-- in flight would show it queued while the engine keeps writing its pages. Any other row, a
+-- failed one (4) above all, is queued again where it stands in the queue.
+insert:
+INSERT INTO download_queue(chapter_id, manga_id, state, queue_order, date_added)
+VALUES (:chapterId, :mangaId, 0, :queueOrder, :now)
+ON CONFLICT(chapter_id)
+DO UPDATE SET state = 0, error_message = NULL
+WHERE state NOT IN (0, 1);
+
+updateState:
+UPDATE download_queue
+SET state = :state, error_message = :errorMessage,
+    date_started = CASE WHEN :state = 1 THEN coalesce(date_started, :now) ELSE date_started END,
+    date_completed = CASE WHEN :state = 3 THEN :now ELSE date_completed END
+WHERE chapter_id = :chapterId;
+
+updateProgress:
+UPDATE download_queue
+SET downloaded_pages = :downloadedPages, total_pages = :totalPages
+WHERE chapter_id = :chapterId;
+
+updateOrder:
+UPDATE download_queue
+SET queue_order = :queueOrder
+WHERE chapter_id = :chapterId;
+
+deleteByChapterIds:
+DELETE FROM download_queue
+WHERE chapter_id IN :chapterIds;

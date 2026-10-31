@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Everything the app ever hands to another app through a content URI. Nothing outside these three
+  directories is reachable, and none of them holds the database or the preferences.
+-->
+<paths>
+    <files-path name="crash" path="crash/" />
+    <files-path name="backups" path="backups/" />
+    <cache-path name="share" path="share/" />
+</paths>

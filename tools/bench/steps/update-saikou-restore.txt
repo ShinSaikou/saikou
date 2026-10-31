@@ -1,0 +1,16 @@
+# Restores a scenario's backup into Saikou through its own Backup screen (ruling R66). Run by
+# library_update_seed.sh from the base snapshot, with the backup pushed to /sdcard/Download and its
+# file name in BACKUP_NAME. Written in tools/bench/ui_steps.py's language, not run_steps.
+wait desc=More options timeout=60
+tap text=More
+tap text=Backup
+# The screen shows "Restore backup" twice, the heading and the button under it.
+scroll-to text=Restore backup nth=2
+tap text=Restore backup nth=2
+# The system picker, from its list of roots down to Download.
+tap desc=Show roots timeout=30
+tap text=sdk_gphone64_x86_64
+tap text=Download
+tap text={{BACKUP_NAME}}
+# BackupNotifier.ID_RESTORE_COMPLETE.
+notification com.shinsaikou|504 timeout=900

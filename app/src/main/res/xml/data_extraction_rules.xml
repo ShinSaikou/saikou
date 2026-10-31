@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Nothing leaves the device on its own. The library, the preferences and the crash logs are the
+  owner's, and the only supported way out is the backup file they ask for.
+
+  Downloaded chapters live in files/downloads (phase 2 decision Q4). The file domain is already
+  excluded as a whole; the downloads folder is named as well so it stays out of both copies if that
+  line is ever relaxed, because chapter images would overrun the backup quota. A manifest row whose
+  folder did not come along is dropped by the manifest sweep at the next start.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="file" path="downloads/" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="file" path="downloads/" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </device-transfer>
+</data-extraction-rules>

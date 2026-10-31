@@ -1,0 +1,32 @@
+# Predicates the index audit may not serve with an index, one per line, as
+# <file>:<query>:<table>.<column> # reason
+# An entry that no longer matches a real finding fails the test, so this list cannot rot.
+view/historyView.sq:history:mangas.title # leading-wildcard LIKE, cannot be indexed
+mangas.sq:getDuplicateLibraryManga:mangas.title # leading-wildcard LIKE, cannot be indexed
+chapters.sq:getScanlatorsByMangaId:chapters.scanlator # manga_id narrows the scan; the scanlator predicates only drop NULL and empty values
+view/updatesView.sq:getRecentUpdatesWithFilters:chapters.bookmark # the bookmark index is (manga_id, bookmark) and this filter spans every manga; dateUpload drives the scan
+mangas.sq:refreshNetworkMangaIfUninitialized:mangas.initialized # idx_mangas_source_url locates the one row by its identity key; initialized is a residual filter on that row, and a boolean index would never be chosen
+manga_sync.sq:insertIfBoundTo:manga_sync.remote_id # the UNIQUE (manga_id, sync_id) index locates the one row; remote_id is a residual filter on that row
+manga_sync.sq:deleteIfBoundTo:manga_sync.remote_id # the UNIQUE (manga_id, sync_id) index locates the one row; remote_id is a residual filter on that row
+extension_store.sq:updateIfSigningKey:extension_store.signing_key # the primary key on index_url locates the one row; signing_key is a residual filter on that row
+library_summary.sq:recomputeLibrarySummary:chapters.scanlator # idx_chapters_manga_id_read finds the one manga's chapters; the scanlator test only drops the excluded ones among them
+# Schema version 4 dropped idx_chapters_last_page_read, which no plan used (design/plans/chapter-index-diet.report.md).
+mangas.sq:getReadMangaNotInLibrary:chapters.last_page_read # read = 1 OR last_page_read != 0: SQLite combines no partial indexes for this OR, so the subquery reads every chapter once
+mangas.sq:deleteNonLibraryManga:chapters.last_page_read # the same OR as getReadMangaNotInLibrary's subquery, read whole once
+mangas.sq:deleteNonLibraryMangaByIds:chapters.last_page_read # the same OR as getReadMangaNotInLibrary's subquery, read whole once per batch
+mangas.sq:backupGetLibraryPage:chapters.last_page_read # the EXISTS reads one entry's chapters through idx_chapters_manga_id_read; the progress OR is a residual filter on them
+sync_change_log.sq:logChaptersWithoutProgressOnFavorite:chapters.last_page_read # manga_id finds the one entry's chapters through idx_chapters_manga_id_read; last_page_read = 0 is a residual filter on them
+view/updatesView.sq:getRecentUpdatesWithFilters:chapters.last_page_read # the started filter's progress test is residual on the rows date_upload or the entry selects
+# Schema version 4 also dropped idx_chapters_read and idx_chapters_date_fetch, whose only plans were the deleted getUpdatesByReadStatus and getRecentUpdates (design/plans/chapter-index-diet.report.md).
+chapters.sq:backupGetChaptersByMangaIds:chapters.manga_id # ORDER BY manga_id, read, _id is idx_chapters_manga_id_read's own order, its entries ending in the rowid; every plan searches it with no sort
+history.sq:backupGetHistoryByMangaIds:chapters.manga_id # ORDER BY C.manga_id, C.read, C._id is idx_chapters_manga_id_read's own order, its entries ending in the rowid; every plan searches it with no sort
+mangas.sq:backupGetLibraryPage:chapters.read # the EXISTS reads one entry's chapters through idx_chapters_manga_id_read; read = 1 sits in the progress OR, a residual filter on them
+mangas.sq:deleteNonLibraryManga:chapters.read # read = 1 OR last_page_read != 0: no index serves this OR (idx_chapters_read was in no plan of it), so the subquery reads every chapter once
+mangas.sq:deleteNonLibraryMangaByIds:chapters.read # the same OR as deleteNonLibraryManga's subquery, read whole once per batch
+mangas.sq:getReadMangaNotInLibrary:chapters.read # the same OR as deleteNonLibraryManga's subquery, read whole once
+mangas.sq:syncCountLibrary:chapters.read # the favorites drive through idx_mangas_favorite and each one's read chapters are a (manga_id, read) search of idx_chapters_manga_id_read
+view/updatesView.sq:getRecentUpdatesWithFilters:chapters.read # the unread and started filters test read on the rows date_upload's range or the entry selects; != and the OR are residual
+view/updatesView.sq:getRecentUpdatesWithFilters:chapters.date_fetch # sorted in a temp B-tree after date_upload's range or the entry selects, as every plan did with idx_chapters_date_fetch too
+view/updatesView.sq:updatesView:chapters.date_fetch # the view's own order; its one query, getRecentUpdatesWithFilters, states its own ORDER BY and sorts in a temp B-tree
+# The migrate-downloads follow-up narrowed three whole-manifest reads to this one; an index on the folder name waits for the next schema version.
+downloads_manifest.sq:getByChapterDirNames:downloads_manifest.chapter_dir_name # no index on the folder name yet: SQLite reads the manifest once per folder a download, a copy or a migration takes (once per entry for a migration), and builds only the matching rows, where each used to build every row

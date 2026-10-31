@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- The in-app updater hands a release's APK to Android's package installer. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <application
+        android:name=".SaikouApp"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:enableOnBackInvokedCallback="true"
+        android:hardwareAccelerated="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Saikou">
+
+        <activity
+            android:name=".ui.main.MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!--
+              A backup file opened from a file manager. The pathPattern ladder is the only way to
+              match a suffix on a path that may contain dots: each rung allows one more dot before
+              the one that ends the name.
+
+              The wildcard host is what makes that ladder run at all. The platform only consults a
+              filter's paths once an authority has matched, so a filter with no host is scheme plus
+              type and nothing else, which offered this app as a handler for every file on the
+              device. It is a wildcard rather than a name because a backup arrives as a content://
+              URI whose authority is whichever file manager the owner happens to use, so naming one
+              would match that app alone.
+
+              Contract 08 section 6.5 lists BROWSABLE on both of these filters. It is left off here,
+              and that is deliberate: BROWSABLE is what makes a filter reachable from a web page,
+              and this app publishes exactly one entry point on purpose (see REMAINING.md section 5
+              group 7 item 16, where an added library published a second one). Both filters still
+              answer an explicit VIEW from a file manager, from another app, and from `adb shell am
+              start`, which is every way the owner actually reaches them.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:host="*" />
+                <data android:mimeType="*/*" />
+                <data android:pathPattern=".*\\.tachibk" />
+                <data android:pathPattern=".*\\..*\\.tachibk" />
+                <data android:pathPattern=".*\\..*\\..*\\.tachibk" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.tachibk" />
+                <data android:pathPattern=".*\\.proto\\.gz" />
+                <data android:pathPattern=".*\\..*\\.proto\\.gz" />
+                <data android:pathPattern=".*\\..*\\..*\\.proto\\.gz" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.proto\\.gz" />
+            </intent-filter>
+
+            <!-- saikou://extension-store?url=<index address>: prefills the add field, adds nothing. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data
+                    android:host="extension-store"
+                    android:scheme="saikou" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
+        </activity>
+
+        <!--
+          The app lock's prompt (phase 4 unit AL), started by the app itself and never by another
+          app: not exported, no intent filter (R30).
+        -->
+        <activity
+            android:name="eu.kanade.tachiyomi.ui.security.UnlockActivity"
+            android:exported="false" />
+
+        <!--
+          The crash screen and the provider it shares a log through, in a process of their own so
+          they still work when the main process dies on every start; SaikouApp builds no graph there.
+          Started by the app's own crash handler only: not exported, no intent filter (R30).
+        -->
+        <activity
+            android:name=".ui.crash.CrashActivity"
+            android:exported="false"
+            android:process=":crash" />
+
+        <provider
+            android:name=".ui.crash.CrashLogProvider"
+            android:authorities="${applicationId}.crashlogs"
+            android:exported="false"
+            android:grantUriPermissions="true"
+            android:process=":crash">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/crash_provider_paths" />
+        </provider>
+
+        <receiver
+            android:name=".notification.NotificationReceiver"
+            android:exported="false" />
+
+        <!-- The in-app updater's install session reports here through its own PendingIntent only. -->
+        <receiver
+            android:name=".appupdate.AppUpdateInstallReceiver"
+            android:exported="false" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.provider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/provider_paths" />
+        </provider>
+
+        <!-- WorkManager: disable the default initializer; SaikouApp is the Configuration.Provider. -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
+
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
+
+        <meta-data
+            android:name="android.webkit.WebView.EnableSafeBrowsing"
+            android:value="false" />
+        <meta-data
+            android:name="android.webkit.WebView.MetricsOptOut"
+            android:value="true" />
+    </application>
+</manifest>

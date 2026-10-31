@@ -1,0 +1,90 @@
+# Saikou's profile for compare20k.py (unit upstream-compare-20k): its package, its labels and the
+# screens S1 to S9 go through. The timing is compare20k.py's and the same for every app; only the
+# words differ. Steps are tools/bench/ui_steps.py's language, plus compare20k.py's `tab <name>`
+# (the navigation bar's tab) and `hscroll-to <locator> along=<locator>` (a sideways row, the
+# category tabs). {{NAME}} comes from real_scale_backup.py's targets.env (TITLE, WORD, CATEGORY,
+# CHAPTERS_TOTAL) or from the scenario (CHAPTERS, BACKUP_NAME).
+
+package com.shinsaikou
+# S1 ends at WorkManager's result line for the restore's worker (compare20k.py, worker_results).
+restore.worker com.shinsaikou.backup.importer.BackupImportWorker
+# BackupNotifier.ID_RESTORE_COMPLETE.
+restore.done com.shinsaikou|504
+tab.library text=Library
+tab.updates text=Updates
+tab.history text=History
+tab.browse text=Browse
+tab.more text=More
+# A copy's title ends in " c01" to " c42" (real_scale_backup.py), so a screen of library titles
+# always shows some; More, the screen every check starts from, shows none.
+copy.pattern  c\d\d$
+marker.library text%= c\d\d$
+marker.updates text%= c\d\d$
+marker.history text%= c\d\d$
+# Statistics' chapter total, the figure that reads every chapter.
+marker.stats text={{CHAPTERS_TOTAL}}
+marker.entry text={{CHAPTERS}} chapters
+# A copy of the target in the grid. The search field above it holds the word as well, so the marker
+# is a copy's title, which the field never shows.
+marker.search text%=(?i){{WORD}}.* c\d\d$
+# Picking the file starts the restore: Saikou asks nothing after it.
+action.restore text={{BACKUP_NAME}}
+action.stats text=Statistics
+# A library cell's description is its title; compare20k.py takes the lowest match below the toolbar.
+action.entry desc={{TITLE}}
+
+[setup]
+# First run: the background work prompt, then the system's battery exemption dialog.
+wait text=Keep background work running timeout=60
+tap text=Allow
+wait text=Let app always run in background?
+tap id=android:id/button1
+wait desc=More options timeout=30
+# Settings > Data: no automatic backup (the default is every 12 h), so none runs in a window.
+tab more
+tap text=Settings
+tap text=Data
+check text=Off
+tap desc=Back
+tap desc=Back
+tab library
+
+[restore]
+# From any tab to the system picker's Downloads root, with the file pushed to /sdcard/Download.
+# Every restore option stays at its default (all on but private settings); the file holds no
+# settings.
+tab more
+tap text=Backup
+# The screen shows "Restore backup" twice, the heading and the button under it.
+scroll-to text=Restore backup nth=2
+tap text=Restore backup nth=2
+# The picker can reset to its Recent root after a drawer tap, so compare20k.py's picker-root repeats
+# the tap until the root's header shows.
+wait desc=Show roots timeout=30
+picker-root text=Downloads shown=text=Files in Downloads
+# The newest file comes first, so a session's first part is at the bottom of eleven.
+scroll-to text={{BACKUP_NAME}} timeout=30
+
+[search-open]
+# S8, from the Library: the target's category tab, then the search field; the clock starts at the
+# word's last letter. Saikou's search filters the tab on screen, so the tab comes first. The tab row
+# is found by whichever tab it shows: Default, or a target's category, where the last check left it.
+hscroll-to text={{CATEGORY}} along=text=Default|text={{CATEGORY_1385}}|text={{CATEGORY_3859}}
+tap desc=Search
+sleep 1
+
+[entry-open]
+# S6: the target's category tab, the search, the word typed a letter at a time, Enter.
+hscroll-to text={{CATEGORY}} along=text=Default|text={{CATEGORY_1385}}|text={{CATEGORY_3859}}
+tap desc=Search
+sleep 1
+slowtype {{WORD}}
+key 66
+sleep 2
+
+[search-close]
+tap-if desc=Close timeout=3
+
+[entry-close]
+tap desc=Back
+sleep 1

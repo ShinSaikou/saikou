@@ -1,0 +1,69 @@
+package com.shinsaikou.backup.importer
+
+import android.content.Context
+import android.net.Uri
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
+import androidx.work.workDataOf
+import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
+import eu.kanade.tachiyomi.data.backup.restore.RestoreOptions
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+
+/**
+ * The restore screen's whole view of the import. [ExistingWorkPolicy.KEEP] on a unique name is what
+ * stops a second tap from racing a run that is already resuming.
+ */
+@SingleIn(AppScope::class)
+@Inject
+class BackupImportRequest(private val context: Context) {
+
+    private val workManager: WorkManager
+        get() = WorkManager.getInstance(context)
+
+    fun start(uri: Uri, options: RestoreOptions) {
+        val request = OneTimeWorkRequestBuilder<BackupImportWorker>()
+            .addTag(BackupImportWorker.WORK_NAME)
+            .setInputData(
+                workDataOf(
+                    BackupImportWorker.KEY_URI to uri.toString(),
+                    BackupImportWorker.KEY_OPTIONS to options.asBooleanArray(),
+                ),
+            )
+            .build()
+        workManager.enqueueUniqueWork(BackupImportWorker.WORK_NAME, ExistingWorkPolicy.KEEP, request)
+    }
+
+    fun cancel() {
+        workManager.cancelUniqueWork(BackupImportWorker.WORK_NAME)
+    }
+
+    val isRunning: Flow<Boolean>
+        get() = infos.map { infos -> infos.any { it.state == WorkInfo.State.RUNNING } }
+
+    val progress: Flow<ImportProgress?>
+        get() = infos.map { infos ->
+            infos.firstOrNull { it.state == WorkInfo.State.RUNNING }?.let { info ->
+                val phase = info.progress.getString(BackupImportWorker.PROGRESS_PHASE)
+                    ?.let(::phaseOf)
+                    ?: return@let null
+                ImportProgress(
+                    phase = phase,
+                    done = info.progress.getInt(BackupImportWorker.PROGRESS_DONE, 0),
+                    total = info.progress.getInt(BackupImportWorker.PROGRESS_TOTAL, 0),
+                    currentTitle = info.progress.getString(BackupImportWorker.PROGRESS_TITLE)
+                        ?.takeIf { it.isNotEmpty() },
+                )
+            }
+        }
+
+    private val infos: Flow<List<WorkInfo>>
+        get() = workManager.getWorkInfosForUniqueWorkFlow(BackupImportWorker.WORK_NAME)
+
+    /** An unknown phase name comes from a build that is no longer installed; it is not a crash. */
+    private fun phaseOf(name: String): ImportPhase? = ImportPhase.entries.firstOrNull { it.name == name }
+}

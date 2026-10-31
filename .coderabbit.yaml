@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit review settings. Everything not set here keeps CodeRabbit's defaults.
+reviews:
+  pre_merge_checks:
+    # The project documents with KDoc where it explains a decision (CONTRIBUTING.md), not to a
+    # coverage percentage, so the generic 80% docstring check is off.
+    docstrings:
+      mode: "off"

@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "comment": "Protobuf field numbers of the catalog index. A unit test in :extensions asserts these equal the @ProtoNumber annotations of the Kotlin index client, so the Python and Kotlin parsers cannot drift.",
+  "messages": {
+    "Index": {
+      "name": 1,
+      "badgeLabel": 2,
+      "signingKey": 3,
+      "contact": 4,
+      "extensionList": 101,
+      "extensionListUrl": 102
+    },
+    "Contact": {
+      "website": 1,
+      "discord": 2
+    },
+    "ExtensionList": {
+      "extensions": 1
+    },
+    "Extension": {
+      "name": 1,
+      "packageName": 2,
+      "resources": 3,
+      "extensionLib": 4,
+      "versionCode": 5,
+      "versionName": 6,
+      "contentWarning": 7,
+      "sources": 8
+    },
+    "Resources": {
+      "apkUrl": 1,
+      "iconUrl": 2,
+      "jarUrl": 501
+    },
+    "Source": {
+      "id": 1,
+      "name": 2,
+      "language": 3,
+      "homeUrl": 4,
+      "mirrorUrls": 5,
+      "message": 7
+    }
+  },
+  "oneofs": {
+    "Index.extensions": [
+      "extensionList",
+      "extensionListUrl"
+    ]
+  },
+  "enums": {
+    "ContentWarning": {
+      "CONTENT_WARNING_UNSPECIFIED": 0,
+      "CONTENT_WARNING_SAFE": 1,
+      "CONTENT_WARNING_MIXED": 2,
+      "CONTENT_WARNING_NSFW": 3
+    }
+  }
+}

@@ -1,0 +1,71 @@
+-- Vendored from upstream v0.20.4: data/src/main/sqldelight/tachiyomi/data/excluded_scanlators.sq (modified: yes)
+-- Modified: UNIQUE (manga_id, scanlator) ON CONFLICT IGNORE, the manga_id index is renamed to the
+-- idx_ convention, and the change-log triggers of 05-data 2.18 are added. Queries are 3.6. Schema
+-- version 2 (phase 3 unit C) adds the update trigger and the manga's exclusions_modified_at clock.
+-- Phase 5 unit SC2 adds backupGetExcludedScanlatorsByMangaIds, for the export's pages.
+
+CREATE TABLE excluded_scanlators(
+    manga_id INTEGER NOT NULL,
+    scanlator TEXT NOT NULL,
+    UNIQUE (manga_id, scanlator) ON CONFLICT IGNORE,
+    FOREIGN KEY(manga_id) REFERENCES mangas (_id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_excluded_scanlators_manga_id ON excluded_scanlators(manga_id);
+CREATE INDEX idx_excluded_scanlators_scanlator ON excluded_scanlators(scanlator);
+
+-- entity_id is the manga id: the excluded set is the unit of change.
+CREATE TRIGGER insert_excluded_scanlator_change AFTER INSERT ON excluded_scanlators
+WHEN (SELECT is_syncing FROM mangas WHERE _id = new.manga_id) = 0
+BEGIN
+    UPDATE mangas
+    SET exclusions_modified_at = max(strftime('%s', 'now') * 1000, coalesce(exclusions_modified_at, 0) + 1)
+    WHERE _id = new.manga_id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('excluded_scanlator', new.manga_id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+CREATE TRIGGER update_excluded_scanlator_change AFTER UPDATE ON excluded_scanlators
+WHEN (SELECT is_syncing FROM mangas WHERE _id = new.manga_id) = 0
+BEGIN
+    UPDATE mangas
+    SET exclusions_modified_at = max(strftime('%s', 'now') * 1000, coalesce(exclusions_modified_at, 0) + 1)
+    WHERE _id = new.manga_id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('excluded_scanlator', new.manga_id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+CREATE TRIGGER delete_excluded_scanlator_change AFTER DELETE ON excluded_scanlators
+WHEN (SELECT is_syncing FROM mangas WHERE _id = old.manga_id) = 0
+BEGIN
+    UPDATE mangas
+    SET exclusions_modified_at = max(strftime('%s', 'now') * 1000, coalesce(exclusions_modified_at, 0) + 1)
+    WHERE _id = old.manga_id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('excluded_scanlator', old.manga_id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+insert:
+INSERT INTO excluded_scanlators(manga_id, scanlator)
+VALUES (:mangaId, :scanlator);
+
+remove:
+DELETE FROM excluded_scanlators
+WHERE manga_id = :mangaId AND scanlator IN :scanlators;
+
+removeAll:
+DELETE FROM excluded_scanlators
+WHERE manga_id = :mangaId;
+
+getExcludedScanlatorsByMangaId:
+SELECT scanlator
+FROM excluded_scanlators
+WHERE manga_id = :mangaId;
+
+-- getExcludedScanlatorsByMangaId for a page of entries (phase 5 unit SC2), in its plan's order, the
+-- unique index's.
+backupGetExcludedScanlatorsByMangaIds:
+SELECT manga_id, scanlator
+FROM excluded_scanlators
+WHERE manga_id IN :mangaIds
+ORDER BY manga_id, scanlator;

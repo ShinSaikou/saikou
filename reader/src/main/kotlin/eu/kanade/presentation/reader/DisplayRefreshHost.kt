@@ -1,0 +1,93 @@
+// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/presentation/reader/DisplayRefreshHost.kt (modified: yes)
+package eu.kanade.presentation.reader
+
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import com.shinsaikou.domain.preferences.FlashColor
+import com.shinsaikou.domain.preferences.ReaderPreferences
+import kotlinx.coroutines.delay
+import tachiyomi.presentation.core.util.collectAsState
+import kotlin.time.Duration.Companion.milliseconds
+
+/**
+ * Modified (I): `ReaderPreferences` is a constructor parameter rather than an Injekt lookup, and
+ * `FlashColor` is `:domain`'s own enum rather than the one nested in upstream's preferences class.
+ */
+@Stable
+class DisplayRefreshHost(readerPreferences: ReaderPreferences) {
+
+    internal var currentDisplayRefresh by mutableStateOf(false)
+
+    internal val flashMillis = readerPreferences.flashDurationMillis
+    internal val flashMode = readerPreferences.flashColor
+
+    internal val flashIntervalPref = readerPreferences.flashPageInterval
+
+    // Internal State for Flash
+    private var flashInterval = flashIntervalPref.get()
+    private var timesCalled = 0
+
+    fun flash() {
+        if (timesCalled % flashInterval == 0) {
+            currentDisplayRefresh = true
+        }
+        timesCalled += 1
+    }
+
+    fun setInterval(interval: Int) {
+        flashInterval = interval
+        timesCalled = 0
+    }
+}
+
+@Composable
+fun DisplayRefreshHost(
+    hostState: DisplayRefreshHost,
+    modifier: Modifier = Modifier,
+) {
+    val currentDisplayRefresh = hostState.currentDisplayRefresh
+    val refreshDuration by hostState.flashMillis.collectAsState()
+    val flashMode by hostState.flashMode.collectAsState()
+    val flashInterval by hostState.flashIntervalPref.collectAsState()
+
+    var currentColor by remember { mutableStateOf<Color?>(null) }
+
+    LaunchedEffect(currentDisplayRefresh) {
+        if (!currentDisplayRefresh) {
+            currentColor = null
+            return@LaunchedEffect
+        }
+
+        val refreshDurationHalf = refreshDuration.milliseconds / 2
+        currentColor = if (flashMode == FlashColor.BLACK) {
+            Color.Black
+        } else {
+            Color.White
+        }
+        delay(refreshDurationHalf)
+        if (flashMode == FlashColor.WHITE_BLACK) {
+            currentColor = Color.Black
+        }
+        delay(refreshDurationHalf)
+        hostState.currentDisplayRefresh = false
+    }
+
+    LaunchedEffect(flashInterval) {
+        hostState.setInterval(flashInterval)
+    }
+
+    Canvas(
+        modifier = modifier.fillMaxSize(),
+    ) {
+        currentColor?.let { drawRect(it) }
+    }
+}

@@ -1,0 +1,68 @@
+-- Vendored from upstream v0.20.4: data/src/main/sqldelight/tachiyomi/data/mangas_categories.sq (modified: yes)
+-- Modified: UNIQUE (manga_id, category_id) ON CONFLICT IGNORE so a re-imported backup cannot
+-- duplicate rows (05-data 2.4), the delete side of the version trigger (2.18) and the queries of 3.4.
+-- Schema version 2 (phase 3 unit C) moves the manga's categories_modified_at clock beside the
+-- version bump.
+
+CREATE TABLE mangas_categories(
+    _id INTEGER NOT NULL PRIMARY KEY,
+    manga_id INTEGER NOT NULL,
+    category_id INTEGER NOT NULL,
+    UNIQUE (manga_id, category_id) ON CONFLICT IGNORE,
+    FOREIGN KEY(category_id) REFERENCES categories (_id) ON DELETE CASCADE,
+    FOREIGN KEY(manga_id) REFERENCES mangas (_id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_mangas_categories_manga_id ON mangas_categories(manga_id);
+CREATE INDEX idx_mangas_categories_category_id ON mangas_categories(category_id);
+
+-- entity_id is the manga id: the manga's category SET is the unit of change.
+CREATE TRIGGER insert_manga_category_update_version AFTER INSERT ON mangas_categories
+WHEN (SELECT is_syncing FROM mangas WHERE _id = new.manga_id) = 0
+BEGIN
+    UPDATE mangas
+    SET version = version + 1,
+        categories_modified_at = max(strftime('%s', 'now') * 1000, coalesce(categories_modified_at, 0) + 1)
+    WHERE _id = new.manga_id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('manga_category', new.manga_id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+CREATE TRIGGER delete_manga_category_update_version AFTER DELETE ON mangas_categories
+WHEN (SELECT is_syncing FROM mangas WHERE _id = old.manga_id) = 0
+BEGIN
+    UPDATE mangas
+    SET version = version + 1,
+        categories_modified_at = max(strftime('%s', 'now') * 1000, coalesce(categories_modified_at, 0) + 1)
+    WHERE _id = old.manga_id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('manga_category', old.manga_id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+insert:
+INSERT INTO mangas_categories(manga_id, category_id)
+VALUES (:mangaId, :categoryId);
+
+deleteMangaCategoryByMangaId:
+DELETE FROM mangas_categories
+WHERE manga_id = :mangaId;
+
+deleteByCategoryId:
+DELETE FROM mangas_categories
+WHERE category_id = :categoryId;
+
+getMangaIdsByCategoryId:
+SELECT manga_id
+FROM mangas_categories
+WHERE category_id = :categoryId;
+
+-- Phase 3 sync (unit E2): a manga's live, keyed categories. The system category has no key.
+syncGetCategoriesByMangaId:
+SELECT C._id, C.sync_key
+FROM mangas_categories MC
+JOIN categories C ON C._id = MC.category_id
+WHERE MC.manga_id = :mangaId AND C._id > 0 AND C.deleted_at IS NULL AND C.sync_key IS NOT NULL;
+
+syncDelete:
+DELETE FROM mangas_categories
+WHERE manga_id = :mangaId AND category_id = :categoryId;

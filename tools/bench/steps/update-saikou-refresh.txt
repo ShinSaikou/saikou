@@ -1,0 +1,8 @@
+# Starts Saikou's library update from its Library screen (ruling R66, section 4 Q2), run by
+# library_update.sh through update_drive.py after the app is launched from the scenario's snapshot.
+# Written in tools/bench/ui_steps.py's language, not run_steps. The last line is the tap that starts
+# the update, and update_drive.py reads the clock immediately before it.
+wait text=Library timeout=60
+wait text^=Fixture timeout=60
+tap desc=More options
+tap text=Update library

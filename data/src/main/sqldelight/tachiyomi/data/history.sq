@@ -1,0 +1,124 @@
+-- Vendored from upstream v0.20.4: data/src/main/sqldelight/tachiyomi/data/history.sq (modified: yes)
+-- Modified: upstream's redundant history_history_chapter_id_index is dropped (the UNIQUE autoindex
+-- already covers chapter_id), the change-log triggers of 05-data 2.18 are added, and the two reset
+-- queries also zero time_read. Queries are 3.7. Schema version 2 (phase 3 unit C) guards the delete
+-- and records the chapter's natural key on it. Phase 5 unit SC2 adds backupGetHistoryByMangaIds, for
+-- the export's pages. migrationMerge and deleteByChapterIds carry a migrated entry's history.
+
+import java.util.Date;
+
+CREATE TABLE history(
+    _id INTEGER NOT NULL PRIMARY KEY,
+    chapter_id INTEGER NOT NULL UNIQUE,
+    last_read INTEGER AS Date,
+    time_read INTEGER NOT NULL,
+    FOREIGN KEY(chapter_id) REFERENCES chapters (_id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_history_last_read ON history(last_read);
+
+-- entity_id is the chapter id.
+CREATE TRIGGER upsert_history_change AFTER INSERT ON history
+WHEN (SELECT M.is_syncing FROM mangas M JOIN chapters C ON C.manga_id = M._id WHERE C._id = new.chapter_id) = 0
+BEGIN
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('history', new.chapter_id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+CREATE TRIGGER update_history_change AFTER UPDATE ON history
+WHEN (new.last_read IS NOT old.last_read OR new.time_read != old.time_read)
+AND (SELECT M.is_syncing FROM mangas M JOIN chapters C ON C.manga_id = M._id WHERE C._id = new.chapter_id) = 0
+BEGIN
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('history', new.chapter_id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+CREATE TRIGGER delete_history_change AFTER DELETE ON history
+WHEN (SELECT M.is_syncing FROM mangas M JOIN chapters C ON C.manga_id = M._id WHERE C._id = old.chapter_id) = 0
+BEGIN
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at, key_source,
+        key_manga_url, key_chapter_url)
+    SELECT 'history', old.chapter_id, 'delete', strftime('%s', 'now') * 1000, M.source, M.url, C.url
+    FROM mangas M JOIN chapters C ON C.manga_id = M._id
+    WHERE C._id = old.chapter_id;
+END;
+
+getHistoryByMangaId:
+SELECT H.*
+FROM history H
+JOIN chapters C ON H.chapter_id = C._id
+WHERE C.manga_id = :mangaId AND C._id = H.chapter_id;
+
+-- The history an export writes for a page of entries (phase 5 unit SC2): a read time, on a chapter
+-- that is not soft-deleted, with the chapter's url, in getHistoryByMangaId's plan order (its
+-- chapters by idx_chapters_manga_id_read).
+backupGetHistoryByMangaIds:
+SELECT C.manga_id, C.url, H.*
+FROM history H
+JOIN chapters C ON H.chapter_id = C._id
+WHERE C.manga_id IN :mangaIds AND C.deleted_at IS NULL AND H.last_read IS NOT NULL
+ORDER BY C.manga_id, C.read, C._id;
+
+getHistoryByChapterUrlAndMangaId:
+SELECT H.*
+FROM history H
+JOIN chapters C ON H.chapter_id = C._id
+WHERE C.url = :chapterUrl AND C.manga_id = :mangaId
+LIMIT 1;
+
+resetHistoryById:
+UPDATE history
+SET last_read = 0, time_read = 0
+WHERE _id = :historyId;
+
+resetHistoryByMangaId:
+UPDATE history
+SET last_read = 0, time_read = 0
+WHERE _id IN (
+    SELECT H._id FROM mangas M JOIN chapters C ON M._id = C.manga_id JOIN history H ON C._id = H.chapter_id
+    WHERE M._id = :mangaId);
+
+removeAllHistory:
+DELETE FROM history;
+
+removeResettedHistory:
+DELETE FROM history
+WHERE last_read = 0;
+
+upsert:
+INSERT INTO history(chapter_id, last_read, time_read)
+VALUES (:chapterId, :readAt, :readDuration)
+ON CONFLICT(chapter_id)
+DO UPDATE SET last_read = :readAt, time_read = time_read + :readDuration
+WHERE chapter_id = :chapterId;
+
+getReadDuration:
+SELECT coalesce(sum(time_read), 0)
+FROM history;
+
+-- A migration's carry onto a chapter of the new entry (MigrateManga): the later read date, and the
+-- reading time added, which a Copy passes as 0 so it is not counted twice. A row it creates or
+-- changes is logged by the triggers above.
+migrationMerge:
+INSERT INTO history(chapter_id, last_read, time_read)
+VALUES (:chapterId, :readAt, :readDuration)
+ON CONFLICT(chapter_id)
+DO UPDATE SET last_read = max(coalesce(last_read, 0), :readAt), time_read = time_read + :readDuration;
+
+-- The old entry's rows a Migrate carried.
+deleteByChapterIds:
+DELETE FROM history
+WHERE chapter_id IN :chapterIds;
+
+-- Phase 3 sync (unit E2): one chapter's row, and the apply's write of both merged values as they
+-- are, where upsert adds the reading time.
+syncGetByChapterId:
+SELECT *
+FROM history
+WHERE chapter_id = :chapterId;
+
+syncUpsert:
+INSERT INTO history(chapter_id, last_read, time_read)
+VALUES (:chapterId, :lastRead, :timeRead)
+ON CONFLICT(chapter_id)
+DO UPDATE SET last_read = :lastRead, time_read = :timeRead;

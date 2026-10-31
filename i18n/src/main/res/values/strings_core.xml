@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Text the network stack in :core:common needs. That module has no resources of its own, so the
+  app module implements com.shinsaikou.core.common.network.NetworkUserMessages with these keys.
+  The key names are upstream's.
+-->
+<resources>
+    <string name="information_cloudflare_bypass_failure">Failed to bypass Cloudflare</string>
+    <string name="information_webview_required">WebView is required for the app to function</string>
+    <string name="information_webview_outdated">Please update the WebView app for better compatibility</string>
+</resources>

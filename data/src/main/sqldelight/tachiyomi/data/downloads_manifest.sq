@@ -1,0 +1,104 @@
+-- Fresh: 05-data section 2.13 declares this table; it lives beside the other schema files in the
+-- tachiyomi.data package so the generated Database class stays in one place.
+-- Device-local table: no sync triggers.
+
+-- Deliberately no foreign key: a manifest row must outlive its chapter and manga rows so the
+-- storage screen can still list downloads for titles that are no longer in the library. That is
+-- why the identity text below is copied rather than joined.
+CREATE TABLE downloads_manifest(
+    _id INTEGER NOT NULL PRIMARY KEY,
+    chapter_id INTEGER NOT NULL UNIQUE,
+    manga_id INTEGER NOT NULL,
+    source_id INTEGER NOT NULL,
+    manga_title TEXT NOT NULL,
+    manga_url TEXT NOT NULL,
+    chapter_url TEXT NOT NULL,
+    chapter_name TEXT NOT NULL,
+    scanlator TEXT,
+    chapter_dir_name TEXT NOT NULL,
+    page_count INTEGER NOT NULL,
+    size_bytes INTEGER NOT NULL DEFAULT 0,
+    date_downloaded INTEGER NOT NULL
+);
+
+CREATE INDEX idx_downloads_manifest_manga_id ON downloads_manifest(manga_id);
+CREATE INDEX idx_downloads_manifest_source_id ON downloads_manifest(source_id);
+
+getByChapterId:
+SELECT *
+FROM downloads_manifest
+WHERE chapter_id = :chapterId;
+
+getByMangaId:
+SELECT *
+FROM downloads_manifest
+WHERE manga_id = :mangaId;
+
+-- The rows of the chapters a screen shows (the Updates tab's, at most 500), for its download controls.
+getByChapterIds:
+SELECT *
+FROM downloads_manifest
+WHERE chapter_id IN :chapterIds;
+
+countsByManga:
+SELECT manga_id, count(*) AS count
+FROM downloads_manifest
+GROUP BY manga_id;
+
+getAll:
+SELECT *
+FROM downloads_manifest;
+
+-- The rows whose folder has one of these names, of any entry: what a download, a copy from upstream's
+-- folder and a migration check before they take a folder, since folders are keyed by source name
+-- and title and never by manga id. Nothing indexes the name, so SQLite reads the table, but only the
+-- matching rows are built, where the whole-table read built every row on each check.
+getByChapterDirNames:
+SELECT *
+FROM downloads_manifest
+WHERE chapter_dir_name IN :chapterDirNames;
+
+getOrphans:
+SELECT D.*
+FROM downloads_manifest D
+LEFT JOIN mangas M ON M._id = D.manga_id
+WHERE M._id IS NULL OR M.favorite = 0;
+
+-- Rows whose chapter row is gone or soft deleted: the ones the download engine tries to re-match.
+getWithoutChapter:
+SELECT D.*
+FROM downloads_manifest D
+LEFT JOIN chapters C ON C._id = D.chapter_id
+WHERE C._id IS NULL OR C.deleted_at IS NOT NULL;
+
+getTotalSizeBytes:
+SELECT coalesce(sum(size_bytes), 0)
+FROM downloads_manifest;
+
+upsert:
+INSERT INTO downloads_manifest(chapter_id, manga_id, source_id, manga_title, manga_url, chapter_url,
+    chapter_name, scanlator, chapter_dir_name, page_count, size_bytes, date_downloaded)
+VALUES (:chapterId, :mangaId, :sourceId, :mangaTitle, :mangaUrl, :chapterUrl, :chapterName, :scanlator,
+    :chapterDirName, :pageCount, :sizeBytes, :now)
+ON CONFLICT(chapter_id)
+DO UPDATE SET page_count = :pageCount, size_bytes = :sizeBytes,
+    chapter_dir_name = :chapterDirName, date_downloaded = :now
+WHERE chapter_id = :chapterId;
+
+repoint:
+UPDATE downloads_manifest
+SET chapter_id = :toChapterId, chapter_url = :chapterUrl, chapter_name = :chapterName, scanlator = :scanlator
+WHERE chapter_id = :fromChapterId;
+
+-- A migration's move of a download onto another entry's chapter (unit migrate-downloads): the
+-- files are already under the new folder name, so every identity column follows them.
+moveToChapter:
+UPDATE downloads_manifest
+SET chapter_id = :toChapterId, manga_id = :mangaId, source_id = :sourceId, manga_title = :mangaTitle,
+    manga_url = :mangaUrl, chapter_url = :chapterUrl, chapter_name = :chapterName, scanlator = :scanlator,
+    chapter_dir_name = :chapterDirName
+WHERE chapter_id = :fromChapterId;
+
+deleteByChapterIds:
+DELETE FROM downloads_manifest
+WHERE chapter_id IN :chapterIds;

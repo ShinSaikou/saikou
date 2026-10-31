@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="540" viewBox="0 0 720 540" role="img" aria-labelledby="cmp-title cmp-desc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+<title id="cmp-title">Saikou 0.0.1 compared with Mihon v0.21.0</title>
+<desc id="cmp-desc">Library update (2,000 entries across 20 sources): Saikou 0.0.1 41.5 s, Mihon v0.21.0 255.3 s. Cold start to library (20,124 entries): Saikou 0.0.1 1.24 s, Mihon v0.21.0 1.78 s. Statistics screen (20,124 entries): Saikou 0.0.1 0.20 s, Mihon v0.21.0 1.38 s. Restore one backup (87 MB file, 20,124 entries): Saikou 0.0.1 139.3 s, Mihon v0.21.0 Runs out of memory before it starts. Memory with the library open (PSS, 20,124 entries): Saikou 0.0.1 141 MB, Mihon v0.21.0 151 MB. Storage after the restore (20,124 entries): Saikou 0.0.1 1,461 MB, Mihon v0.21.0 987 MB. Lower is better in every panel. Mihon restored the eleven smaller backups in 86.5 s in total; Saikou was not timed on them. Storage was measured before schema 4 dropped unused chapter indexes, about 300 MB at this size. Mihon v0.20.4 took 246.0 s on the same library update bench. Mihon releases after v0.21.0 were not measured.</desc>
+<rect x="0" y="4" width="12" height="12" rx="3" fill="#2a78d6"/>
+<text x="18" y="14.5" font-size="13" fill="#0b0b0b">Saikou 0.0.1</text>
+<rect x="123" y="4" width="12" height="12" rx="3" fill="#eb6834"/>
+<text x="141" y="14.5" font-size="13" fill="#0b0b0b">Mihon v0.21.0</text>
+<text x="0" y="50" font-size="13" font-weight="600" fill="#0b0b0b">Library update</text>
+<text x="0" y="67" font-size="12" fill="#52514e">2,000 entries across 20 sources</text>
+<line x1="59.5" y1="76" x2="59.5" y2="130" stroke-width="1" stroke="#e4e3df"/>
+<text x="0" y="93" font-size="12" fill="#52514e">Saikou</text>
+<path d="M60.0,80.0 h29.5 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-29.5 Z" fill="#2a78d6"><title>Saikou 0.0.1: 41.5 s</title></path>
+<text x="99.5" y="93" font-size="12" font-variant-numeric="tabular-nums" fill="#0b0b0b">41.5 s</text>
+<text x="0" y="121" font-size="12" fill="#52514e">Mihon</text>
+<path d="M60.0,108.0 h202.0 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-202.0 Z" fill="#eb6834"><title>Mihon v0.21.0: 255.3 s</title></path>
+<text x="272.0" y="121" font-size="12" font-variant-numeric="tabular-nums" fill="#0b0b0b">255.3 s</text>
+<text x="380" y="50" font-size="13" font-weight="600" fill="#0b0b0b">Cold start to library</text>
+<text x="380" y="67" font-size="12" fill="#52514e">20,124 entries</text>
+<line x1="439.5" y1="76" x2="439.5" y2="130" stroke-width="1" stroke="#e4e3df"/>
+<text x="380" y="93" font-size="12" fill="#52514e">Saikou</text>
+<path d="M440.0,80.0 h139.4 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-139.4 Z" fill="#2a78d6"><title>Saikou 0.0.1: 1.24 s</title></path>
+<text x="589.4" y="93" font-size="12" font-variant-numeric="tabular-nums" fill="#0b0b0b">1.24 s</text>
+<text x="380" y="121" font-size="12" fill="#52514e">Mihon</text>
+<path d="M440.0,108.0 h202.0 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-202.0 Z" fill="#eb6834"><title>Mihon v0.21.0: 1.78 s</title></path>
+<text x="652.0" y="121" font-size="12" font-variant-numeric="tabular-nums" fill="#0b0b0b">1.78 s</text>
+<text x="0" y="162" font-size="13" font-weight="600" fill="#0b0b0b">Statistics screen</text>
+<text x="0" y="179" font-size="12" fill="#52514e">20,124 entries</text>
+<line x1="59.5" y1="188" x2="59.5" y2="242" stroke-width="1" stroke="#e4e3df"/>
+<text x="0" y="205" font-size="12" fill="#52514e">Saikou</text>
+<path d="M60.0,192.0 h26.2 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-26.2 Z" fill="#2a78d6"><title>Saikou 0.0.1: 0.20 s</title></path>
+<text x="96.2" y="205" font-size="12" font-variant-numeric="tabular-nums" fill="#0b0b0b">0.20 s</text>
+<text x="0" y="233" font-size="12" fill="#52514e">Mihon</text>
+<path d="M60.0,220.0 h202.0 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-202.0 Z" fill="#eb6834"><title>Mihon v0.21.0: 1.38 s</title></path>
+<text x="272.0" y="233" font-size="12" font-variant-numeric="tabular-nums" fill="#0b0b0b">1.38 s</text>
+<text x="380" y="162" font-size="13" font-weight="600" fill="#0b0b0b">Restore one backup</text>
+<text x="380" y="179" font-size="12" fill="#52514e">87 MB file, 20,124 entries</text>
+<line x1="439.5" y1="188" x2="439.5" y2="242" stroke-width="1" stroke="#e4e3df"/>
+<text x="380" y="205" font-size="12" fill="#52514e">Saikou</text>
+<path d="M440.0,192.0 h202.0 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-202.0 Z" fill="#2a78d6"><title>Saikou 0.0.1: 139.3 s</title></path>
+<text x="652.0" y="205" font-size="12" font-variant-numeric="tabular-nums" fill="#0b0b0b">139.3 s</text>
+<text x="380" y="233" font-size="12" fill="#52514e">Mihon</text>
+<text x="446" y="233" font-size="12" font-style="italic" fill="#52514e">Runs out of memory before it starts</text>
+<text x="0" y="274" font-size="13" font-weight="600" fill="#0b0b0b">Memory with the library open</text>
+<text x="0" y="291" font-size="12" fill="#52514e">PSS, 20,124 entries</text>
+<line x1="59.5" y1="300" x2="59.5" y2="354" stroke-width="1" stroke="#e4e3df"/>
+<text x="0" y="317" font-size="12" fill="#52514e">Saikou</text>
+<path d="M60.0,304.0 h188.4 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-188.4 Z" fill="#2a78d6"><title>Saikou 0.0.1: 141 MB</title></path>
+<text x="258.4" y="317" font-size="12" font-variant-numeric="tabular-nums" fill="#0b0b0b">141 MB</text>
+<text x="0" y="345" font-size="12" fill="#52514e">Mihon</text>
+<path d="M60.0,332.0 h202.0 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-202.0 Z" fill="#eb6834"><title>Mihon v0.21.0: 151 MB</title></path>
+<text x="272.0" y="345" font-size="12" font-variant-numeric="tabular-nums" fill="#0b0b0b">151 MB</text>
+<text x="380" y="274" font-size="13" font-weight="600" fill="#0b0b0b">Storage after the restore</text>
+<text x="380" y="291" font-size="12" fill="#52514e">20,124 entries</text>
+<line x1="439.5" y1="300" x2="439.5" y2="354" stroke-width="1" stroke="#e4e3df"/>
+<text x="380" y="317" font-size="12" fill="#52514e">Saikou</text>
+<path d="M440.0,304.0 h202.0 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-202.0 Z" fill="#2a78d6"><title>Saikou 0.0.1: 1,461 MB</title></path>
+<text x="652.0" y="317" font-size="12" font-variant-numeric="tabular-nums" fill="#0b0b0b">1,461 MB</text>
+<text x="380" y="345" font-size="12" fill="#52514e">Mihon</text>
+<path d="M440.0,332.0 h135.2 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-135.2 Z" fill="#eb6834"><title>Mihon v0.21.0: 987 MB</title></path>
+<text x="585.2" y="345" font-size="12" font-variant-numeric="tabular-nums" fill="#0b0b0b">987 MB</text>
+<text x="0" y="392" font-size="11" fill="#52514e">Lower is better in every panel.</text>
+<text x="0" y="408" font-size="11" fill="#52514e">Mihon restored the eleven smaller backups in 86.5 s in total; Saikou was not timed on them.</text>
+<text x="0" y="424" font-size="11" fill="#52514e">Storage was measured before schema 4 dropped unused chapter indexes, about 300 MB at this size.</text>
+<text x="0" y="440" font-size="11" fill="#52514e">Mihon v0.20.4 took 246.0 s on the same library update bench. Mihon releases after v0.21.0 were not measured.</text>
+<text x="0" y="456" font-size="11" fill="#52514e">Measured 2026-10-14. Android emulator, Pixel 9 profile (API 36, 4 GB), network off. Saikou 0.0.1 release build</text>
+<text x="0" y="472" font-size="11" fill="#52514e">against the official Mihon v0.21.0 APK. Library: 20,124 entries and about 3.6 million chapters from one 87 MB</text>
+<text x="0" y="488" font-size="11" fill="#52514e">backup; Saikou restored that file, Mihon (which runs out of memory on it) restored the same data split into</text>
+<text x="0" y="504" font-size="11" fill="#52514e">eleven backups. Memory and storage were measured after each app&#x27;s restore. One sample per scenario, except the</text>
+<text x="0" y="520" font-size="11" fill="#52514e">library update: two runs each, against a local test server that answers in 0.4 to 0.8 s and allows 5 requests</text>
+<text x="0" y="536" font-size="11" fill="#52514e">per second per source.</text>
+</svg>

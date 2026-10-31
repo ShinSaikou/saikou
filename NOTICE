@@ -1,0 +1,43 @@
+Saikou
+Copyright 2026 The Saikou authors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+
+Vendored code
+-------------
+
+This product includes software developed by the Mihon Open Source Project
+(https://github.com/mihonapp/mihon), licensed under the Apache License, Version 2.0:
+
+    Copyright 2015 Javier Tomás
+    Copyright 2024 Mihon Open Source Project
+
+Throughout this repository, "upstream" means that project. Every file taken from it carries the
+first line
+
+    // Vendored from upstream v<version>: <path> (modified: yes|no) [what changed]
+
+where <path> is the file's path in the upstream repository at that version. A file marked
+"modified: yes" was changed by the Saikou authors, and the rest of its first line says how.
+Upstream packages named after the project itself were renamed to the tachiyomi prefix; the paths
+in those files' first lines are written with the renamed package. Files whose first line starts
+with "// Fresh:" are Saikou's own code placed in a vendored package.
+
+Some vendored files carry their own notices, which are kept as found:
+
+  - presentation-core/.../material/Scaffold.kt: Copyright 2021 The Android Open Source Project,
+    Apache License, Version 2.0.
+  - presentation-core/.../colorscheme/CatppuccinColorScheme.kt: Copyright (c) 2021 Catppuccin,
+    MIT License.
+  - extensions/.../RxCoroutineBridge.kt: from TachiyomiEH/SY, Apache License, Version 2.0.
+
+
+Libraries
+---------
+
+The image utilities (format sniffing, page splitting and rotation, background detection,
+hardware bitmap limits) are published separately as saikou-image
+(https://github.com/ShinSaikou/saikou-image), under the Apache License, Version 2.0, with its own
+NOTICE. Other dependencies are resolved by Gradle and keep their own licenses; their coordinates
+are listed in gradle/libs.versions.toml.

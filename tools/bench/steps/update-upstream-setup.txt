@@ -1,0 +1,67 @@
+# One-time setup of upstream v0.20.4 for the library update bench (ruling R66), run by
+# library_update_seed.sh on a fresh install before it saves update-bench-upstream-base.
+# Written in tools/bench/ui_steps.py's language, not common.sh's run_steps: every line is a label on
+# upstream's own screens or the system's, found in a uiautomator dump and tapped.
+#
+# The seed script grants the notification permission and creates the storage folder before this runs,
+# and serves the fixture's repository on the host.
+
+# First run: the storage folder, ${UPSTREAM_STORAGE_DIR}, through the system picker. The picker opens on
+# whichever folder it last showed, so the path starts from the storage root.
+tap text=Next timeout=60
+tap text=Select a folder
+tap text=sdk_gphone64_x86_64 timeout=30
+tap text=${UPSTREAM_STORAGE_DIR}
+tap text=USE THIS FOLDER
+tap text=ALLOW
+tap text=Next
+# Install apps permission, through the system's own toggle. The first Grant on the page is its row.
+tap text=Grant
+check text=Allow from this source
+tap desc=Navigate up
+# Background battery usage: the one Grant left.
+tap text=Grant
+tap text=Allow
+uncheck text=Send crash logs
+uncheck text=Allow analytics
+tap text=Next
+tap text=Get started
+wait text=Library timeout=30
+
+# The fixture repository, through upstream's own extension-store link, then the extension through the
+# system installer. Upstream trusts it by the repository's signing key, with no untrusted step.
+am start -a android.intent.action.VIEW -d '${UPSTREAM_SCHEME}://extension-store?url=http://10.0.2.2:18794/repo/index.min.json' ${UPSTREAM_PACKAGE}
+tap text=Add
+wait text=Library update fixture
+tap desc=Navigate up
+tap text=Browse
+tap text=Extensions
+tap desc=Install timeout=60
+tap text=Install timeout=30
+wait text=Installed timeout=60
+wait text=Library Update Fixture
+
+# Settings > Library > Smart update: all four restrictions off, so a manual update fetches every entry.
+# The boxes carry no checked state in the dump; the summary reading None is the check.
+tap text=More
+tap text=Settings
+tap text=Library
+tap text=Smart update
+tap text=Skip entries with unread chapter(s)
+tap text=Skip unstarted entries
+tap text=Skip entries with "Completed" status
+tap text=Predict next release time
+tap text=OK
+wait text=None
+gone text~=Skip entries with
+# Automatic updates and Automatically refresh metadata stay at their defaults, Off and off.
+wait text=Off
+tap desc=Navigate up
+
+# Settings > Data and storage > Automatic backup frequency: Off, so no backup job runs in a window.
+tap text=Data and storage
+tap text=Automatic backup frequency
+tap text=Off
+wait text=Off
+tap desc=Navigate up
+tap desc=Navigate up

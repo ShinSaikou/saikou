@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The mark alone, for the top of More (upstream's LogoHeader, which tints it onSurface): the three
+    panel paths of ic_launcher_monochrome.xml without its 0.9 scale group, the viewport cropped to
+    the mark's bounds (x 30.338 to 77.662, y 28.211 to 79.789) by translating the paths, and the
+    width and height in the viewport's ratio so the mark fills its 64 dp.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="58.72dp"
+    android:height="64dp"
+    android:viewportWidth="47.324"
+    android:viewportHeight="51.578">
+    <group
+        android:translateX="-30.338"
+        android:translateY="-28.211">
+        <path
+            android:pathData="M32.236,28.211H51.022A1.898,1.898 0 0 1 52.92,30.109V77.891A1.898,1.898 0 0 1 51.022,79.789H32.236A1.898,1.898 0 0 1 30.338,77.891V30.109A1.898,1.898 0 0 1 32.236,28.211Z"
+            android:fillColor="#FFFFFF" />
+        <path
+            android:pathData="M56.716,28.211H75.764A1.898,1.898 0 0 1 77.662,30.109V50.597A1.898,1.898 0 0 1 75.764,52.495H56.716A1.898,1.898 0 0 1 54.818,50.597V30.109A1.898,1.898 0 0 1 56.716,28.211Z"
+            android:fillColor="#FFFFFF" />
+        <path
+            android:pathData="M56.716,54.524H75.764A1.898,1.898 0 0 1 77.662,56.422V77.891A1.898,1.898 0 0 1 75.764,79.789H56.716A1.898,1.898 0 0 1 54.818,77.891V56.422A1.898,1.898 0 0 1 56.716,54.524Z"
+            android:fillColor="#FFFFFF" />
+    </group>
+</vector>

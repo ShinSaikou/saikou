@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The debug build's own entry point for the one Google round trip (phase 3 unit O, owner item 2):
+  a second launcher icon, in the debug build type only. Its own task, so the sign-in notifications
+  bring the owner back to it and not to the library. No BROWSABLE category (R30): the browser comes
+  back through the loopback listener, never through an intent.
+
+  It keeps LAUNCHER because owner item 2's phone steps open "Saikou Google test" from the app drawer
+  (O's report, section 9), so a debug build has two MAIN and LAUNCHER entries and anything that
+  picks "the" launcher activity can land here: `monkey -p com.shinsaikou -c
+  android.intent.category.LAUNCHER 1` takes either at random, and `cmd package resolve-activity`
+  answers with the chooser. Evidence and device scripts start the main screen by name instead,
+  `adb shell am start -W -n com.shinsaikou/.ui.main.MainActivity`, as tools/bench/common.sh does once it
+  sets aside classes in a debug package. An activity-alias would be a second entry all the same, and
+  a static shortcut on MainActivity, the one way to leave a single entry, always starts with
+  FLAG_ACTIVITY_CLEAR_TASK, which would end a round trip in progress when the owner came back
+  through it.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <activity
+            android:name="com.shinsaikou.debug.GoogleRoundTripActivity"
+            android:exported="true"
+            android:label="@string/debug_google_round_trip_label"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.shinsaikou.debug.google"
+            android:theme="@style/Theme.Saikou">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

@@ -1,0 +1,80 @@
+-- Fresh: 05-data section 2.11 declares this table; it lives beside the other schema files in the
+-- tachiyomi.data package so the generated Database class stays in one place. Schema version 2 (phase
+-- 3 unit C) logs every write against the chapter, under the chapter's is_syncing guard, and moves
+-- the chapter's bookmark_notes_modified_at clock.
+
+CREATE TABLE bookmark_notes(
+    _id INTEGER NOT NULL PRIMARY KEY,
+    chapter_id INTEGER NOT NULL,
+    page_index INTEGER NOT NULL,
+    note TEXT NOT NULL DEFAULT '',
+    date_added INTEGER NOT NULL,
+    UNIQUE (chapter_id, page_index) ON CONFLICT REPLACE,
+    FOREIGN KEY(chapter_id) REFERENCES chapters (_id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_bookmark_notes_chapter_id ON bookmark_notes(chapter_id);
+
+-- entity_id is the chapter id: a chapter's notes travel as one value, so a delete is an upsert of
+-- that value.
+CREATE TRIGGER upsert_bookmark_note_change AFTER INSERT ON bookmark_notes
+WHEN (SELECT is_syncing FROM chapters WHERE _id = new.chapter_id) = 0
+BEGIN
+    UPDATE chapters
+    SET bookmark_notes_modified_at = max(strftime('%s', 'now') * 1000, coalesce(bookmark_notes_modified_at, 0) + 1)
+    WHERE _id = new.chapter_id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('bookmark_note', new.chapter_id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+CREATE TRIGGER update_bookmark_note_change AFTER UPDATE ON bookmark_notes
+WHEN new.note != old.note AND (SELECT is_syncing FROM chapters WHERE _id = new.chapter_id) = 0
+BEGIN
+    UPDATE chapters
+    SET bookmark_notes_modified_at = max(strftime('%s', 'now') * 1000, coalesce(bookmark_notes_modified_at, 0) + 1)
+    WHERE _id = new.chapter_id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('bookmark_note', new.chapter_id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+CREATE TRIGGER delete_bookmark_note_change AFTER DELETE ON bookmark_notes
+WHEN (SELECT is_syncing FROM chapters WHERE _id = old.chapter_id) = 0
+BEGIN
+    UPDATE chapters
+    SET bookmark_notes_modified_at = max(strftime('%s', 'now') * 1000, coalesce(bookmark_notes_modified_at, 0) + 1)
+    WHERE _id = old.chapter_id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('bookmark_note', old.chapter_id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+getByChapterId:
+SELECT *
+FROM bookmark_notes
+WHERE chapter_id = :chapterId
+ORDER BY page_index;
+
+getByMangaId:
+SELECT N.*
+FROM bookmark_notes N
+JOIN chapters C ON C._id = N.chapter_id
+WHERE C.manga_id = :mangaId
+ORDER BY N.chapter_id, N.page_index;
+
+upsert:
+INSERT INTO bookmark_notes(chapter_id, page_index, note, date_added)
+VALUES (:chapterId, :pageIndex, :note, :now)
+ON CONFLICT(chapter_id, page_index)
+DO UPDATE SET note = :note
+WHERE chapter_id = :chapterId AND page_index = :pageIndex;
+
+delete:
+DELETE FROM bookmark_notes
+WHERE chapter_id = :chapterId AND page_index = :pageIndex;
+
+-- Phase 3 sync (unit E2): the apply writes a page's note with the date it travelled with, where
+-- upsert keeps the stored date.
+syncUpsert:
+INSERT INTO bookmark_notes(chapter_id, page_index, note, date_added)
+VALUES (:chapterId, :pageIndex, :note, :dateAdded)
+ON CONFLICT(chapter_id, page_index)
+DO UPDATE SET note = :note, date_added = :dateAdded;

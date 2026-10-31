@@ -1,0 +1,63 @@
+-- Vendored from upstream v0.20.4: data/src/main/sqldelight/tachiyomi/view/historyView.sq (modified: yes)
+-- Modified: the deleted_at IS NULL guard on mangas (05-data 2.16). The two queries leave out
+-- soft-deleted chapters, which a sync keeps when they have a download, and history takes each
+-- entry's latest read among its live chapters rather than the view's maxReadAtChapterId.
+-- displayTitle (schema version 3, phase 5 unit SC4) is the entry's edited title over its source's,
+-- for unit ED's display sites; title stays the source's. The two queries select both, and history's
+-- search matches either (unit ED).
+
+CREATE VIEW historyView AS
+SELECT
+    history._id AS id,
+    mangas._id AS mangaId,
+    chapters._id AS chapterId,
+    mangas.title,
+    coalesce(mangas.title_override, mangas.title) AS displayTitle,
+    mangas.thumbnail_url AS thumbnailUrl,
+    mangas.source,
+    mangas.favorite,
+    mangas.cover_last_modified,
+    chapters.chapter_number AS chapterNumber,
+    history.last_read AS readAt,
+    history.time_read AS readDuration,
+    max_last_read.last_read AS maxReadAt,
+    max_last_read.chapter_id AS maxReadAtChapterId
+FROM mangas
+JOIN chapters ON mangas._id = chapters.manga_id
+JOIN history ON chapters._id = history.chapter_id
+JOIN (
+    SELECT chapters.manga_id, chapters._id AS chapter_id, MAX(history.last_read) AS last_read
+    FROM chapters JOIN history ON chapters._id = history.chapter_id
+    GROUP BY chapters.manga_id
+) AS max_last_read ON chapters.manga_id = max_last_read.manga_id
+WHERE mangas.deleted_at IS NULL;
+
+-- The latest read is taken over live chapters only: the view's maxReadAtChapterId counts a
+-- soft-deleted chapter too, and would drop the whole entry when that chapter is the latest read.
+history:
+SELECT historyView.id, historyView.mangaId, historyView.chapterId, historyView.title,
+       historyView.displayTitle, historyView.thumbnailUrl, historyView.source, historyView.favorite,
+       historyView.cover_last_modified, historyView.chapterNumber, historyView.readAt,
+       historyView.readDuration
+FROM historyView
+JOIN (
+    SELECT C.manga_id, max(H.last_read) AS last_read
+    FROM chapters C JOIN history H ON H.chapter_id = C._id
+    WHERE C.deleted_at IS NULL
+    GROUP BY C.manga_id
+) AS live ON live.manga_id = historyView.mangaId AND live.last_read = historyView.readAt
+WHERE historyView.readAt > 0
+  AND historyView.chapterId NOT IN (SELECT _id FROM chapters WHERE deleted_at IS NOT NULL)
+  -- The shown title or the source's (phase 5 unit ED): the owner types what they see.
+  AND (lower(historyView.displayTitle) LIKE ('%' || :query || '%')
+    OR lower(historyView.title) LIKE ('%' || :query || '%'))
+ORDER BY historyView.readAt DESC;
+
+getLatestHistory:
+SELECT id, mangaId, chapterId, title, displayTitle, thumbnailUrl, source, favorite, cover_last_modified,
+       chapterNumber, readAt, readDuration
+FROM historyView
+WHERE historyView.readAt > 0
+  AND historyView.chapterId NOT IN (SELECT _id FROM chapters WHERE deleted_at IS NOT NULL)
+ORDER BY readAt DESC
+LIMIT 1;

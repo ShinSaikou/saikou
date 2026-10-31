@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The pager's view id, which upstream declares the same way in app/src/main/res/values/ids.xml. -->
+<resources>
+    <item name="reader_pager" type="id" />
+</resources>

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Text the app module owns: one line per extension loader failure, and the wording the reader's
+  page actions and the notification actions need. Ruling R13 keeps these out of the shared
+  strings.xml so parallel units never collide on one file.
+-->
+<resources>
+    <string name="ext_install_rejected_not_an_extension">That file is not an extension</string>
+    <string name="ext_install_rejected_downgrade">A newer version is already installed</string>
+    <string name="ext_install_rejected_unsigned">The file is not signed</string>
+    <string name="ext_install_rejected_signer_mismatch">Signed by a different key than the installed copy</string>
+    <string name="ext_install_rejected_copy_failed">The file could not be copied to app storage</string>
+    <string name="ext_install_rejected_unsupported_lib">Built for an extension library this version of Saikou does not load</string>
+
+    <string name="ext_load_error_not_an_extension">Not an extension</string>
+    <string name="ext_load_error_missing_source_class">The entry point is missing</string>
+    <string name="ext_load_error_unsupported_lib_version">Built for an unsupported library version</string>
+    <string name="ext_load_error_unsigned">Not signed</string>
+    <string name="ext_load_error_class_load_failed">The code could not be loaded</string>
+    <string name="ext_load_error_instantiation_failed">The entry point failed to start</string>
+    <string name="ext_load_error_unknown_source_type">The entry point is of an unknown type</string>
+    <string name="ext_load_error_injekt_not_ready">Loaded before the app finished starting</string>
+
+    <string name="error_no_storage_location">No place to save the picture</string>
+    <string name="error_page_not_ready">The page has not finished loading</string>
+    <string name="error_manga_not_in_library">Add the entry to your library first</string>
+
+    <!-- Long-press launcher shortcuts. Short labels are what the launcher shows under the icon. -->
+    <string name="shortcut_library_short">Library</string>
+    <string name="shortcut_library_long">Open your library</string>
+    <string name="shortcut_updates_short">Updates</string>
+    <string name="shortcut_updates_long">See new chapters</string>
+    <string name="shortcut_history_short">History</string>
+    <string name="shortcut_history_long">Pick up where you left off</string>
+    <string name="shortcut_browse_short">Browse</string>
+    <string name="shortcut_browse_long">Browse your sources</string>
+
+    <string name="notification_permission_rationale">Saikou posts library update progress and new chapters here.</string>
+</resources>

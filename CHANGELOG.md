@@ -1,0 +1,258 @@
+# Changelog
+
+Every change a user would notice goes here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version numbers follow
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html), with the 0.x caveat that any minor
+release may change behaviour.
+
+## Unreleased
+
+### Security
+
+- An extension repository keeps the signing key it was added with: refreshing the repository list
+  or restoring a backup no longer replaces it, so neither can change which extensions are trusted.
+  A repository that really changed its key has to be removed and added again.
+- Restoring source settings from a backup writes only sources' own settings files; a backup can no
+  longer reach the app's settings, the app lock among them, that way.
+
+### Added
+
+- Select several entries in a source's listing with a long press (and a range), then add them to
+  the library in one go.
+- Edit an entry's title and description; the edit syncs, while downloads, tracking and backups
+  keep the source's text.
+- Restoring a backup from TachiyomiSY, TachiyomiJ2K or Komikku keeps each entry's edited title and
+  description, unless the entry already has its own edit.
+- A cover viewer on the entry screen: share, save, set a custom cover or remove it.
+- Notes on an entry: write them from the entry screen's menu, and see their first lines under the
+  description, including notes restored from a backup.
+- A tap on a genre on the entry screen searches the library for it, and a long press on a genre,
+  the title or the author copies it.
+- Removing an entry from the library on its screen offers Undo, which puts it back with its
+  categories and its place in a date-added sort.
+- A second long press in the library selects every entry between it and the selection.
+- Sort A to Z on the Categories screen puts the categories, and those under each parent, in name
+  order.
+- Export the library as a CSV list of titles, authors and artists, from the Data settings next to
+  backup.
+- One level of sub-categories.
+- A language filter for Extensions and a filter screen for Browse sources.
+- A backup is checked before it is restored: the report lists missing sources and trackers, and a
+  missing extension can be installed from there.
+- A migration can carry the old entry's downloads, and says how many it keeps.
+- A storage location for automatic backups, the Local source and exported downloads; choosing a new
+  location moves what was in the old one.
+- Saved pages and covers go to the gallery, under Pictures/Saikou.
+- Sync warns a day before a stored Google sign-in expires, and once for each problem a background
+  sync can act on.
+- Settings that need a restart offer a Restart action.
+- DNS over HTTPS has a Custom choice: enter the https address of any DoH server. The device's DNS
+  looks up that server's own name.
+- The Migrate page's help action opens the migration guide.
+- Saikou's own theme, alongside thirteen named themes and a theme picker.
+- Updates from GitHub: when a new version is out, Saikou offers it once a day and installs it with
+  one tap, after checking the download's checksum and that it is signed with the same key as the
+  installed app. Settings > Advanced has Check for updates and a switch for the daily check.
+- A crash opens a screen with the crash log and Share, Restart and Close. It runs apart from the
+  rest of the app, so it still opens when Saikou crashes on every start; the log leaves the device
+  only when you tap Share.
+- History shows a header for each day and the time each chapter was read.
+- Global search has upstream's Pinned / All and Has results chips, remembered on the device, and
+  marks results already in the library.
+- The reader is listed under the S Pen's air actions, to turn pages, go back and change chapter
+  with the pen.
+- The restore report offers Copy downloads from a folder, since a backup holds no downloads.
+- Sync over Wi-Fi only, in the sync settings: automatic syncs wait for an unmetered network, while
+  Sync now runs on any connection.
+- Automatic backups every 6 or 48 hours or weekly, besides 12 and 24, and a choice of how many to
+  keep, from 2 to 10.
+- Updates and Settings > Library show when the library was last updated.
+- The update errors offer Retry, which updates the failed entries again, and Migrate for each
+  source's failed entries; the library selection offers Update for the selected entries.
+- Updates says how many entries the last automatic update skipped, and why.
+- When MyAnimeList is ahead of the chapters read in the app, the track sheet says so and offers to
+  mark them read up to its chapter.
+- AniList as a second tracker: sign in from Settings > Tracking, then search, link and update
+  entries from the track sheet, with the status, chapters, score in your AniList score format,
+  start and finish dates, and private entries.
+
+### Changed
+
+- The library update keeps one request budget per site, so sources on the same site share a rate
+  limit.
+- An update error Saikou has no name for shows the extension's own message under it (a sign-in it
+  needs, a rate limit, maintenance) instead of only the exception's name. Such a message is cut to
+  its first line, there and in the other error messages.
+- The library, the library update, sync and restore stay responsive at 40,000 entries; backups are
+  read and written as a stream.
+- The library's search opens in the top bar, and Update library moved into the overflow menu.
+- Covers are fetched through their source, with its client and headers.
+- A new entry's first chapter list counts only chapters uploaded after it joined the library.
+- Download ahead also runs while a chapter is read online.
+- The download notification names the chapter and the chapters left, and has Pause and Cancel
+  all.
+- The entry screen shows every genre, wrapping onto more lines, instead of the first four.
+- Adding an entry that may already be in the library lists every match, with its source and
+  chapter count, instead of the first one.
+- The image utilities moved into their own library,
+  [saikou-image](https://github.com/ShinSaikou/saikou-image).
+- The project is licensed under the Apache License 2.0, with a README, contributing guide, code of
+  conduct and security policy for its public release.
+- In the long strip, arrow, volume and page keys repeat while held; Page Up, Page Down and Space
+  (Shift+Space back) scroll one screen; and a mouse wheel or touchpad scrolls as far as it moved
+  rather than three quarters of a screen per event.
+- With double-tap zoom off, a tap in the long strip acts at once instead of after a short wait for
+  a second tap.
+
+### Fixed
+
+- A chapter with split tall pages is marked read on its last page, and the page slider and
+  reopening the chapter land on the right page instead of a part of an earlier one.
+- Zooming the long strip after a rotation, a split-screen change or a window resize no longer
+  leaves a gap or an oversized view.
+- A zoomed-in long strip with side padding pans to the edge of the page instead of into the empty
+  padding.
+- In paged mode, tapping to turn pages works again after a press on Retry turned into a swipe.
+- Long-strip side padding is measured against the reader's window, so split screen and freeform
+  windows get the padding they ask for, and it follows a rotation or a resize.
+- A tap in the long strip just before the reader closes no longer crashes the app.
+- Downloads waiting for Wi-Fi start on mobile data as soon as "Only download over Wi-Fi" is turned
+  off, and the download queue says when it is waiting for Wi-Fi or a network.
+- Downloads, and copies of downloads from a folder, stop with a notice when less than 200 MB of
+  storage is free, instead of filling the storage the library database needs; the chapters stay
+  queued.
+- Partly downloaded chapters that nothing will finish are deleted when downloads start, instead of
+  taking up storage for good.
+- A download that loses its network stays queued and resumes by itself when the network is back,
+  instead of failing every chapter left; one that keeps failing still fails after three tries.
+- A download a site refuses with "too many requests" waits as long as the site asks, up to a minute,
+  before it tries again.
+- With "Delete after reading" and "Mark duplicate chapters as read" both on, the duplicates marked
+  read with a chapter lose their downloads with it.
+- Verbose network logging no longer writes credentials or cookies to the system log.
+- Copying downloads from a folder also finds chapters a compatible reader's recent releases named
+  differently: a name starting with a space or a dot, a long name, or a non-ASCII scanlator.
+- A challenge solved by hand in the in-app WebView carries over to the source's own requests: the
+  page opens with the source's user agent and headers, and no longer tells the site it runs inside
+  an app.
+- A source that sends an Origin header no longer closes the app when its page opens in WebView or
+  one of its challenges is solved.
+- When WebView's page process crashes or is stopped by the system, the WebView screen closes with a
+  message, and a challenge solve fails, instead of the whole app closing.
+- A challenge that wants a tap no longer holds every request to its site for 30 seconds: the solve
+  gives up as soon as the challenge asks for a person or fails, and for a minute after a failed
+  solve the site's requests fail at once instead of each trying again.
+- A challenge met by a request that sends data, such as a search or a login, is solved on the site's
+  front page, where it used to fail every time and then hold the site's other requests for a minute.
+- A failed extension install or update says why on its row (a different signer, a newer version
+  already installed, no network) and offers Retry, where the button used to come back with no word.
+- An extension the catalog moved to a library version Saikou does not load is labelled "Needs a newer
+  Saikou" and is no longer offered as an update, which would have replaced a working extension with
+  one that cannot load. An update that fails part way leaves the installed extension in place.
+- An extension built against an API Saikou lacks fails its own request instead of closing the app.
+- A source listing that fails to load offers Open in WebView beside Retry, so a challenge or a login
+  can be answered from where the error shows.
+- When one extension repository fails to refresh, its extensions stay listed and the error names the
+  repository; repository errors read as sentences ("The address does not lead to a repository
+  index") instead of the app's internal codes.
+- An extension that did not load is no longer a dead end: a tap shows why, with the error details to
+  copy, its menu uninstalls it (even a file that is not a package at all), and an update for it is
+  offered, counted and covered by Update all, as for a loaded one.
+- Adding an entry with a blank title no longer reports every library entry as its duplicate.
+- Removing an entry from History asks first and removes the whole entry, instead of bringing it
+  straight back with the chapter read before.
+- Resume in History opens the next chapter when the last one read is finished, instead of starting
+  the finished chapter again.
+- A migration keeps the entry's edited title and description.
+- A migration with Chapters ticked carries the reading history to the new entry, so History and
+  Resume follow it to the new source; Copy copies only the read dates. Another synced device keeps
+  the old entry in its History as well, with its reading time, until it is removed there.
+- Migration's automatic match no longer takes a source's only search result whatever its title,
+  and compares titles regardless of case and bracketed text.
+- Migration gives each source 25 seconds to answer a search, so a source that is down no longer
+  holds up every entry for minutes.
+- Global search puts the keyboard away when a search is submitted.
+- On Android 8 to 14 the status and navigation bars take the app's colours: no purple status bar
+  in the light theme, true black bars in pure black, and visible navigation buttons.
+- A source's search runs from the keyboard's Search key and from Enter, and the keyboard closes;
+  before, the key only closed the keyboard.
+- With the app lock on, the app's screen no longer shows before the unlock prompt, and the recent
+  apps view shows a blank card instead of the last screen.
+- A page that fails to load says why: no network, a timeout, the server's HTTP status, or an image
+  that could not be read. A page that timed out, lost its connection or met a busy server is tried
+  once more on its own before the error shows.
+- AVIF, HEIF and JPEG XL pages are shown instead of failing as an unsupported format. Animated AVIF
+  and HEIF pages still are not.
+- With "Always show chapter transition" off, a transition reached before the next chapter has
+  loaded gives way to that chapter's page once it loads, so sources with one page per chapter no
+  longer show a transition between every page.
+- Saved and shared pages carry the chapter number in their file name, so pages of two chapters with
+  the same name no longer overwrite each other.
+- A backup gives every category a position of its own, so restoring it no longer moves the entries
+  of one category into another that sync had left at the same position. Restoring an older backup
+  with such a tie puts those entries in both categories, and the restore report names them.
+- Chapters that sync brings in from another device take their place in the chapter list, where
+  they used to mix in with the older chapters until the next library update.
+- An automatic backup that fails partway no longer costs the oldest kept backup, and never leaves a
+  half-written file among the kept ones: older backups are deleted only once the new one is complete.
+- A restore that keeps failing stops after a few retries and says so in a notification, where it
+  used to start again without end; restoring the same file again continues where it stopped.
+- A backup with an entry that cannot be read restores every other entry, and the restore report
+  names the one it skipped; the whole file used to be refused.
+- A rare "database is locked" crash, when a background task and the app reached the database at the
+  same moment: every connection now waits a moment for the lock.
+- An automatic backup names the sources whose extension is gone, where it could write their bare
+  numbers instead.
+- Restoring a backup over an entry already tracked, at the same chapter, keeps the tracker entry it
+  is bound to; it could take the backup's while still showing the old one's title, so updates went
+  to an entry the tracking sheet did not show.
+- Cancelling a library update no longer turns off automatic updates until the app restarts.
+- An automatic library update that comes due during a manual one waits for it to finish.
+- Back from a chapter opened from a new chapters notification goes to the entry instead of leaving
+  the app.
+- A library update with many updated entries posts a notification for the first 20 and names the
+  rest in the summary, instead of losing some, and two entries no longer share one notification.
+- A category update or a cancelled one no longer clears the update errors of the entries it did
+  not reach, and an entry's error goes once it updates without one.
+- New chapters from a scanlator excluded for an entry are no longer counted, notified or downloaded
+  automatically.
+- A chapter from an excluded scanlator opens from a notification, History or Updates instead of
+  closing the reader with "That chapter is gone".
+- With "Predict next release time" on, an entry whose predicted release had passed
+  without a new chapter is no longer checked on every automatic update.
+- A chapter a source moves to a new address keeps its reading history, so the entry stays in
+  History.
+- Tracker dates: Completed sets a finish date, the first chapter read or set sets a start date
+  whatever its number (and never moves one already set), the start date set when tracking begins is
+  no longer a day off, and the date picker offers today and same-day start and finish dates in
+  every time zone.
+- A MyAnimeList sign-in refused before its time is renewed once instead of failing every update;
+  when it has truly expired, one notification says so, and the progress read meanwhile is kept and
+  sent after the next sign-in instead of being dropped.
+- Restoring a backup from upstream 0.21 keeps the entries of the tracker it added, which were
+  skipped as an unknown tracker's.
+- MyAnimeList search takes an `id:` with spaces around it and an entry's address pasted from the
+  browser, and its results show the entry's mean score.
+- A progress update MyAnimeList refuses for good (an entry it no longer has, or a title waiting for
+  approval) is dropped instead of being sent again with every later update.
+
+## 0.0.1 - 2026-10-01
+
+The first closed-test release.
+
+### Added
+
+- A library with categories, filters, sorting and search.
+- Browse and global search over third-party extensions built for the Tachiyomi extension API, lib
+  1.4 and 1.6, from catalogs the user adds.
+- A reader with paged and long-strip modes, tall-strip splitting, animated images, double-page
+  handling and page notes.
+- Downloads as folders or CBZ archives, with cleanup rules, and a copy of an existing downloads
+  folder from a compatible reader.
+- The Local source, for archives and folders of images on the device.
+- Backup and restore in the `.tachibk` format.
+- Sync between devices through Google Drive's app folder.
+- MyAnimeList tracking.
+- Migration of entries between sources.
+- Library updates, Updates, History and Statistics.
+- An app lock and a secure screen option.

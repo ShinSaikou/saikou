@@ -1,0 +1,337 @@
+-- Fresh: schema version 1 to 2, the first migration (phase 3 unit C, decisions Q5 to Q7 of
+-- design/plans/phase3-start.md). Version 1 is the .sq files as they shipped at 49c3732 and its
+-- snapshot is schemas/1.db; verifyMigrations applies this file to that snapshot and diffs the
+-- result against the .sq files, so every statement here mirrors one there.
+--
+-- The categories' sync keys are not set here. They are derived in Kotlin (CategorySyncKey), because
+-- SQLite's lower() folds ASCII only, by DatabaseInitializer's start-up backfill.
+
+-- The owner's modification clocks, epoch milliseconds, NULL until the first local edit (Q6).
+ALTER TABLE mangas ADD COLUMN display_modified_at INTEGER;
+ALTER TABLE mangas ADD COLUMN notes_modified_at INTEGER;
+ALTER TABLE mangas ADD COLUMN position_modified_at INTEGER;
+ALTER TABLE mangas ADD COLUMN categories_modified_at INTEGER;
+ALTER TABLE mangas ADD COLUMN exclusions_modified_at INTEGER;
+ALTER TABLE mangas ADD COLUMN priority_modified_at INTEGER;
+ALTER TABLE mangas ADD COLUMN trackers_modified_at INTEGER;
+ALTER TABLE mangas ADD COLUMN restored_at INTEGER;
+ALTER TABLE chapters ADD COLUMN bookmark_notes_modified_at INTEGER;
+ALTER TABLE chapters ADD COLUMN restored_at INTEGER;
+ALTER TABLE categories ADD COLUMN modified_at INTEGER;
+ALTER TABLE categories ADD COLUMN restored_at INTEGER;
+ALTER TABLE categories ADD COLUMN sync_key TEXT;
+
+-- The natural key of a hard delete (Q5).
+ALTER TABLE sync_change_log ADD COLUMN key_source INTEGER;
+ALTER TABLE sync_change_log ADD COLUMN key_manga_url TEXT;
+ALTER TABLE sync_change_log ADD COLUMN key_chapter_url TEXT;
+ALTER TABLE sync_change_log ADD COLUMN key_category TEXT;
+
+CREATE UNIQUE INDEX idx_categories_sync_key ON categories(sync_key);
+
+-- Triggers whose body changed: children log against their parent, deletes are guarded and record
+-- their key, and each owner clock moves beside the log.
+DROP TRIGGER delete_manga_change;
+DROP TRIGGER delete_chapter_change;
+DROP TRIGGER update_category_version;
+DROP TRIGGER insert_category_change;
+DROP TRIGGER delete_category_change;
+DROP TRIGGER insert_manga_category_update_version;
+DROP TRIGGER delete_manga_category_update_version;
+DROP TRIGGER delete_history_change;
+DROP TRIGGER upsert_track_change;
+DROP TRIGGER update_track_change;
+DROP TRIGGER delete_track_change;
+DROP TRIGGER insert_excluded_scanlator_change;
+DROP TRIGGER delete_excluded_scanlator_change;
+DROP TRIGGER insert_scanlator_priority_change;
+DROP TRIGGER delete_scanlator_priority_change;
+DROP TRIGGER upsert_bookmark_note_change;
+DROP TRIGGER update_bookmark_note_change;
+DROP TRIGGER delete_bookmark_note_change;
+
+CREATE TRIGGER delete_manga_change AFTER DELETE ON mangas
+WHEN old.is_syncing = 0 AND (old.favorite = 1 OR old.deleted_at IS NOT NULL)
+BEGIN
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at, key_source, key_manga_url)
+    VALUES ('manga', old._id, 'delete', strftime('%s', 'now') * 1000, old.source, old.url);
+END;
+
+CREATE TRIGGER delete_chapter_change AFTER DELETE ON chapters
+WHEN old.is_syncing = 0 AND (SELECT favorite FROM mangas WHERE _id = old.manga_id) = 1
+BEGIN
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at, key_source,
+        key_manga_url, key_chapter_url)
+    SELECT 'chapter', old._id, 'delete', strftime('%s', 'now') * 1000, source, url, old.url
+    FROM mangas
+    WHERE _id = old.manga_id;
+END;
+
+-- A row that stays deleted logs nothing: its tombstone was logged when it was deleted, and a
+-- category re-created over it takes its new values before the restore that logs it once.
+CREATE TRIGGER update_category_version AFTER UPDATE ON categories
+WHEN new.is_syncing = 0 AND (old.deleted_at IS NULL OR new.deleted_at IS NULL) AND (
+    new.name != old.name OR new.sort != old.sort OR new.flags != old.flags OR
+    new.parent_id IS NOT old.parent_id OR new.deleted_at IS NOT old.deleted_at
+)
+BEGIN
+    UPDATE categories SET version = version + 1 WHERE _id = new._id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('category', new._id,
+            CASE WHEN new.deleted_at IS NULL THEN 'upsert' ELSE 'delete' END,
+            strftime('%s', 'now') * 1000);
+END;
+
+CREATE TRIGGER insert_category_change AFTER INSERT ON categories
+WHEN new.is_syncing = 0 AND new._id > 0
+BEGIN
+    UPDATE categories
+    SET version = version + 1,
+        modified_at = max(strftime('%s', 'now') * 1000, coalesce(modified_at, 0) + 1)
+    WHERE _id = new._id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('category', new._id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+CREATE TRIGGER delete_category_change AFTER DELETE ON categories
+WHEN old.is_syncing = 0
+BEGIN
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at, key_category)
+    VALUES ('category', old._id, 'delete', strftime('%s', 'now') * 1000, old.sync_key);
+END;
+
+CREATE TRIGGER insert_manga_category_update_version AFTER INSERT ON mangas_categories
+WHEN (SELECT is_syncing FROM mangas WHERE _id = new.manga_id) = 0
+BEGIN
+    UPDATE mangas
+    SET version = version + 1,
+        categories_modified_at = max(strftime('%s', 'now') * 1000, coalesce(categories_modified_at, 0) + 1)
+    WHERE _id = new.manga_id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('manga_category', new.manga_id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+CREATE TRIGGER delete_manga_category_update_version AFTER DELETE ON mangas_categories
+WHEN (SELECT is_syncing FROM mangas WHERE _id = old.manga_id) = 0
+BEGIN
+    UPDATE mangas
+    SET version = version + 1,
+        categories_modified_at = max(strftime('%s', 'now') * 1000, coalesce(categories_modified_at, 0) + 1)
+    WHERE _id = old.manga_id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('manga_category', old.manga_id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+CREATE TRIGGER delete_history_change AFTER DELETE ON history
+WHEN (SELECT M.is_syncing FROM mangas M JOIN chapters C ON C.manga_id = M._id WHERE C._id = old.chapter_id) = 0
+BEGIN
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at, key_source,
+        key_manga_url, key_chapter_url)
+    SELECT 'history', old.chapter_id, 'delete', strftime('%s', 'now') * 1000, M.source, M.url, C.url
+    FROM mangas M JOIN chapters C ON C.manga_id = M._id
+    WHERE C._id = old.chapter_id;
+END;
+
+CREATE TRIGGER upsert_track_change AFTER INSERT ON manga_sync
+WHEN (SELECT is_syncing FROM mangas WHERE _id = new.manga_id) = 0
+BEGIN
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('track', new.manga_id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+CREATE TRIGGER update_track_change AFTER UPDATE ON manga_sync
+WHEN (SELECT is_syncing FROM mangas WHERE _id = new.manga_id) = 0
+BEGIN
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('track', new.manga_id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+CREATE TRIGGER delete_track_change AFTER DELETE ON manga_sync
+WHEN (SELECT is_syncing FROM mangas WHERE _id = old.manga_id) = 0
+BEGIN
+    UPDATE mangas
+    SET trackers_modified_at = max(strftime('%s', 'now') * 1000, coalesce(trackers_modified_at, 0) + 1)
+    WHERE _id = old.manga_id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('track', old.manga_id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+CREATE TRIGGER insert_excluded_scanlator_change AFTER INSERT ON excluded_scanlators
+WHEN (SELECT is_syncing FROM mangas WHERE _id = new.manga_id) = 0
+BEGIN
+    UPDATE mangas
+    SET exclusions_modified_at = max(strftime('%s', 'now') * 1000, coalesce(exclusions_modified_at, 0) + 1)
+    WHERE _id = new.manga_id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('excluded_scanlator', new.manga_id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+CREATE TRIGGER delete_excluded_scanlator_change AFTER DELETE ON excluded_scanlators
+WHEN (SELECT is_syncing FROM mangas WHERE _id = old.manga_id) = 0
+BEGIN
+    UPDATE mangas
+    SET exclusions_modified_at = max(strftime('%s', 'now') * 1000, coalesce(exclusions_modified_at, 0) + 1)
+    WHERE _id = old.manga_id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('excluded_scanlator', old.manga_id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+CREATE TRIGGER insert_scanlator_priority_change AFTER INSERT ON scanlator_priority
+WHEN (SELECT is_syncing FROM mangas WHERE _id = new.manga_id) = 0
+BEGIN
+    UPDATE mangas
+    SET priority_modified_at = max(strftime('%s', 'now') * 1000, coalesce(priority_modified_at, 0) + 1)
+    WHERE _id = new.manga_id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('scanlator_priority', new.manga_id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+CREATE TRIGGER delete_scanlator_priority_change AFTER DELETE ON scanlator_priority
+WHEN (SELECT is_syncing FROM mangas WHERE _id = old.manga_id) = 0
+BEGIN
+    UPDATE mangas
+    SET priority_modified_at = max(strftime('%s', 'now') * 1000, coalesce(priority_modified_at, 0) + 1)
+    WHERE _id = old.manga_id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('scanlator_priority', old.manga_id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+CREATE TRIGGER upsert_bookmark_note_change AFTER INSERT ON bookmark_notes
+WHEN (SELECT is_syncing FROM chapters WHERE _id = new.chapter_id) = 0
+BEGIN
+    UPDATE chapters
+    SET bookmark_notes_modified_at = max(strftime('%s', 'now') * 1000, coalesce(bookmark_notes_modified_at, 0) + 1)
+    WHERE _id = new.chapter_id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('bookmark_note', new.chapter_id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+CREATE TRIGGER update_bookmark_note_change AFTER UPDATE ON bookmark_notes
+WHEN new.note != old.note AND (SELECT is_syncing FROM chapters WHERE _id = new.chapter_id) = 0
+BEGIN
+    UPDATE chapters
+    SET bookmark_notes_modified_at = max(strftime('%s', 'now') * 1000, coalesce(bookmark_notes_modified_at, 0) + 1)
+    WHERE _id = new.chapter_id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('bookmark_note', new.chapter_id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+CREATE TRIGGER delete_bookmark_note_change AFTER DELETE ON bookmark_notes
+WHEN (SELECT is_syncing FROM chapters WHERE _id = old.chapter_id) = 0
+BEGIN
+    UPDATE chapters
+    SET bookmark_notes_modified_at = max(strftime('%s', 'now') * 1000, coalesce(bookmark_notes_modified_at, 0) + 1)
+    WHERE _id = old.chapter_id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('bookmark_note', old.chapter_id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+-- New triggers: the clocks, the update side of two child tables and the progress log on a
+-- library add.
+CREATE TRIGGER update_manga_display_modified_at AFTER UPDATE OF viewer, chapter_flags ON mangas
+WHEN new.is_syncing = 0 AND (new.viewer != old.viewer OR new.chapter_flags != old.chapter_flags)
+BEGIN
+    UPDATE mangas
+    SET display_modified_at = max(strftime('%s', 'now') * 1000, coalesce(display_modified_at, 0) + 1)
+    WHERE _id = new._id;
+END;
+
+CREATE TRIGGER update_manga_notes_modified_at AFTER UPDATE OF notes ON mangas
+WHEN new.is_syncing = 0 AND new.notes != old.notes
+BEGIN
+    UPDATE mangas
+    SET notes_modified_at = max(strftime('%s', 'now') * 1000, coalesce(notes_modified_at, 0) + 1)
+    WHERE _id = new._id;
+END;
+
+CREATE TRIGGER update_manga_position_modified_at AFTER UPDATE OF manual_position ON mangas
+WHEN new.is_syncing = 0 AND new.manual_position != old.manual_position
+BEGIN
+    UPDATE mangas
+    SET position_modified_at = max(strftime('%s', 'now') * 1000, coalesce(position_modified_at, 0) + 1)
+    WHERE _id = new._id;
+END;
+
+CREATE TRIGGER log_manga_progress_on_favorite AFTER UPDATE OF favorite ON mangas
+WHEN new.is_syncing = 0 AND old.favorite = 0 AND new.favorite = 1
+BEGIN
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    SELECT 'chapter', _id, CASE WHEN deleted_at IS NULL THEN 'upsert' ELSE 'delete' END,
+           strftime('%s', 'now') * 1000
+    FROM chapters
+    WHERE manga_id = new._id AND (read = 1 OR bookmark = 1 OR last_page_read != 0);
+END;
+
+-- A bind moves the tracker set's clock; an insert of a pair already bound is progress (R82).
+CREATE TRIGGER bind_track_modified_at BEFORE INSERT ON manga_sync
+WHEN (SELECT is_syncing FROM mangas WHERE _id = new.manga_id) = 0 AND NOT EXISTS (
+    SELECT 1 FROM manga_sync WHERE manga_id = new.manga_id AND sync_id = new.sync_id
+)
+BEGIN
+    UPDATE mangas
+    SET trackers_modified_at = max(strftime('%s', 'now') * 1000, coalesce(trackers_modified_at, 0) + 1)
+    WHERE _id = new.manga_id;
+END;
+
+-- An undelete and every library add stamp the manga's restore clock past its tombstone (R82).
+CREATE TRIGGER update_manga_restored_at AFTER UPDATE OF deleted_at, favorite ON mangas
+WHEN new.is_syncing = 0 AND (
+    (old.deleted_at IS NOT NULL AND new.deleted_at IS NULL) OR (old.favorite = 0 AND new.favorite = 1)
+)
+BEGIN
+    UPDATE mangas
+    SET restored_at = max(
+        strftime('%s', 'now') * 1000,
+        coalesce(restored_at, 0) + 1,
+        coalesce(old.deleted_at, 0) + 1,
+        coalesce(new.deleted_at, 0) + 1
+    )
+    WHERE _id = new._id;
+END;
+
+CREATE TRIGGER update_chapter_restored_at AFTER UPDATE OF deleted_at ON chapters
+WHEN new.is_syncing = 0 AND old.deleted_at IS NOT NULL AND new.deleted_at IS NULL
+BEGIN
+    UPDATE chapters
+    SET restored_at = max(strftime('%s', 'now') * 1000, coalesce(restored_at, 0) + 1, old.deleted_at + 1)
+    WHERE _id = new._id;
+END;
+
+CREATE TRIGGER update_category_modified_at AFTER UPDATE OF name, sort, flags, parent_id ON categories
+WHEN new.is_syncing = 0 AND (
+    new.name != old.name OR new.sort != old.sort OR new.flags != old.flags OR
+    new.parent_id IS NOT old.parent_id
+)
+BEGIN
+    UPDATE categories
+    SET modified_at = max(strftime('%s', 'now') * 1000, coalesce(modified_at, 0) + 1)
+    WHERE _id = new._id;
+END;
+
+CREATE TRIGGER update_category_restored_at AFTER UPDATE OF deleted_at ON categories
+WHEN new.is_syncing = 0 AND old.deleted_at IS NOT NULL AND new.deleted_at IS NULL
+BEGIN
+    UPDATE categories
+    SET restored_at = max(strftime('%s', 'now') * 1000, coalesce(restored_at, 0) + 1, old.deleted_at + 1)
+    WHERE _id = new._id;
+END;
+
+CREATE TRIGGER update_excluded_scanlator_change AFTER UPDATE ON excluded_scanlators
+WHEN (SELECT is_syncing FROM mangas WHERE _id = new.manga_id) = 0
+BEGIN
+    UPDATE mangas
+    SET exclusions_modified_at = max(strftime('%s', 'now') * 1000, coalesce(exclusions_modified_at, 0) + 1)
+    WHERE _id = new.manga_id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('excluded_scanlator', new.manga_id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+CREATE TRIGGER update_scanlator_priority_change AFTER UPDATE ON scanlator_priority
+WHEN (SELECT is_syncing FROM mangas WHERE _id = new.manga_id) = 0
+BEGIN
+    UPDATE mangas
+    SET priority_modified_at = max(strftime('%s', 'now') * 1000, coalesce(priority_modified_at, 0) + 1)
+    WHERE _id = new.manga_id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('scanlator_priority', new.manga_id, 'upsert', strftime('%s', 'now') * 1000);
+END;

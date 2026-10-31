@@ -1,0 +1,32 @@
+-- Fresh: 05-data section 2.14 declares this table; it lives beside the other schema files in the
+-- tachiyomi.data package so the generated Database class stays in one place.
+-- Device-local table: no sync triggers.
+
+CREATE TABLE source_alias(
+    _id INTEGER NOT NULL PRIMARY KEY,
+    old_source_id INTEGER NOT NULL UNIQUE,
+    new_source_id INTEGER NOT NULL,
+    date_added INTEGER NOT NULL
+);
+
+CREATE INDEX idx_source_alias_new_source_id ON source_alias(new_source_id);
+
+getAll:
+SELECT *
+FROM source_alias;
+
+getByOldSourceId:
+SELECT *
+FROM source_alias
+WHERE old_source_id = :oldSourceId;
+
+upsert:
+INSERT INTO source_alias(old_source_id, new_source_id, date_added)
+VALUES (:oldSourceId, :newSourceId, :now)
+ON CONFLICT(old_source_id)
+DO UPDATE SET new_source_id = :newSourceId
+WHERE old_source_id = :oldSourceId;
+
+delete:
+DELETE FROM source_alias
+WHERE old_source_id = :oldSourceId;

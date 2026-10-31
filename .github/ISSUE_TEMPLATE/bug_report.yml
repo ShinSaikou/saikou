@@ -1,0 +1,56 @@
+name: Bug report
+description: Something in Saikou does not work as it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please do not name sources, extensions or catalog URLs in this
+        issue: describe them ("a source with a login", "a lib-1.6 extension") instead.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Tap ...
+        3. See ...
+    validations:
+      required: true
+  - type: input
+    id: app-version
+    attributes:
+      label: Saikou version
+      description: More > About, or the version chip on the More tab.
+      placeholder: "0.0.1"
+    validations:
+      required: true
+  - type: input
+    id: android
+    attributes:
+      label: Android version and device
+      placeholder: "Android 15, Pixel 8"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: A crash log, logcat output or a screenshot, if you have one. Remove anything private first.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched the existing issues and this is not a duplicate.
+          required: true
+        - label: This happens on the latest release or on main.
+          required: true

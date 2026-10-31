@@ -1,0 +1,494 @@
+-- Vendored from upstream v0.20.4: data/src/main/sqldelight/tachiyomi/data/mangas.sq (modified: yes)
+-- Modified: the UpdateStrategy import points at the contract enum, memo loses its SQL default,
+-- manual_position and deleted_at are added, the index set is the one in 05-data 2.3, and the
+-- timestamp and change-log triggers are 2.17 and 2.18. Queries are 3.3. Schema version 2 (phase 3
+-- unit C) adds the owner's modification clocks, the progress log on a library add and the key of a
+-- hard delete. getFavoriteById is phase 4 unit NB's, for the rest of a library add's chapters.
+-- backupGetLibraryPage is phase 5 unit SC2's, for the export's pages. Schema version 3 (phase 5 unit
+-- SC4) adds unit ED's title and description overrides and their clock; setDetailsOverride is ED's
+-- one local write of them, and the sync apply's two statements carry them. getDuplicateLibraryManga
+-- takes upstream's later guard against a blank title (triage E105).
+
+import com.shinsaikou.source.model.UpdateStrategy;
+import kotlin.Boolean;
+import kotlin.String;
+import kotlin.collections.List;
+import kotlinx.serialization.json.JsonObject;
+
+CREATE TABLE mangas(
+    _id INTEGER NOT NULL PRIMARY KEY,
+    source INTEGER NOT NULL,
+    url TEXT NOT NULL,
+    artist TEXT,
+    author TEXT,
+    description TEXT,
+    genre TEXT AS List<String>,
+    title TEXT NOT NULL,
+    status INTEGER NOT NULL,
+    thumbnail_url TEXT,
+    favorite INTEGER AS Boolean NOT NULL,
+    last_update INTEGER,
+    next_update INTEGER,
+    initialized INTEGER AS Boolean NOT NULL,
+    viewer INTEGER NOT NULL,
+    chapter_flags INTEGER NOT NULL,
+    cover_last_modified INTEGER NOT NULL,
+    date_added INTEGER NOT NULL,
+    update_strategy INTEGER AS UpdateStrategy NOT NULL DEFAULT 0,
+    calculate_interval INTEGER DEFAULT 0 NOT NULL,
+    last_modified_at INTEGER NOT NULL DEFAULT 0,
+    favorite_modified_at INTEGER,
+    version INTEGER NOT NULL DEFAULT 0,
+    is_syncing INTEGER NOT NULL DEFAULT 0,
+    notes TEXT NOT NULL DEFAULT '',
+    memo BLOB AS JsonObject NOT NULL,
+    manual_position INTEGER NOT NULL DEFAULT 0,
+    deleted_at INTEGER,
+    display_modified_at INTEGER,
+    notes_modified_at INTEGER,
+    position_modified_at INTEGER,
+    categories_modified_at INTEGER,
+    exclusions_modified_at INTEGER,
+    priority_modified_at INTEGER,
+    trackers_modified_at INTEGER,
+    restored_at INTEGER,
+    title_override TEXT,
+    description_override TEXT,
+    details_modified_at INTEGER
+);
+
+CREATE INDEX idx_mangas_favorite ON mangas(favorite);
+CREATE INDEX idx_mangas_url ON mangas(url);
+CREATE INDEX idx_mangas_source_url ON mangas(source, url);
+CREATE INDEX idx_mangas_next_update ON mangas(next_update);
+CREATE INDEX idx_mangas_is_syncing ON mangas(is_syncing) WHERE is_syncing = 1;
+CREATE INDEX idx_mangas_deleted_at ON mangas(deleted_at) WHERE deleted_at IS NOT NULL;
+
+CREATE TRIGGER update_last_favorited_at_mangas AFTER UPDATE OF favorite ON mangas
+WHEN new.favorite != old.favorite
+BEGIN
+    UPDATE mangas SET favorite_modified_at = strftime('%s', 'now') * 1000 WHERE _id = new._id;
+END;
+
+-- The WHEN guard stops the timestamp trigger from firing on its own nested update; upstream's fires
+-- unconditionally.
+CREATE TRIGGER update_last_modified_at_mangas AFTER UPDATE ON mangas
+WHEN new.last_modified_at = old.last_modified_at
+BEGIN
+    UPDATE mangas SET last_modified_at = strftime('%s', 'now') * 1000 WHERE _id = new._id;
+END;
+
+CREATE TRIGGER update_manga_version AFTER UPDATE ON mangas
+WHEN new.is_syncing = 0 AND (
+    new.url != old.url OR new.title != old.title OR
+    new.artist IS NOT old.artist OR new.author IS NOT old.author OR
+    new.description IS NOT old.description OR new.genre IS NOT old.genre OR
+    new.status != old.status OR new.thumbnail_url IS NOT old.thumbnail_url OR
+    new.favorite != old.favorite OR new.viewer != old.viewer OR
+    new.chapter_flags != old.chapter_flags OR new.update_strategy != old.update_strategy OR
+    new.notes != old.notes OR new.memo IS NOT old.memo OR
+    new.manual_position != old.manual_position OR new.deleted_at IS NOT old.deleted_at OR
+    new.title_override IS NOT old.title_override OR new.description_override IS NOT old.description_override
+)
+BEGIN
+    UPDATE mangas SET version = version + 1 WHERE _id = new._id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    SELECT 'manga', new._id, CASE WHEN new.deleted_at IS NULL THEN 'upsert' ELSE 'delete' END,
+           strftime('%s', 'now') * 1000
+    WHERE new.favorite = 1 OR old.favorite = 1;
+END;
+
+CREATE TRIGGER insert_manga_change AFTER INSERT ON mangas
+WHEN new.is_syncing = 0 AND new.favorite = 1
+BEGIN
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('manga', new._id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+-- The row is gone when the push reads the log, so the delete records the natural key.
+CREATE TRIGGER delete_manga_change AFTER DELETE ON mangas
+WHEN old.is_syncing = 0 AND (old.favorite = 1 OR old.deleted_at IS NOT NULL)
+BEGIN
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at, key_source, key_manga_url)
+    VALUES ('manga', old._id, 'delete', strftime('%s', 'now') * 1000, old.source, old.url);
+END;
+
+-- The owner's clocks (phase 3 Q6). Each moves only on a local write, to max(now, previous + 1)
+-- in epoch milliseconds, so two edits within one tick of the clock still order. The column the
+-- nested UPDATE reads is the stored clock, which an apply (is_syncing = 1) writes directly.
+CREATE TRIGGER update_manga_display_modified_at AFTER UPDATE OF viewer, chapter_flags ON mangas
+WHEN new.is_syncing = 0 AND (new.viewer != old.viewer OR new.chapter_flags != old.chapter_flags)
+BEGIN
+    UPDATE mangas
+    SET display_modified_at = max(strftime('%s', 'now') * 1000, coalesce(display_modified_at, 0) + 1)
+    WHERE _id = new._id;
+END;
+
+CREATE TRIGGER update_manga_notes_modified_at AFTER UPDATE OF notes ON mangas
+WHEN new.is_syncing = 0 AND new.notes != old.notes
+BEGIN
+    UPDATE mangas
+    SET notes_modified_at = max(strftime('%s', 'now') * 1000, coalesce(notes_modified_at, 0) + 1)
+    WHERE _id = new._id;
+END;
+
+-- The edited title and description's clock (schema version 3, R138 item 2): one clock for both
+-- overrides, in the notes clock's shape.
+CREATE TRIGGER update_manga_details_modified_at AFTER UPDATE OF title_override, description_override ON mangas
+WHEN new.is_syncing = 0 AND (
+    new.title_override IS NOT old.title_override OR new.description_override IS NOT old.description_override
+)
+BEGIN
+    UPDATE mangas
+    SET details_modified_at = max(strftime('%s', 'now') * 1000, coalesce(details_modified_at, 0) + 1)
+    WHERE _id = new._id;
+END;
+
+CREATE TRIGGER update_manga_position_modified_at AFTER UPDATE OF manual_position ON mangas
+WHEN new.is_syncing = 0 AND new.manual_position != old.manual_position
+BEGIN
+    UPDATE mangas
+    SET position_modified_at = max(strftime('%s', 'now') * 1000, coalesce(position_modified_at, 0) + 1)
+    WHERE _id = new._id;
+END;
+
+-- A restore's clock (phase 3 Q6, R82): the manga is deleted while its newest deleted_at is newer
+-- than its newest restored_at, as chapters and categories are. An undelete and every library add
+-- stamp it, the add even on a live row, because another device may hold a tombstone this device
+-- never saw. The stamp passes the tombstone it clears, so the row reads live after any merge.
+CREATE TRIGGER update_manga_restored_at AFTER UPDATE OF deleted_at, favorite ON mangas
+WHEN new.is_syncing = 0 AND (
+    (old.deleted_at IS NOT NULL AND new.deleted_at IS NULL) OR (old.favorite = 0 AND new.favorite = 1)
+)
+BEGIN
+    UPDATE mangas
+    SET restored_at = max(
+        strftime('%s', 'now') * 1000,
+        coalesce(restored_at, 0) + 1,
+        coalesce(old.deleted_at, 0) + 1,
+        coalesce(new.deleted_at, 0) + 1
+    )
+    WHERE _id = new._id;
+END;
+
+-- Chapter changes log only while the manga is a favourite, so chapters stored before a library add
+-- were never logged. This trigger logs the ones that carry progress (phase 3 Q5), and
+-- MangaRepositoryImpl.partialUpdate, the one path of every local add, logs the rest with
+-- sync_change_log.sq's logChaptersWithoutProgressOnFavorite, so the add logs every chapter the entry
+-- holds (phase 4 unit NB). A flip written by any other statement logs at most this trigger's rows.
+-- There are two such writers, each covered: a backup restore, whose next push is a full export
+-- carrying every chapter (R87 item 3), and a sync apply, which writes under is_syncing and must log
+-- nothing.
+CREATE TRIGGER log_manga_progress_on_favorite AFTER UPDATE OF favorite ON mangas
+WHEN new.is_syncing = 0 AND old.favorite = 0 AND new.favorite = 1
+BEGIN
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    SELECT 'chapter', _id, CASE WHEN deleted_at IS NULL THEN 'upsert' ELSE 'delete' END,
+           strftime('%s', 'now') * 1000
+    FROM chapters
+    WHERE manga_id = new._id AND (read = 1 OR bookmark = 1 OR last_page_read != 0);
+END;
+
+getMangaById:
+SELECT *
+FROM mangas
+WHERE _id = :id;
+
+-- Whether a library add is a flip from 0 to 1, read by MangaRepositoryImpl.partialUpdate just before
+-- the update (phase 4 unit NB).
+getFavoriteById:
+SELECT favorite
+FROM mangas
+WHERE _id = :id;
+
+getMangaByUrlAndSource:
+SELECT *
+FROM mangas
+WHERE url = :url
+AND source = :source
+LIMIT 1;
+
+getFavorites:
+SELECT *
+FROM mangas
+WHERE favorite = 1 AND deleted_at IS NULL;
+
+getReadMangaNotInLibrary:
+SELECT *
+FROM mangas
+WHERE favorite = 0 AND deleted_at IS NULL AND _id IN (
+    SELECT DISTINCT manga_id FROM chapters WHERE read = 1 OR last_page_read != 0
+);
+
+-- A page of what an export writes (phase 5 unit SC2): the favourites and, with :withRead = 1, the
+-- entries outside the library with a read or begun chapter, the union of getFavorites and
+-- getReadMangaNotInLibrary, by id after :afterId.
+backupGetLibraryPage:
+SELECT *
+FROM mangas
+WHERE _id > :afterId AND deleted_at IS NULL AND (
+    favorite = 1 OR (:withRead = 1 AND EXISTS (
+        SELECT 1 FROM chapters C WHERE C.manga_id = mangas._id AND (C.read = 1 OR C.last_page_read != 0)
+    ))
+)
+ORDER BY _id
+LIMIT :limit;
+
+-- Backup exporter only: every row, soft-deleted ones included.
+getAllManga:
+SELECT *
+FROM mangas;
+
+getFavoriteBySourceId:
+SELECT *
+FROM mangas
+WHERE favorite = 1 AND source = :sourceId AND deleted_at IS NULL;
+
+getSourceIdWithFavoriteCount:
+SELECT source, count(*) AS count
+FROM mangas
+WHERE favorite = 1 AND deleted_at IS NULL
+GROUP BY source;
+
+-- The ids of every live favourite: the migration list marks a match already in the library.
+getFavoriteIds:
+SELECT _id FROM mangas WHERE favorite = 1 AND deleted_at IS NULL;
+
+getSourceIdsWithNonLibraryManga:
+SELECT source, count(*) AS count
+FROM mangas
+WHERE favorite = 0
+GROUP BY source;
+
+-- Clear database's list (phase 4 unit ST): the rows deleteNonLibraryManga can remove, per source.
+-- A soft-deleted row is a tombstone sync still needs and the delete never touches, so it is not
+-- counted either.
+getSourceIdsWithLiveNonLibraryManga:
+SELECT source, count(*) AS count
+FROM mangas
+WHERE favorite = 0 AND deleted_at IS NULL
+GROUP BY source;
+
+-- A blank title would match every title (upstream's later fix, triage E105).
+getDuplicateLibraryManga:
+SELECT M.*, count(C._id) AS chapterCount
+FROM mangas M
+LEFT JOIN chapters C ON C.manga_id = M._id AND C.deleted_at IS NULL
+WHERE M.favorite = 1 AND M.deleted_at IS NULL AND M._id != :id
+  AND trim(:title) != '' AND lower(M.title) LIKE '%' || lower(:title) || '%'
+GROUP BY M._id
+ORDER BY M.source, M.url;
+
+resetViewerFlags:
+UPDATE mangas
+SET viewer = 0;
+
+resetIsSyncing:
+UPDATE mangas
+SET is_syncing = 0
+WHERE is_syncing = 1;
+
+deleteNonLibraryManga:
+DELETE FROM mangas
+WHERE favorite = 0 AND deleted_at IS NULL AND source IN :sourceIds
+AND (:keepReadManga = 0 OR _id NOT IN (
+    SELECT manga_id FROM chapters WHERE read = 1 OR last_page_read != 0));
+
+-- Clear database's confirmation (phase 4 unit ST): the rows of the ticked sources it freezes when it
+-- opens, the same rows getSourceIdsWithLiveNonLibraryManga counts.
+getLiveNonLibraryMangaIds:
+SELECT _id
+FROM mangas
+WHERE favorite = 0 AND deleted_at IS NULL AND source IN :sourceIds;
+
+-- Clear database's delete: only the rows its confirmation froze, and of those only the ones still
+-- outside the library and live now, so a row a sync moved out of the library while the dialog was
+-- open is never swept in.
+deleteNonLibraryMangaByIds:
+DELETE FROM mangas
+WHERE _id IN :mangaIds AND favorite = 0 AND deleted_at IS NULL
+AND (:keepReadManga = 0 OR _id NOT IN (
+    SELECT manga_id FROM chapters WHERE read = 1 OR last_page_read != 0));
+
+insert:
+INSERT INTO mangas(source, url, artist, author, description, genre, title, status, thumbnail_url,
+    favorite, last_update, next_update, initialized, viewer, chapter_flags, cover_last_modified,
+    date_added, update_strategy, calculate_interval, last_modified_at, version, notes, memo,
+    manual_position, deleted_at)
+VALUES (:source, :url, :artist, :author, :description, :genre, :title, :status, :thumbnailUrl,
+    :favorite, :lastUpdate, :nextUpdate, :initialized, :viewer, :chapterFlags, :coverLastModified,
+    :dateAdded, :updateStrategy, :calculateInterval, :lastModifiedAt, :version, :notes, :memo,
+    :manualPosition, :deletedAt);
+
+selectLastInsertedRowId:
+SELECT last_insert_rowid();
+
+insertNetworkManga:
+INSERT INTO mangas(source, url, artist, author, description, genre, title, status, thumbnail_url,
+    favorite, last_update, next_update, initialized, viewer, chapter_flags, cover_last_modified,
+    date_added, update_strategy, calculate_interval, last_modified_at, version, notes, memo,
+    manual_position, deleted_at)
+SELECT :source, :url, :artist, :author, :description, :genre, :title, :status, :thumbnailUrl,
+    :favorite, :lastUpdate, :nextUpdate, :initialized, :viewer, :chapterFlags, :coverLastModified,
+    :dateAdded, :updateStrategy, :calculateInterval, 0, 0, '', :memo, 0, NULL
+WHERE NOT EXISTS (SELECT 1 FROM mangas WHERE source = :source AND url = :url);
+
+refreshNetworkMangaIfUninitialized:
+UPDATE mangas SET
+    artist = :artist, author = :author, description = :description, genre = :genre,
+    title = :title, status = :status, thumbnail_url = :thumbnailUrl,
+    last_update = :lastUpdate, next_update = :nextUpdate, initialized = :initialized,
+    cover_last_modified = :coverLastModified, update_strategy = :updateStrategy,
+    calculate_interval = :calculateInterval, memo = :memo
+WHERE source = :source AND url = :url AND initialized = 0;
+
+update:
+UPDATE mangas SET
+    source = coalesce(:source, source), url = coalesce(:url, url),
+    artist = coalesce(:artist, artist), author = coalesce(:author, author),
+    description = coalesce(:description, description), genre = coalesce(:genre, genre),
+    title = coalesce(:title, title), status = coalesce(:status, status),
+    thumbnail_url = coalesce(:thumbnailUrl, thumbnail_url), favorite = coalesce(:favorite, favorite),
+    last_update = coalesce(:lastUpdate, last_update), next_update = coalesce(:nextUpdate, next_update),
+    initialized = coalesce(:initialized, initialized), viewer = coalesce(:viewer, viewer),
+    chapter_flags = coalesce(:chapterFlags, chapter_flags),
+    cover_last_modified = coalesce(:coverLastModified, cover_last_modified),
+    date_added = coalesce(:dateAdded, date_added),
+    update_strategy = coalesce(:updateStrategy, update_strategy),
+    calculate_interval = coalesce(:calculateInterval, calculate_interval),
+    version = coalesce(:version, version), is_syncing = coalesce(:isSyncing, is_syncing),
+    notes = coalesce(:notes, notes), memo = coalesce(:memo, memo),
+    manual_position = coalesce(:manualPosition, manual_position),
+    deleted_at = coalesce(:deletedAt, deleted_at)
+WHERE _id = :mangaId;
+
+-- A tombstone passes the row's last restore (R82), so a device whose clock lags the one that
+-- restored it still records the delete as the newer event.
+softDelete:
+UPDATE mangas
+SET deleted_at = max(:now, coalesce(restored_at, 0) + 1), favorite = 0
+WHERE _id = :mangaId;
+
+-- Stamps the restore clock itself, as update_manga_restored_at would, because a backup restore
+-- calls it under the row's is_syncing latch, where the trigger stays quiet (R87). Called on a live
+-- row it is a library add: deleted_at stays NULL and the clock still moves. The right-hand side
+-- reads the row before the update, so the stamp passes the tombstone it clears.
+undelete:
+UPDATE mangas
+SET deleted_at = NULL,
+    restored_at = max(strftime('%s', 'now') * 1000, coalesce(restored_at, 0) + 1, coalesce(deleted_at, 0) + 1)
+WHERE _id = :mangaId;
+
+setManualPosition:
+UPDATE mangas
+SET manual_position = :position
+WHERE _id = :mangaId;
+
+-- The owner's edit of the title and description (phase 5 unit ED, R138 item 2), both written whole:
+-- NULL is unedited. update_manga_details_modified_at stamps the clock and update_manga_version logs it.
+setDetailsOverride:
+UPDATE mangas
+SET title_override = :titleOverride, description_override = :descriptionOverride
+WHERE _id = :mangaId;
+
+rewriteSourceId:
+UPDATE mangas
+SET source = :newSourceId
+WHERE source = :oldSourceId;
+
+countBySourceId:
+SELECT count(*)
+FROM mangas
+WHERE source = :sourceId;
+
+-- Phase 3 sync (unit E2). An apply writes a merged row whole, every value and clock as the merge
+-- returned it, while the row's is_syncing latch is raised, so no trigger logs, bumps or stamps.
+-- update_last_favorited_at_mangas has no guard and stamps the write's time whenever favorite
+-- changes, so syncSetFavoriteModifiedAt runs after any write that may change it.
+syncSetIsSyncing:
+UPDATE mangas
+SET is_syncing = :isSyncing
+WHERE _id = :mangaId;
+
+-- initialized is true when any of the details the wire carries arrived (description, author, artist,
+-- genre; SyncStoreImpl.insertManga decides): the other device fetched them, so the library update treats the entry as fetched and
+-- applies its restrictions, rather than refreshing every pulled entry once on a newly paired device
+-- (owner ruling, 2026-10-15). An entry that arrives with none of them was never fetched there
+-- either and stays 0, so the next update fetches its details. What the wire does not carry
+-- (cover_last_modified, next_update, chapter memos) waits for a manual refresh or the next update
+-- that fetches details: opening a pulled entry no longer refreshes it.
+syncInsert:
+INSERT INTO mangas(source, url, artist, author, description, genre, title, status, thumbnail_url,
+    favorite, last_update, next_update, initialized, viewer, chapter_flags, cover_last_modified,
+    date_added, update_strategy, calculate_interval, version, is_syncing, notes, memo,
+    manual_position, deleted_at, favorite_modified_at, restored_at, display_modified_at,
+    notes_modified_at, position_modified_at, categories_modified_at, exclusions_modified_at,
+    priority_modified_at, trackers_modified_at, title_override, description_override,
+    details_modified_at)
+VALUES (:source, :url, :artist, :author, :description, :genre, :title, :status, :thumbnailUrl,
+    :favorite, 0, 0, :initialized, :viewer, :chapterFlags, 0,
+    :dateAdded, :updateStrategy, 0, :version, 1, :notes, :memo,
+    :manualPosition, :deletedAt, :favoriteModifiedAt, :restoredAt, :displayModifiedAt,
+    :notesModifiedAt, :positionModifiedAt, :categoriesModifiedAt, :exclusionsModifiedAt,
+    :priorityModifiedAt, :trackersModifiedAt, :titleOverride, :descriptionOverride,
+    :detailsModifiedAt);
+
+syncUpdate:
+UPDATE mangas SET
+    favorite = :favorite, date_added = :dateAdded, deleted_at = :deletedAt, restored_at = :restoredAt,
+    version = :version, title = :title, author = :author, artist = :artist,
+    description = :description, genre = :genre, status = :status, thumbnail_url = :thumbnailUrl,
+    update_strategy = :updateStrategy, memo = :memo, viewer = :viewer, chapter_flags = :chapterFlags,
+    display_modified_at = :displayModifiedAt, notes = :notes, notes_modified_at = :notesModifiedAt,
+    manual_position = :manualPosition, position_modified_at = :positionModifiedAt,
+    title_override = :titleOverride, description_override = :descriptionOverride,
+    details_modified_at = :detailsModifiedAt,
+    categories_modified_at = :categoriesModifiedAt, exclusions_modified_at = :exclusionsModifiedAt,
+    priority_modified_at = :priorityModifiedAt, trackers_modified_at = :trackersModifiedAt
+WHERE _id = :mangaId;
+
+syncSetFavoriteModifiedAt:
+UPDATE mangas
+SET favorite_modified_at = :favoriteModifiedAt
+WHERE _id = :mangaId;
+
+syncSetCategoriesModifiedAt:
+UPDATE mangas
+SET categories_modified_at = :modifiedAt
+WHERE _id = :mangaId;
+
+syncSetExclusionsModifiedAt:
+UPDATE mangas
+SET exclusions_modified_at = :modifiedAt
+WHERE _id = :mangaId;
+
+syncSetPriorityModifiedAt:
+UPDATE mangas
+SET priority_modified_at = :modifiedAt
+WHERE _id = :mangaId;
+
+syncSetTrackersModifiedAt:
+UPDATE mangas
+SET trackers_modified_at = :modifiedAt
+WHERE _id = :mangaId;
+
+-- A page of every manga by id, with the three values that say whether a full export or a snapshot
+-- carries it; the caller keeps favourites, soft-deleted rows and rows once in the library. The
+-- filter is in Kotlin because favorite_modified_at has no index, and a page reads by primary key.
+syncGetPage:
+SELECT _id, favorite, deleted_at, favorite_modified_at
+FROM mangas
+WHERE _id > :afterId
+ORDER BY _id
+LIMIT :limit;
+
+-- A sync run's before and after counts: live library entries, live categories but the system one,
+-- and the read and bookmarked live chapters of live library entries.
+syncCountLibrary:
+SELECT
+    (SELECT count(*) FROM mangas WHERE favorite = 1 AND deleted_at IS NULL) AS library_entries,
+    (SELECT count(*) FROM categories WHERE _id > 0 AND deleted_at IS NULL) AS categories,
+    (SELECT count(*) FROM chapters C JOIN mangas M ON M._id = C.manga_id
+        WHERE M.favorite = 1 AND M.deleted_at IS NULL AND C.deleted_at IS NULL AND C.read = 1) AS read_chapters,
+    (SELECT count(*) FROM chapters C JOIN mangas M ON M._id = C.manga_id
+        WHERE M.favorite = 1 AND M.deleted_at IS NULL AND C.deleted_at IS NULL AND C.bookmark = 1) AS bookmarked_chapters;

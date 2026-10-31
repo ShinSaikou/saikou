@@ -1,0 +1,71 @@
+-- Vendored from upstream v0.20.4: data/src/main/sqldelight/tachiyomi/view/updatesView.sq (modified: yes)
+-- Modified: the deleted_at IS NULL guards on mangas and chapters (05-data 2.16) and the category
+-- filters take explicit includeAll, includeUncategorized and excludeUncategorized flags computed in
+-- Kotlin (3.17). getRecentUpdatesWithFilters states its order (phase 4 unit CO, R112 carry-over 2).
+-- The datefetch alias, lower-case f, is upstream's and is kept so the vendored mapper compiles.
+-- displayTitle (schema version 3, phase 5 unit SC4) is the entry's edited title over its source's,
+-- for unit ED's display sites; mangaTitle stays the source's. Upstream's getRecentUpdates and
+-- getUpdatesByReadStatus are deleted (schema version 4, the chapter index diet): nothing called
+-- them, and idx_chapters_read and idx_chapters_date_fetch, dropped with them, served only them.
+-- Upstream's updates widget reads getUpdatesByReadStatus; a port brings it back from upstream.
+
+CREATE VIEW updatesView AS
+SELECT
+    mangas._id AS mangaId,
+    mangas.title AS mangaTitle,
+    coalesce(mangas.title_override, mangas.title) AS displayTitle,
+    chapters._id AS chapterId,
+    chapters.name AS chapterName,
+    chapters.scanlator,
+    chapters.url AS chapterUrl,
+    chapters.read,
+    chapters.bookmark,
+    chapters.last_page_read,
+    mangas.source,
+    mangas.favorite,
+    mangas.thumbnail_url AS thumbnailUrl,
+    mangas.cover_last_modified AS coverLastModified,
+    chapters.date_upload AS dateUpload,
+    chapters.date_fetch AS datefetch,
+    excluded_scanlators.scanlator AS excludedScanlator
+FROM mangas JOIN chapters ON mangas._id = chapters.manga_id
+LEFT JOIN excluded_scanlators
+    ON mangas._id = excluded_scanlators.manga_id
+    AND chapters.scanlator = excluded_scanlators.scanlator
+WHERE favorite = 1
+AND mangas.deleted_at IS NULL
+AND chapters.deleted_at IS NULL
+AND date_fetch > date_added
+ORDER BY date_fetch DESC;
+
+getRecentUpdatesWithFilters:
+SELECT *
+FROM updatesView
+WHERE dateUpload > :after
+  -- read != :unread is the contract's read = NOT :unread: the SQLDelight grammar has no
+  -- unary NOT over a bind parameter, and the two are the same test for a boolean column.
+  AND (:unread IS NULL OR read != :unread)
+  -- Upstream's three cases: started is some progress and not read, and not started is no progress
+  -- and not read, so a read chapter is neither (phase 4 unit UF).
+  AND (
+    :started IS NULL
+    OR (:started = 1 AND last_page_read > 0 AND read = 0)
+    OR (:started = 0 AND last_page_read = 0 AND read = 0)
+  )
+  AND (:bookmarked IS NULL OR bookmark = :bookmarked)
+  AND (:hideExcludedScanlators = 0 OR excludedScanlator IS NULL)
+  AND (
+    :includeAll = 1
+    OR mangaId IN (SELECT manga_id FROM mangas_categories WHERE category_id IN :includedCategories)
+    OR (:includeUncategorized = 1 AND mangaId NOT IN (SELECT manga_id FROM mangas_categories))
+  )
+  AND mangaId NOT IN (SELECT manga_id FROM mangas_categories WHERE category_id IN :excludedCategories)
+  -- An excluded default category hides the entries in no category, as upstream's 0 NOT IN test does.
+  AND (:excludeUncategorized = 0 OR mangaId IN (SELECT manga_id FROM mangas_categories))
+-- The Updates tab's day headers and folds read this order, so the query states it rather than
+-- inherit the view's, which SQLite does not promise to keep. Newest fetch first, as the view; a
+-- library update stamps every new chapter of one fetch alike, so the ties are one entry's chapters
+-- together and then by id, the order they were inserted in, the source's. Left to the plan, an
+-- entry's tied chapters came unread first, so a mark as read moved a chapter within its fold.
+ORDER BY datefetch DESC, mangaId, chapterId
+LIMIT :limit;

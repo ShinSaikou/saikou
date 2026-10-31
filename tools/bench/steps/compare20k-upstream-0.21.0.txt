@@ -1,0 +1,100 @@
+# Upstream v0.21.0's profile for compare20k.py (unit upstream-compare-20k), the official x86_64 APK. The
+# keys and blocks are the ones steps/compare20k-saikou.txt describes; only upstream's words differ.
+
+package ${UPSTREAM_PACKAGE}
+# S1 ends at WorkManager's result line for the restore's worker (compare20k.py, worker_results).
+restore.worker eu.kanade.tachiyomi.data.backup.restore.BackupRestoreWorker
+# Notifications.ID_RESTORE_COMPLETE.
+restore.done ${UPSTREAM_PACKAGE}|-504
+tab.library text=Library
+tab.updates text=Updates
+tab.history text=History
+tab.browse text=Browse
+tab.more text=More
+copy.pattern  c\d\d$
+marker.library text%= c\d\d$
+marker.updates text%= c\d\d$
+marker.history text%= c\d\d$
+marker.stats text={{CHAPTERS_TOTAL}}
+marker.entry text={{CHAPTERS}} chapters
+# A copy of the target in the grid. The search field above it holds the word as well, so the marker
+# is a copy's title, which the field never shows.
+marker.search text%=(?i){{WORD}}.* c\d\d$
+# Picking the file opens the Restore backup screen, whose Restore button starts it.
+action.restore text={{BACKUP_NAME}}
+restore.confirm text=Restore
+action.stats text=Statistics
+# A library cell shows its title as text; compare20k.py takes the lowest match below the toolbar.
+action.entry text={{TITLE}}
+
+[setup]
+# The first-run screens, as steps/scale-upstream-setup.txt (phase 5 unit SC0) goes through them: the
+# storage folder ${UPSTREAM_STORAGE_DIR} (the runner creates it), the install-apps grant, the battery grant,
+# crash logs and analytics off. The welcome page takes a tap made while it settles as nothing.
+wait text=Welcome! timeout=60
+sleep 2
+tap text=Next
+tap text=Select a folder
+tap text=sdk_gphone64_x86_64 timeout=30
+tap text=${UPSTREAM_STORAGE_DIR}
+tap text=USE THIS FOLDER
+tap text=ALLOW
+tap text=Next
+tap text=Grant
+check text=Allow from this source
+tap desc=Navigate up
+tap text=Grant
+tap text=Allow
+uncheck text=Send crash logs
+uncheck text=Allow analytics
+tap text=Next
+tap text=Get started
+wait text=Library timeout=30
+# Settings > Data and storage > Automatic backup frequency: Off (the default is every 12 hours), as
+# Saikou's is turned off, so no backup runs in a window.
+tab more
+tap text=Settings
+tap text=Data and storage
+tap text=Automatic backup frequency
+tap text=Off
+wait text=Off
+tap desc=Navigate up
+tap desc=Navigate up
+tab library
+
+[restore]
+# From any tab to the system picker's Downloads root, with the file pushed to /sdcard/Download.
+tab more
+tap text=Settings
+tap text=Data and storage
+tap text=Restore backup
+# The picker can reset to its Recent root after a drawer tap, so compare20k.py's picker-root repeats
+# the tap until the root's header shows.
+wait desc=Show roots timeout=30
+picker-root text=Downloads shown=text=Files in Downloads
+# The newest file comes first, so a session's first part is at the bottom of eleven.
+scroll-to text={{BACKUP_NAME}} timeout=30
+
+[search-open]
+# S8: the target's category tab, then the search field; the clock starts at the word's last letter.
+hscroll-to text={{CATEGORY}} along=text=Default|text={{CATEGORY_1385}}|text={{CATEGORY_3859}}
+tap desc=Search
+sleep 1
+
+[entry-open]
+# S6: the target's category tab, the search, the word typed a letter at a time, Enter.
+hscroll-to text={{CATEGORY}} along=text=Default|text={{CATEGORY_1385}}|text={{CATEGORY_3859}}
+tap desc=Search
+sleep 1
+slowtype {{WORD}}
+key 66
+sleep 2
+
+[search-close]
+# The search toolbar's arrow closes the search.
+tap-if desc=Navigate up timeout=3
+sleep 1
+
+[entry-close]
+tap desc=Navigate up
+sleep 1

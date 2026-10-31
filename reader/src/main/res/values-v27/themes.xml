@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The two attributes the reader theme wants that did not exist until API 27.
+  minSdk is 26, so they live here rather than in values/: the resource system ignores an
+  unknown theme attribute at runtime, but relying on that is relying on an accident, and lint
+  is right to call it one. API 26 keeps the dark navigation bar it already had by default and
+  does not draw under a cutout, which is correct because no API 26 device has one.
+-->
+<resources>
+    <style name="Theme.Saikou.Reader" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:windowBackground">@color/reader_background_black</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+    </style>
+</resources>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The debug build's Google round trip screen (phase 3 unit O). Debug build type only. -->
+<resources>
+    <string name="debug_google_round_trip_label">Saikou Google test</string>
+    <string name="debug_google_round_trip_title">Google Drive sign-in, one round trip</string>
+    <string name="debug_google_not_configured">No Google client is configured in this build. Put saikou.drive.client.id and saikou.drive.client.secret in local.properties and build again.</string>
+    <string name="debug_google_configured">A Google client is configured in this build.</string>
+    <string name="debug_google_endpoints_google">Endpoints: Google</string>
+    <string name="debug_google_endpoints_test_format">Endpoints: the test base %1$s</string>
+    <string name="debug_google_base">Test base, such as http://10.0.2.2:18797/ (blank for Google)</string>
+    <string name="debug_google_hold">Hold the foreground while the browser is open</string>
+    <string name="debug_google_run">Run one round trip</string>
+    <string name="debug_google_running">Waiting for the browser</string>
+    <string name="debug_google_yes">yes</string>
+    <string name="debug_google_no">no</string>
+    <string name="debug_google_not_run">not run</string>
+    <string name="debug_google_foreground_format">Foreground held: %1$s</string>
+    <string name="debug_google_code_format">Code issued: %1$s</string>
+    <string name="debug_google_code_after_format">Code issued: yes, %1$d s after the browser opened</string>
+    <string name="debug_google_refresh_token_format">Refresh token issued: %1$s</string>
+    <string name="debug_google_expires_in_format">Token response carried refresh_token_expires_in: %1$s</string>
+    <string name="debug_google_refreshed_format">Refresh accepted: %1$s</string>
+    <string name="debug_google_revoked_format">Grant revoked: %1$s</string>
+    <string name="debug_google_failed_format">Stopped: %1$s</string>
+</resources>

@@ -1,0 +1,59 @@
+# Upstream v0.21.0's one-time setup for the library update bench (upstream-compare-20k): update-upstream-setup.txt's
+# steps, after the welcome page settles (v0.21.0's takes a tap made while it settles as nothing).
+# Upstream checks for a newer release on its first start (v0.21.2 was out by 2026-10-14). Skip it,
+# so the prompt never shows again in this install.
+tap-if desc=Skip this version timeout=30
+# Skipping asks "Skip v0.21.2?" once more.
+tap-if text=OK timeout=10
+wait text=Welcome! timeout=60
+sleep 2
+
+tap text=Next timeout=60
+tap text=Select a folder
+tap text=sdk_gphone64_x86_64 timeout=30
+tap text=${UPSTREAM_STORAGE_DIR}
+tap text=USE THIS FOLDER
+tap text=ALLOW
+tap text=Next
+tap text=Grant
+check text=Allow from this source
+tap desc=Navigate up
+tap text=Grant
+tap text=Allow
+uncheck text=Send crash logs
+uncheck text=Allow analytics
+tap text=Next
+tap text=Get started
+wait text=Library timeout=30
+
+am start -a android.intent.action.VIEW -d '${UPSTREAM_SCHEME}://extension-store?url=http://10.0.2.2:18794/repo/index.min.json' ${UPSTREAM_PACKAGE}
+tap text=Add
+wait text=Library update fixture
+tap desc=Navigate up
+tap text=Browse
+tap text=Extensions
+tap desc=Install timeout=60
+tap text=Install timeout=30
+wait text=Installed timeout=60
+wait text=Library Update Fixture
+
+tap text=More
+tap text=Settings
+tap text=Library
+tap text=Smart update
+tap text=Skip entries with unread chapter(s)
+tap text=Skip unstarted entries
+tap text=Skip entries with "Completed" status
+tap text=Predict next release time
+tap text=OK
+wait text=None
+gone text~=Skip entries with
+wait text=Off
+tap desc=Navigate up
+
+tap text=Data and storage
+tap text=Automatic backup frequency
+tap text=Off
+wait text=Off
+tap desc=Navigate up
+tap desc=Navigate up

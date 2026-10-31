@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Ruling R11: :reader owns ReaderActivity and declares it; :app starts it with an Intent.
+
+  The REMOTE_ACTION filter and meta-data are upstream v0.20.4's: they list the reader under the
+  S Pen's air actions, which send the keys in res/xml/s_pen_actions.xml to the focused activity.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <activity
+            android:name="com.shinsaikou.reader.ReaderActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.Saikou.Reader"
+            android:windowSoftInputMode="adjustNothing">
+            <intent-filter>
+                <action android:name="com.samsung.android.support.REMOTE_ACTION" />
+            </intent-filter>
+
+            <meta-data
+                android:name="com.samsung.android.support.REMOTE_ACTION"
+                android:resource="@xml/s_pen_actions" />
+        </activity>
+    </application>
+</manifest>

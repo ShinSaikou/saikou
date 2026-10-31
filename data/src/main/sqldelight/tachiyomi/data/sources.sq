@@ -1,0 +1,32 @@
+-- Vendored from upstream v0.20.4: data/src/main/sqldelight/tachiyomi/data/sources.sq (modified: yes)
+-- Modified: the seed row for source id 0 (the local source) is added, per 05-data section 5.
+-- Device-local table: no sync triggers.
+
+CREATE TABLE sources(
+    _id INTEGER NOT NULL PRIMARY KEY,
+    lang TEXT NOT NULL,
+    name TEXT NOT NULL
+);
+
+-- Source id 0 is the local source. The row exists so findOne(0) answers before the local source
+-- registers itself, and so a restored backup never parks local manga as "source missing".
+INSERT OR IGNORE INTO sources(_id, lang, name) VALUES (0, 'other', 'Local source');
+
+findAll:
+SELECT *
+FROM sources;
+
+findOne:
+SELECT *
+FROM sources
+WHERE _id = :id;
+
+upsert:
+INSERT INTO sources(_id, lang, name)
+VALUES (:id, :lang, :name)
+ON CONFLICT(_id)
+DO UPDATE
+SET
+    lang = :lang,
+    name = :name
+WHERE _id = :id;

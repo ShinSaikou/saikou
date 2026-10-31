@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The storage screen and upstream's maintenance rows (phase 4 unit ST): the Data and Advanced rows,
+  clear database, the list of downloads not in the library, the More tab's Data and storage row and
+  the extension store's remove dialog. Upstream's keys carry upstream v0.20.4's English text; the rest are
+  fresh. A file of its own so parallel units never collide on one file (R13).
+-->
+<resources>
+    <!-- Upstream's MoreTab row and Data and storage screen -->
+    <string name="label_data_storage">Data and storage</string>
+    <string name="last_auto_backup_info">Last automatically backed up: %s</string>
+    <string name="relative_time_span_never">Never</string>
+    <string name="updates_last_update_info_just_now">Just now</string>
+    <!-- Upstream's line above the Updates rows, also under Settings > Library's automatic update row. -->
+    <string name="updates_last_update_info">Library last updated: %s</string>
+    <!-- Under that line: what the last automatic update skipped, the total then the reasons. -->
+    <string name="updates_last_auto_skipped_format">Last automatic update skipped %1$d: %2$s</string>
+    <string name="updates_skipped_completed">%d completed</string>
+    <string name="updates_skipped_unread">%d with unread chapters</string>
+    <string name="updates_skipped_not_started">%d not started</string>
+    <string name="updates_skipped_not_due">%d not due for a release</string>
+    <string name="updates_skipped_fetch_once">%d fetched only once</string>
+    <string name="pref_storage_usage">Storage usage</string>
+    <string name="available_disk_space_info">Available: %1$s / Total: %2$s</string>
+    <!-- Saikou keeps downloads in its own storage, so the one storage row names what it holds. -->
+    <string name="pref_storage_usage_format">Downloads: %1$s. Chapter cache: %2$s.</string>
+    <string name="pref_storage_usage_pending">Measuring</string>
+
+    <!-- Upstream's Storage location row (unit storage-location). Upstream's title; Saikou keeps downloads in
+         its own storage, so the summaries and the info line say what the folder holds here. -->
+    <string name="pref_storage_location">Storage location</string>
+    <string name="pref_storage_location_info">Used for automatic backups, the Local source and exported downloads.</string>
+    <string name="pref_storage_location_not_set">Backups and Local series are kept inside the app and are deleted with it. Tap to choose a folder</string>
+    <string name="pref_storage_location_unreachable_format">%1$s cannot be reached. Tap to choose it again</string>
+    <string name="file_picker_error">No file picker app found</string>
+    <string name="file_picker_uri_permission_unsupported">Failed to acquire persistent folder access. The app may behave unexpectedly.</string>
+    <string name="action_choose_folder">Choose folder</string>
+    <string name="action_move">Move</string>
+    <plurals name="storage_move_backups">
+        <item quantity="one">%1$d backup</item>
+        <item quantity="other">%1$d backups</item>
+    </plurals>
+    <plurals name="storage_move_local_series">
+        <item quantity="one">%1$d Local series</item>
+        <item quantity="other">%1$d Local series</item>
+    </plurals>
+    <!-- Unit storage-move-between-folders: what a previous storage location's downloads folder holds. -->
+    <plurals name="storage_move_exported_chapters">
+        <item quantity="one">%1$d exported chapter</item>
+        <item quantity="other">%1$d exported chapters</item>
+    </plurals>
+    <!-- The counts above that are not zero, joined: "4 backups, 12 Local series and 3 exported chapters". -->
+    <string name="storage_move_join_pair_format">%1$s and %2$s</string>
+    <string name="storage_move_join_comma_format">%1$s, %2$s</string>
+    <!-- %1$s is the joined counts, %2$s the folder's name. -->
+    <string name="storage_move_one_format">%1$s will be moved to %2$s</string>
+    <!-- When the files are in the previous storage location: %2$s is its name, %3$s the new one's, %4$s the size. -->
+    <string name="storage_move_from_format">%1$s will be moved from %2$s to %3$s (%4$s)</string>
+    <!-- Under the sentence when the new folder's storage has less free space than the move needs; Move is then off. -->
+    <string name="storage_move_no_space_format">%1$s does not have %2$s free</string>
+    <!-- Shown under the row while the app folders still hold files after a location was chosen. -->
+    <string name="pref_storage_move_left">Move to the storage location</string>
+    <string name="pref_storage_move_progress_format">Moving file %1$d of %2$d</string>
+    <string name="pref_storage_move_counting">Counting files</string>
+    <string name="channel_storage_move">Storage location</string>
+    <string name="notification_storage_move_title">Moving to the storage location</string>
+    <string name="notification_storage_move_done">Moved to the storage location</string>
+    <plurals name="notification_storage_move_failed">
+        <item quantity="one">%1$d file could not be moved and is still in the app</item>
+        <item quantity="other">%1$d files could not be moved and are still in the app</item>
+    </plurals>
+    <!-- %2$s is the previous storage location, where the files that could not be moved still are. -->
+    <plurals name="notification_storage_move_failed_in">
+        <item quantity="one">%1$d file could not be moved and is still in %2$s</item>
+        <item quantity="other">%1$d files could not be moved and are still in %2$s</item>
+    </plurals>
+    <string name="notification_storage_move_stopped">The move to the storage location stopped; nothing was lost</string>
+    <string name="notification_storage_move_again">Tap to open Settings and move them again</string>
+
+    <!-- Downloads of titles not in the library (upstream issue #565) -->
+    <string name="storage_downloads_title">Downloads not in library</string>
+    <string name="storage_downloads_none">None</string>
+    <string name="storage_downloads_pending">Counting</string>
+    <plurals name="storage_downloads_summary_format">
+        <item quantity="one">%1$d entry, %2$s</item>
+        <item quantity="other">%1$d entries, %2$s</item>
+    </plurals>
+    <plurals name="storage_downloads_item_format">
+        <item quantity="one">%1$d chapter, %2$s</item>
+        <item quantity="other">%1$d chapters, %2$s</item>
+    </plurals>
+    <string name="storage_downloads_empty">No downloads outside the library</string>
+    <string name="delete_downloads_for_manga">Delete downloaded chapters?</string>
+    <plurals name="storage_downloads_delete_message_format">
+        <item quantity="one">The downloaded chapters of this entry are deleted from this device:</item>
+        <item quantity="other">The downloaded chapters of these %1$d entries are deleted from this device:</item>
+    </plurals>
+
+    <!-- Upstream's ClearDatabaseScreen -->
+    <string name="pref_clear_database">Clear database</string>
+    <string name="pref_clear_database_summary">Delete history for entries that are not saved in your library</string>
+    <!-- Phase 5 unit SC4: Saikou's repair of the library's per-entry chapter counts; upstream has none. -->
+    <string name="pref_rebuild_library_counts">Rebuild library counts</string>
+    <string name="pref_rebuild_library_counts_summary">Count the unread, read and bookmarked chapters of every library entry again</string>
+    <string name="pref_rebuild_library_counts_success">Library counts rebuilt</string>
+    <string name="pref_rebuild_library_counts_error">Couldn\'t rebuild library counts</string>
+    <string name="clear_database_source_item_count">%1$d non-library entries in database</string>
+    <string name="clear_database_text">You’re about to remove entries from the database</string>
+    <string name="clear_database_history_warning">Read chapters and progress of non-library entries will be lost</string>
+    <string name="clear_db_exclude_read">Keep entries with read chapters</string>
+    <string name="clear_database_completed">Entries deleted</string>
+    <string name="database_clean">Nothing to clear</string>
+    <string name="are_you_sure">Are you sure?</string>
+    <string name="action_select_inverse">Select inverse</string>
+
+    <!-- Upstream's Advanced rows -->
+    <string name="pref_clear_webview_data">Clear WebView data</string>
+    <string name="webview_data_deleted">WebView data cleared</string>
+    <string name="cache_delete_error">Error occurred while clearing</string>
+    <string name="pref_refresh_library_covers">Refresh library covers</string>
+    <!-- Saikou has no details-only job: the row starts a whole library update with details. -->
+    <string name="pref_refresh_library_covers_summary">Runs a full library update that also refreshes every entry\'s cover and details</string>
+    <string name="pref_reset_viewer_flags">Reset per-series reader settings</string>
+    <!-- Upstream's summary, plus the reach sync gives it. -->
+    <string name="pref_reset_viewer_flags_summary_synced">Resets reading mode and orientation of all series, on every synced device</string>
+    <string name="pref_reset_viewer_flags_success">All reader settings reset</string>
+    <string name="pref_reset_viewer_flags_error">Couldn\'t reset reader settings</string>
+    <string name="ext_revoke_trust">Revoke trusted unknown extensions</string>
+
+    <!-- Upstream's ExtensionStoreDeleteDialog (extensionStoresScreen.deleteStore.*) -->
+    <string name="ext_stores_remove_title">Remove extension store</string>
+    <string name="ext_stores_remove_body">Do you wish to remove the extension store \"%1$s\" (%2$s)?</string>
+</resources>

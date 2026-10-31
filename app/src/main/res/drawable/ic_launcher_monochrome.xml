@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The themed-icon layer. The system tints this flat, so the screentone and the paper panel cannot
+    survive as themselves: what is left is the three-panel grid, which is the part of the mark that
+    still reads at 48dp in one colour. Converted from brand/icon-foreground.svg.
+    The owner asked for the mark 10 percent smaller on 2026-10-03, so every shape sits in one group
+    scaled to 0.9 about the centre (54, 54); a regeneration from the source keeps that group.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108"
+    android:tint="?attr/colorControlNormal">
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="0.9"
+        android:scaleY="0.9">
+        <path
+            android:pathData="M32.236,28.211H51.022A1.898,1.898 0 0 1 52.92,30.109V77.891A1.898,1.898 0 0 1 51.022,79.789H32.236A1.898,1.898 0 0 1 30.338,77.891V30.109A1.898,1.898 0 0 1 32.236,28.211Z"
+            android:fillColor="#FFFFFF" />
+        <path
+            android:pathData="M56.716,28.211H75.764A1.898,1.898 0 0 1 77.662,30.109V50.597A1.898,1.898 0 0 1 75.764,52.495H56.716A1.898,1.898 0 0 1 54.818,50.597V30.109A1.898,1.898 0 0 1 56.716,28.211Z"
+            android:fillColor="#FFFFFF" />
+        <path
+            android:pathData="M56.716,54.524H75.764A1.898,1.898 0 0 1 77.662,56.422V77.891A1.898,1.898 0 0 1 75.764,79.789H56.716A1.898,1.898 0 0 1 54.818,77.891V56.422A1.898,1.898 0 0 1 56.716,54.524Z"
+            android:fillColor="#FFFFFF" />
+    </group>
+</vector>

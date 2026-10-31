@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Some sources still serve over plain HTTP, and targetSdk 36 blocks cleartext by default, so the
+  extension host would fail on them without this. Only preinstalled CAs are trusted: contract 08
+  section 6.5 drops upstream's user-added anchors, because nothing here asks the owner to install one
+  and a user CA is the shape a man in the middle takes.
+-->
+<network-security-config xmlns:tools="http://schemas.android.com/tools">
+    <base-config
+        cleartextTrafficPermitted="true"
+        tools:ignore="InsecureBaseConfiguration">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

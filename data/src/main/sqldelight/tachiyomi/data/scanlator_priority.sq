@@ -1,0 +1,61 @@
+-- Fresh: 05-data section 2.10 declares this table; it lives beside the other schema files in the
+-- tachiyomi.data package so the generated Database class stays in one place. Schema version 2 (phase
+-- 3 unit C) adds the update trigger and the manga's priority_modified_at clock.
+
+CREATE TABLE scanlator_priority(
+    _id INTEGER NOT NULL PRIMARY KEY,
+    manga_id INTEGER NOT NULL,
+    scanlator TEXT NOT NULL,
+    priority INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (manga_id, scanlator) ON CONFLICT REPLACE,
+    FOREIGN KEY(manga_id) REFERENCES mangas (_id) ON DELETE CASCADE
+);
+
+-- Lower priority sorts first; 0 is the unranked default. The composite index serves
+-- WHERE manga_id = ? ORDER BY priority in one pass.
+CREATE INDEX idx_scanlator_priority_manga_id_priority ON scanlator_priority(manga_id, priority);
+
+-- entity_id is the manga id: the ranking is a set, not a row.
+CREATE TRIGGER insert_scanlator_priority_change AFTER INSERT ON scanlator_priority
+WHEN (SELECT is_syncing FROM mangas WHERE _id = new.manga_id) = 0
+BEGIN
+    UPDATE mangas
+    SET priority_modified_at = max(strftime('%s', 'now') * 1000, coalesce(priority_modified_at, 0) + 1)
+    WHERE _id = new.manga_id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('scanlator_priority', new.manga_id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+CREATE TRIGGER update_scanlator_priority_change AFTER UPDATE ON scanlator_priority
+WHEN (SELECT is_syncing FROM mangas WHERE _id = new.manga_id) = 0
+BEGIN
+    UPDATE mangas
+    SET priority_modified_at = max(strftime('%s', 'now') * 1000, coalesce(priority_modified_at, 0) + 1)
+    WHERE _id = new.manga_id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('scanlator_priority', new.manga_id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+CREATE TRIGGER delete_scanlator_priority_change AFTER DELETE ON scanlator_priority
+WHEN (SELECT is_syncing FROM mangas WHERE _id = old.manga_id) = 0
+BEGIN
+    UPDATE mangas
+    SET priority_modified_at = max(strftime('%s', 'now') * 1000, coalesce(priority_modified_at, 0) + 1)
+    WHERE _id = old.manga_id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('scanlator_priority', old.manga_id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+getByMangaId:
+SELECT *
+FROM scanlator_priority
+WHERE manga_id = :mangaId
+ORDER BY priority;
+
+insert:
+INSERT INTO scanlator_priority(manga_id, scanlator, priority)
+VALUES (:mangaId, :scanlator, :priority);
+
+deleteByMangaId:
+DELETE FROM scanlator_priority
+WHERE manga_id = :mangaId;

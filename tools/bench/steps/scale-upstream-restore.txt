@@ -1,0 +1,19 @@
+# Starts upstream v0.20.4's restore of big_backup.py's 40,000-entry file, for phase 5 unit SC0's context
+# number beside restore_40k_ms. The same screens as update-upstream-restore.txt (frozen, R66), which this
+# copies up to the Restore tap: after scale-upstream-setup.txt on a fresh install (the snapshot
+# update-bench-upstream-2000x20 is gone; see that file), with the file pushed to /sdcard/Download and its
+# name in BACKUP_NAME. It stops at the tap rather than waiting for
+# Notifications.ID_RESTORE_COMPLETE, because a restore this size runs far past that file's 600 s:
+# the host reads upstream's progress notification once a minute instead, up to its 60-minute cap, and
+# the restore's own clock starts at this file's last step.
+# Written in tools/bench/ui_steps.py's language.
+wait text=Library timeout=60
+tap text=More
+tap text=Settings
+tap text=Data and storage
+tap text=Restore backup
+# The system picker, from the storage root down to Download.
+tap text=sdk_gphone64_x86_64 timeout=30
+tap text=Download
+tap text={{BACKUP_NAME}}
+tap text=Restore
