@@ -29,7 +29,7 @@ body:
     attributes:
       label: Saikou version
       description: More > About, or the version chip on the More tab.
-      placeholder: "0.0.1"
+      placeholder: "0.1.0"
     validations:
       required: true
   - type: input

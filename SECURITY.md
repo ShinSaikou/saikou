@@ -2,8 +2,8 @@
 
 ## Supported versions
 
-Only the latest release, and `main`, get security fixes. Saikou is at 0.0.1, an early closed test,
-so expect to update to the next release rather than receive a patch for an old one.
+Only the latest release, and `main`, get security fixes. Saikou is at 0.1.0, an early public
+release, so expect to update to the next release rather than receive a patch for an old one.
 
 ## Reporting a vulnerability
 

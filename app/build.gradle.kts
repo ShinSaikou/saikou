@@ -60,12 +60,12 @@ android {
 
     defaultConfig {
         applicationId = "com.shinsaikou"
-        // 0.0.1 is the closed-test version the owner chose on 2026-10-01 (the app stays on 0.x until
-        // the owner says otherwise). versionCode is a plain counter: it must be above the code in
-        // tools/gate/last-release.json (1 on the devices) for install_release.py to accept the build,
+        // 0.0.1 was the closed test (2026-10-01) and 0.1.0 the first public release (2026-11-01); the
+        // app stays on 0.x until the owner says otherwise. versionCode is a plain counter: it must be
+        // above the code in tools/gate/last-release.json for install_release.py to accept the build,
         // and it goes up by one per release. The earlier major-times-10000 formula no longer applies.
-        versionCode = 2
-        versionName = "0.0.1"
+        versionCode = 3
+        versionName = "0.1.0"
         buildConfigField("String", "COMMIT_SHA", "\"${gitShortSha()}\"")
         buildConfigField("String", "UPDATE_REPO", updateRepo.asJavaString())
         // Whether coming to the foreground checks for an app update by itself: the release build

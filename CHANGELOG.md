@@ -7,6 +7,10 @@ release may change behaviour.
 
 ## Unreleased
 
+## 0.1.0 - 2026-11-01
+
+The first public release.
+
 ### Security
 
 - An extension repository keeps the signing key it was added with: refreshing the repository list
