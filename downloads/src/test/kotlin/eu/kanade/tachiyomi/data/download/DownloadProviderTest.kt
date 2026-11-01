@@ -4,6 +4,7 @@ package eu.kanade.tachiyomi.data.download
 import eu.kanade.tachiyomi.util.storage.DiskUtil
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.ints.shouldBeLessThan
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldEndWith
@@ -120,6 +121,44 @@ class DownloadProviderTest {
             val (name, scanlator, disallowNonAscii) = chapter
             DownloadProvider.getValidChapterDirNames(name, scanlator, URL, disallowNonAscii) shouldContain folder
         }
+    }
+
+    @Test
+    fun `folders upstream 0_21_2 and later named without the hash are found under either ascii setting`() {
+        // With the hash setting off those versions write the folder name without its hash: the
+        // scanlator and the name made valid as one string under the hash's byte limit. So a non-ASCII
+        // scanlator is hex under the non-ASCII setting, and a long name is cut shorter than the
+        // pre-hash name.
+        val long = "Chapter ".repeat(40)
+        val cases = listOf(
+            Triple("Chapter 1", "翻訳グループ", true) to "e7bfbbe8a8b3e382b0e383abe383bce38397_Chapter 1",
+            Triple(long, "Group", false) to
+                DiskUtil.buildValidFilename("Group_$long", DiskUtil.MAX_FILE_NAME_BYTES - 11),
+        )
+
+        cases.forEach { (chapter, folder) ->
+            val (name, scanlator, upstreamSetting) = chapter
+            DownloadProvider.getChapterDirName(name, scanlator, URL, upstreamSetting) shouldBe "${folder}_$HASH"
+            // The owner's setting need not be the one upstream had.
+            listOf(false, true).forEach { disallowNonAscii ->
+                DownloadProvider.getValidChapterDirNames(name, scanlator, URL, disallowNonAscii) shouldContain folder
+            }
+        }
+    }
+
+    @Test
+    fun `the names without the hash come with the non-ascii setting off first, as upstream looks for them`() {
+        // A long name, so the name kept as it is differs from the pre-hash name and is listed here.
+        val long = "Chapter ".repeat(40)
+        val (asIs, hex) = listOf(false, true).map {
+            DownloadProvider.getChapterDirName(long, "翻訳グループ", URL, it).removeSuffix("_$HASH")
+        }
+
+        val names = DownloadProvider.getLegacyChapterDirNames(long, "翻訳グループ", URL, disallowNonAscii = true)
+
+        names shouldContain asIs
+        names shouldContain hex
+        names.indexOf(asIs) shouldBeLessThan names.indexOf(hex)
     }
 
     @Test
