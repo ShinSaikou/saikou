@@ -37,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -1619,7 +1620,7 @@ private fun UserAgentDialog(
 private fun AppUpdateRows(appName: String, showMessage: (String, SnackbarAction?) -> Unit) {
     val viewModel: AppUpdateViewModel = metroViewModel()
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val context = LocalContext.current
+    val resources = LocalResources.current
     val upToDate = stringResource(R.string.app_update_up_to_date)
     val failed = stringResource(R.string.app_update_check_failed)
     ListRow(
@@ -1632,7 +1633,7 @@ private fun AppUpdateRows(appName: String, showMessage: (String, SnackbarAction?
                         is AppUpdateChecker.Result.Available -> null
                         AppUpdateChecker.Result.UpToDate -> upToDate
                         AppUpdateChecker.Result.Failed -> failed
-                        is AppUpdateChecker.Result.NoApk -> context.getString(R.string.app_update_no_apk, appName, result.version)
+                        is AppUpdateChecker.Result.NoApk -> resources.getString(R.string.app_update_no_apk, appName, result.version)
                     }
                     if (message != null) showMessage(message, null)
                 }

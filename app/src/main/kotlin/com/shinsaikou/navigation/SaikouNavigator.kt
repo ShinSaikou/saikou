@@ -5,11 +5,11 @@ import android.content.Intent
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.core.net.toUri
 import androidx.navigation.NavBackStackEntry
-import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.toRoute
 import com.shinsaikou.reader.ReaderIntents
+import kotlin.reflect.KClass
 
 /**
  * The thin navigation surface handed to screens instead of the raw `NavController`
@@ -95,10 +95,20 @@ class SaikouNavigator(
      */
     fun searchLibrary(query: String) {
         navController.getBackStackEntry<Route.Library>().savedStateHandle[LIBRARY_SEARCH_KEY] = query
-        val inOtherTab = navController.currentBackStack.value.any { entry ->
-            OTHER_TABS.any { entry.destination.hasRoute(it) }
-        }
+        val inOtherTab = OTHER_TABS.any { isOnBackStack(it) }
         if (inOtherTab) open(Route.Library) else navController.popBackStack<Route.Library>(inclusive = false)
+    }
+
+    /**
+     * Whether a destination of [route] is on the back stack. `NavController.currentBackStack` would
+     * answer in one read, but it is restricted to the navigation library itself; `getBackStackEntry`
+     * is the public way to ask, and it throws when there is none.
+     */
+    private fun isOnBackStack(route: KClass<out Route>): Boolean = try {
+        navController.getBackStackEntry(route)
+        true
+    } catch (e: IllegalArgumentException) {
+        false
     }
 
     /** The topmost migration list on the back stack, or null. */
