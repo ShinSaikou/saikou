@@ -1,6 +1,5 @@
 package com.shinsaikou.ui.settings
 
-import android.content.Intent
 import android.content.res.Resources
 import android.net.Uri
 import android.provider.DocumentsContract
@@ -29,7 +28,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
@@ -78,17 +76,10 @@ fun AdoptionSummaryScreen() {
     val viewModel: AdoptionSummaryViewModel = metroViewModel()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
-    val context = LocalContext.current
 
     val pickTree = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        if (uri != null) {
-            // As the Downloads section's copy row takes it: a read grant only, persisted so a run
-            // WorkManager finishes in a later process can still read the folder.
-            runCatching {
-                context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            viewModel.copyFrom(uri.toString())
-        }
+        // The scheduler takes the read grant, and only for a run it starts.
+        if (uri != null) viewModel.copyFrom(uri.toString())
     }
 
     LaunchedEffect(viewModel) {

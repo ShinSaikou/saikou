@@ -1,6 +1,5 @@
 package com.shinsaikou.ui.backup
 
-import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
@@ -19,7 +18,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
@@ -84,16 +82,9 @@ fun ImportReportScreen() {
     val exportLog = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(ERROR_LOG_MIME)) { uri ->
         if (uri != null) viewModel.exportErrors(uri)
     }
-    val context = LocalContext.current
     val pickTree = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        if (uri != null) {
-            // As the Downloads section's copy row takes it: a read grant only, persisted so a run
-            // WorkManager finishes in a later process can still read the folder.
-            runCatching {
-                context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            viewModel.copyDownloadsFrom(uri.toString())
-        }
+        // The scheduler takes the read grant, and only for a run it starts.
+        if (uri != null) viewModel.copyDownloadsFrom(uri.toString())
     }
 
     Scaffold(

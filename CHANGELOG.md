@@ -21,6 +21,8 @@ release may change behaviour.
 - Copying downloads from a folder also finds chapters with a scanlator that a compatible reader's
   latest releases saved without the hash at the end of the folder name: a long name, or a non-ASCII
   scanlator saved with "Disallow non-ASCII filenames" on.
+- Picking a folder to copy downloads from while a copy is already running no longer keeps a
+  permanent read permission on that folder; the permission is taken only for a copy that starts.
 
 ## 0.1.0 - 2026-11-01
 

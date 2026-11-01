@@ -157,7 +157,7 @@ class AdoptionSummaryViewModel(
         }
     }
 
-    /** A tree the owner picked from Copy again; the screen has taken its read grant. */
+    /** A tree the owner picked from Copy again; the scheduler takes its read grant for a run it starts. */
     fun copyFrom(treeUri: String) {
         viewModelScope.launch { scheduler.start(treeUri) }
     }

@@ -162,7 +162,7 @@ class ImportReportViewModel(
 
     /**
      * Copies downloads from [treeUri], as the Downloads section's row does, unless a copy is running.
-     * The screen has taken the read grant on it.
+     * The scheduler takes the read grant on it for a run it starts.
      */
     fun copyDownloadsFrom(treeUri: String) {
         viewModelScope.launch { adoptionScheduler.start(treeUri) }

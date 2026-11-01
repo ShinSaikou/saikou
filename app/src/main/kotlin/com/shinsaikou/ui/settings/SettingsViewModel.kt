@@ -201,7 +201,7 @@ class SettingsViewModel(
 
     /**
      * Starts the adoption of upstream's downloads from the tree the owner picked, unless one is
-     * running already. The screen has taken the read grant on [treeUri] before this is called.
+     * running already. The scheduler takes the read grant on [treeUri] for a run it starts.
      */
     fun startAdoption(treeUri: String) {
         viewModelScope.launch { adoptionScheduler.start(treeUri) }

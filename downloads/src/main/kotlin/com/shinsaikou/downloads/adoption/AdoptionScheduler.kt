@@ -13,8 +13,11 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
@@ -36,23 +39,48 @@ class AdoptionScheduler(
         get() = WorkManager.getInstance(context)
 
     /**
-     * Records [treeUri] as the tree to adopt from and enqueues the worker, unless a run is already
-     * waiting or running, which is left to finish over the tree it was started with. Returns whether
-     * a run was started.
+     * Takes the persisted read grant on [treeUri], records it as the tree to adopt from and enqueues
+     * the worker, unless a run is already waiting or running, which is left to finish over the tree
+     * it was started with. Returns whether a run was started.
+     *
+     * The grant is taken here, once the run is sure to start, and not by the picker: only the end of
+     * a run gives it back, and persisted grants are capped per app, so one taken for a run that never
+     * started would hold a slot for good. A start refused for a running run touches no grant, which
+     * keeps that run's own grant when the same folder is picked again.
+     *
+     * One start at a time, so two that overlap cannot both find no run and both take a grant, the
+     * second's then never given back. Past the check a start is not cancelled: a grant taken for a
+     * run that is never enqueued would stay too.
      */
-    suspend fun start(treeUri: String): Boolean {
+    suspend fun start(treeUri: String): Boolean = startLock.withLock {
         val active = withContext(Dispatchers.IO) {
             workManager.getWorkInfosForUniqueWork(AdoptionWorker.WORK_NAME).get().any { !it.state.isFinished }
         }
-        if (active) return false
+        if (active) return@withLock false
 
-        storagePreferences.adoptionTree.set(treeUri)
-        val request = OneTimeWorkRequestBuilder<AdoptionWorker>()
-            .addTag(AdoptionWorker.TAG)
-            .build()
-        workManager.enqueueUniqueWork(AdoptionWorker.WORK_NAME, ExistingWorkPolicy.KEEP, request)
-        return true
+        withContext(Dispatchers.IO + NonCancellable) {
+            // A read grant only, never a write one: adoption copies out of the folder and never
+            // changes it. It is persisted because WorkManager may finish the run in a later process,
+            // after the picker's activity is gone. A provider that refuses to persist it still serves
+            // a run that finishes in this process, and a plain file tree has no grant to take.
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    Uri.parse(treeUri),
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            }
+            storagePreferences.adoptionTree.set(treeUri)
+            val request = OneTimeWorkRequestBuilder<AdoptionWorker>()
+                .addTag(AdoptionWorker.TAG)
+                .build()
+            // WorkManager runs this enqueue and the next start's lookup on one serial executor, so
+            // that lookup finds this run.
+            workManager.enqueueUniqueWork(AdoptionWorker.WORK_NAME, ExistingWorkPolicy.KEEP, request)
+        }
+        true
     }
+
+    private val startLock = Mutex()
 
     /**
      * Whether [treeUri], the tree an earlier run read, can be read again without the picker. The

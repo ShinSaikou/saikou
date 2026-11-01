@@ -1,7 +1,6 @@
 package com.shinsaikou.ui.settings
 
 import android.content.Context
-import android.content.Intent
 import android.text.format.Formatter
 import android.webkit.WebStorage
 import android.webkit.WebView
@@ -748,22 +747,13 @@ private fun DownloadsSection(viewModel: SettingsViewModel) {
     // Counted each time the section is shown, since a library update can orphan a download.
     LaunchedEffect(viewModel) { viewModel.refreshOrphanDownloads() }
 
-    val context = LocalContext.current
     val storageLocation: StorageLocationViewModel = metroViewModel()
     val storageState by storageLocation.state.collectAsStateWithLifecycle()
     val pickThenExport = rememberStorageLocationPicker(storageLocation, StorageLocationViewModel.Then.EXPORT_DOWNLOADS)
     val pendingTree by viewModel.storagePreferences.adoptionTree.collectAsState()
     val pickTree = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        if (uri != null) {
-            // A read grant only, never a write one: adoption copies out of upstream's folder and never
-            // changes it. It is persisted because WorkManager may finish the run in a later process,
-            // after this activity is gone, and the worker gives it back when the run ends. A provider
-            // that refuses to persist it still serves a run that finishes in this process.
-            runCatching {
-                context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            viewModel.startAdoption(uri.toString())
-        }
+        // The scheduler takes the read grant, and only for a run it starts.
+        if (uri != null) viewModel.startAdoption(uri.toString())
     }
 
     SettingsColumn {
