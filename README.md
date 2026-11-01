@@ -1,17 +1,29 @@
+<div align="center">
+
+<a href="https://shinsaikou.com">
+    <img src="./.github/assets/logo.png" alt="Saikou logo" title="Saikou logo" width="80"/>
+</a>
+
 # Saikou
 
-Saikou is a manga reader for Android. It reads from third-party extensions built for the Tachiyomi
-extension API (lib 1.4 and 1.6), from your own files, and from what you have downloaded, and it
-keeps your library in step across devices through your own Google Drive or WebDAV server.
+### Fast, private manga reader
+Read manga, webtoons and comics from the extensions you choose, your own files and your downloads,
+and keep your library in step across devices through your own Google Drive or WebDAV server.
 
-No telemetry, no crash reporting, no ads and no server of its own. The only network traffic is to
-the sources you read, the extension catalogs you add, MyAnimeList and AniList if you link them,
-Google Drive or your WebDAV server if you turn on sync, and GitHub: Saikou asks it for the latest
-release at most once a day (**Settings > Advanced > Check for updates automatically** turns that
-off) or when you tap Check for updates, and downloads an update from it only when you tap Update.
+[![GitHub downloads](https://img.shields.io/github/downloads/ShinSaikou/saikou/total?label=downloads&labelColor=27303D&color=0D1117&logo=github&logoColor=FFFFFF&style=flat)](https://github.com/ShinSaikou/saikou/releases)
 
-> Status: early. The current release is 0.0.1, a closed test. Expect rough edges, and back up your
-> library before you try it.
+[![CI](https://img.shields.io/github/actions/workflow/status/ShinSaikou/saikou/ci.yml?labelColor=27303D)](https://github.com/ShinSaikou/saikou/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/github/license/ShinSaikou/saikou?labelColor=27303D&color=0877d2)](/LICENSE)
+
+[Website](https://shinsaikou.com) · [User guide](https://shinsaikou.com/docs/) · [Privacy policy](https://shinsaikou.com/privacy-policy)
+
+## Download
+
+[![Saikou Stable](https://img.shields.io/github/release/ShinSaikou/saikou.svg?maxAge=3600&label=Stable&labelColor=06599d&color=043b69)](https://github.com/ShinSaikou/saikou/releases/latest)
+
+*Requires Android 8.0 or higher on a 64-bit device (arm64 or x86_64).*
+
+*Early release: expect rough edges, and back up your library before you try it.*
 
 <p align="center">
   <picture>
@@ -20,30 +32,38 @@ off) or when you tap Check for updates, and downloads an update from it only whe
   </picture>
   <img src=".github/assets/screenshots/entry.webp" alt="An entry's page: cover, author, status, description, genres and the chapter list" width="200">
   <img src=".github/assets/screenshots/reader.webp" alt="The paged reader with its controls open: title, chapter, page slider and actions" width="200">
-  <img src=".github/assets/screenshots/long-strip.webp" alt="The long-strip reader showing a colour webcomic" width="200">
+  <img src=".github/assets/screenshots/long-strip.webp" alt="The long-strip reader showing a colour page" width="200">
 </p>
-<p align="center"><sub>Screenshots of Saikou 0.0.1 on Android. Pepper&amp;Carrot by David Revoy, <a href="https://www.peppercarrot.com">www.peppercarrot.com</a>, licensed under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a> (episode 6 English translation by Alex Gryson; pages resized). The other comics are in the public domain: works by Winsor McCay, George Herriman, R. F. Outcault, Katsushika Hokusai, Okamoto Ippei and Kawanabe Kyosai (photographs of the Kyosai book by The Metropolitan Museum of Art, CC0).</sub></p>
+<p align="center"><sub>Screenshots of Saikou 0.0.1 on Android, with covers, titles and pages blurred.</sub></p>
 
 ## Features
 
-- **Library** with categories and one level of sub-categories, filters, sorting, a fast search
-  and per-entry edits of the title and description.
-- **Browse** sources from the extension catalogs you add, with global search, a source filter,
-  pinned sources, multi-select and migration of entries between sources.
-- **Reader** in paged and long-strip (webtoon) modes, with tall-strip splitting, animated images,
+<div align="left">
+
+* Third-party extensions built for the Tachiyomi extension API (lib 1.4 and 1.6), from the catalogs
+  you add, with global search, pinned sources, multi-select and migration between sources.
+* A reader with paged and long-strip (webtoon) modes, tall-strip splitting, animated images,
   double-page handling, page notes and crop borders.
-- **Downloads** as folders of pages, download ahead, automatic cleanup rules, and a copy of an
-  existing downloads folder from a compatible reader, whose CBZ chapters open as they are.
-- **Local source** for CBZ, ZIP, CBR, RAR, CB7, 7z, CBT, TAR and EPUB files and folders of images on
-  the device.
-- **Backup and restore** in the `.tachibk` format, read and written as a stream, with a report of
-  missing sources and trackers before anything is restored.
-- **Sync** of the library, categories, reading progress, history, bookmarks and tracking between
-  devices through Google Drive's private app folder (`drive.appdata` only) or a WebDAV server you
-  run. Settings and extensions stay on each device.
-- **Tracking** with MyAnimeList and AniList.
-- **Updates, history and statistics**, an app lock, a secure screen option, and a choice of
-  themes.
+* Local reading of CBZ, ZIP, CBR, RAR, CB7, 7z, CBT, TAR and EPUB files and folders of images.
+* Categories with one level of sub-categories, filters, sorting, a fast search and per-entry edits
+  of the title and description.
+* Downloads as folders of pages, download ahead, automatic cleanup rules, and a copy of an existing
+  downloads folder from a compatible reader.
+* Sync of the library, categories, reading progress, history, bookmarks and tracking between
+  devices, through Google Drive's private app folder or a WebDAV server you run.
+* Tracker support: [MyAnimeList](https://myanimelist.net/) and [AniList](https://anilist.co/).
+* Backup and restore in the `.tachibk` format, with a report of missing sources and trackers
+  before anything is restored.
+* Library updates, history, statistics, an app lock, a secure screen option and a choice of themes.
+* Updates from this repository's releases: Saikou checks at most once a day, or when you tap Check
+  for updates, and downloads one only when you tap Update.
+* No telemetry, no crash reporting, no ads and no server of its own.
+
+Saikou ships no extensions and no catalog. Add a catalog you trust in **Browse > Extensions**, or
+restore a backup that already names one. Extensions are third-party code that runs inside the app,
+so only install ones you trust.
+
+</div>
 
 ## How it compares
 
@@ -55,6 +75,8 @@ one place Saikou loses, storage, stays in.
   <source media="(prefers-color-scheme: dark)" srcset=".github/assets/comparison-dark.svg">
   <img src=".github/assets/comparison-light.svg" alt="Benchmark comparison of Saikou 0.0.1 and Mihon v0.21.0; the same numbers are in the table below" width="720">
 </picture>
+
+<div align="left">
 
 <details>
 <summary>The numbers as a table</summary>
@@ -89,76 +111,54 @@ Next to other readers:
 | Reads Tachiyomi extensions | Yes, lib 1.4 and 1.6 | Yes | Yes | Yes | Yes, one of several engines | No, its own sources |
 | Sync between devices | Built in: Google Drive or WebDAV | No | Google Drive, WebDAV or a SyncYomi server | Google Drive or a SyncYomi server | A self-hosted sync server | iCloud |
 | License | Apache-2.0 | Apache-2.0 | Apache-2.0 | Apache-2.0 | Apache-2.0 | GPL-3.0 |
-| Latest release | 0.0.1, closed test | v0.21.3, 2026-10-25 | v1.14.1, 2026-07-17 | 1.13.2, 2026-07-13 | v0.9.9, 2026-10-12 | v0.9-4, 2026-10-16 |
+| Latest release | 0.1.0, 2026-11-01 | v0.21.3, 2026-10-25 | v1.14.1, 2026-07-17 | 1.13.2, 2026-07-13 | v0.9.9, 2026-10-12 | v0.9-4, 2026-10-16 |
 
 <sub>Features as each project documents them (checked 2026-09-10); licenses and releases read from
 each project's GitHub repository on 2026-10-30.</sub>
 
-## Install
-
-There is no store listing yet. Build the APK from source (below) and install it with
-`adb install`. Saikou needs Android 8.0 (API 26) or later.
-
-Saikou ships no extensions and no catalog. Add a catalog you trust in **Browse > Extensions**, or
-restore a backup that already names one. Extensions are third-party code that runs inside the app,
-so only install ones you trust.
-
-## Build
-
-You need JDK 17, a JVM 21 for the Gradle daemon (`gradle/gradle-daemon-jvm.properties` selects
-it), and the Android SDK with platform 37 installed (`sdkmanager "platforms;android-37.0"`).
-
-```bash
-export ANDROID_HOME="$HOME/Android/Sdk"
-./gradlew :app:assembleDebug
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-```
-
-A release build signs with the debug key unless you pass `-Psaikou.ownerSigning=true` with a
-`keystore.properties` in place; see [CONTRIBUTING.md](CONTRIBUTING.md) for that, for the tests and
-for the checks a change has to pass.
-
-## Project layout
-
-| Module | What lives there |
-|---|---|
-| `:app` | the application, its screens and navigation |
-| `:reader` | the reader shell, viewers and page pipeline |
-| `:extensions` | the extension API, loader, trust checks and catalog clients |
-| `:source-contract` | what a source implementation can see |
-| `:sources:local` | the Local source |
-| `:domain` | models, repository interfaces and interactors |
-| `:data` | SQLDelight database and repository implementations |
-| `:downloads` | the download engine and the copy from a downloads folder |
-| `:library-update` | the library update worker |
-| `:backup` | `.tachibk` import and export |
-| `:sync` | Google Drive sync |
-| `:tracking` | MyAnimeList and AniList |
-| `:presentation-core` | shared Compose components and themes |
-| `:core:common`, `:core:archive`, `:core:metadata` | shared plumbing, archives, ComicInfo |
-| `:i18n` | string resources |
-| `:bench` | macrobenchmarks |
-
-`tools/` holds the test, benchmark and release tooling (Python and shell).
-
-## Related projects
-
-- [saikou-image](https://github.com/ShinSaikou/saikou-image): the image utilities the reader and
-  the download engine use, published as a library.
-- The website, the [user guide](https://shinsaikou.com/docs/) and the
-  [privacy policy](https://shinsaikou.com/privacy-policy) live at
-  <https://shinsaikou.com/>.
+</div>
 
 ## Contributing
 
-Bug reports, fixes and ideas are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first, and the
-[Code of Conduct](CODE_OF_CONDUCT.md). Report security problems privately, as
-[SECURITY.md](SECURITY.md) describes, not in a public issue.
+[Code of conduct](./CODE_OF_CONDUCT.md) · [Contributing guide](./CONTRIBUTING.md) · [Security policy](./SECURITY.md)
 
-## License
+Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
 
-Saikou is licensed under the [Apache License, Version 2.0](LICENSE). It includes code from other
-projects under their own licenses; [NOTICE](NOTICE) lists them.
+Before reporting a new issue, take a look at the [FAQ](https://shinsaikou.com/docs/faq), the [changelog](./CHANGELOG.md) and the already opened [issues](https://github.com/ShinSaikou/saikou/issues). Report security problems privately, as the security policy describes, not in a public issue.
 
-Saikou does not host, provide or endorse any content. Extensions and the sources they read are
-maintained by third parties.
+### Repositories
+
+[![ShinSaikou/saikou-image - GitHub](https://github-stats-extended.vercel.app/api/pin/?username=ShinSaikou&repo=saikou-image&bg_color=161B22&text_color=c9d1d9&title_color=0877d2&icon_color=0877d2&border_radius=8&hide_border=true&description_lines_count=2)](https://github.com/ShinSaikou/saikou-image/)
+[![ShinSaikou/saikou-site - GitHub](https://github-stats-extended.vercel.app/api/pin/?username=ShinSaikou&repo=saikou-site&bg_color=161B22&text_color=c9d1d9&title_color=0877d2&icon_color=0877d2&border_radius=8&hide_border=true&description_lines_count=2)](https://github.com/ShinSaikou/saikou-site/)
+
+### Credits
+
+Saikou is built on [Mihon](https://github.com/mihonapp/mihon) and the Tachiyomi project before it. Thank you to everyone who made them.
+
+### Disclaimer
+
+The developer of this application does not have any affiliation with the content providers available, and this application hosts zero content. Extensions and the sources they read are maintained by third parties.
+
+### License
+
+<pre>
+Copyright © 2015 Javier Tomás
+Copyright © 2024 Mihon Open Source Project
+Copyright © 2026 The Saikou authors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+</pre>
+
+Saikou includes code from other projects under their own licenses; [NOTICE](NOTICE) lists them.
+
+</div>

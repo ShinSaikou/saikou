@@ -81,6 +81,29 @@ given, so a fresh clone can always build a release:
 With the property set, every release task fails when the file is absent or incomplete, and a blank
 or unknown value fails the configuration rather than turning signing on.
 
+## Project layout
+
+| Module | What lives there |
+|---|---|
+| `:app` | the application, its screens and navigation |
+| `:reader` | the reader shell, viewers and page pipeline |
+| `:extensions` | the extension API, loader, trust checks and catalog clients |
+| `:source-contract` | what a source implementation can see |
+| `:sources:local` | the Local source |
+| `:domain` | models, repository interfaces and interactors |
+| `:data` | SQLDelight database and repository implementations |
+| `:downloads` | the download engine and the copy from a downloads folder |
+| `:library-update` | the library update worker |
+| `:backup` | `.tachibk` import and export |
+| `:sync` | Google Drive sync |
+| `:tracking` | MyAnimeList and AniList |
+| `:presentation-core` | shared Compose components and themes |
+| `:core:common`, `:core:archive`, `:core:metadata` | shared plumbing, archives, ComicInfo |
+| `:i18n` | string resources |
+| `:bench` | macrobenchmarks |
+
+`tools/` holds the test, benchmark and release tooling (Python and shell).
+
 ## Testing
 
 Unit tests are JUnit 5 with kotest assertions, mockk, turbine and `kotlinx-coroutines-test`. They
