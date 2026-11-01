@@ -412,6 +412,7 @@ DEVICE_CLASSES_APP=(
     com.shinsaikou.tracking.TrackerCompareDeviceTest
     com.shinsaikou.ui.CrashLogShareTest
     com.shinsaikou.ui.CrashScreenDeviceTest
+    com.shinsaikou.ui.CrashScreenLayoutTest
     com.shinsaikou.ui.MainActivitySmokeTest
     com.shinsaikou.ui.PureBlackBarsTest
     com.shinsaikou.ui.SearchFieldTypingTest

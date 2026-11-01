@@ -73,8 +73,12 @@ internal fun CrashScreen(
                     )
                 }
             }
+            // The text's side margin, so the last button ends as far from the right edge as the text
+            // starts from the left one.
             Row(
-                modifier = Modifier.fillMaxWidth().padding(MaterialTheme.padding.small),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = MaterialTheme.padding.medium, vertical = MaterialTheme.padding.small),
                 horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small, Alignment.End),
             ) {
                 TextButton(onClick = onClose) { Text(stringResource(R.string.action_close)) }
