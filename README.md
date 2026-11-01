@@ -10,6 +10,7 @@
 Read manga, webtoons and comics from the extensions you choose, your own files and your downloads,
 and keep your library in step across devices through your own Google Drive or WebDAV server.
 
+[![Discord server](https://img.shields.io/badge/Discord-join-7389D8?logo=discord&logoColor=FFFFFF&labelColor=6A7EC2)](https://discord.gg/dH4rgaMqU)
 [![GitHub downloads](https://img.shields.io/github/downloads/ShinSaikou/saikou/total?label=downloads&labelColor=27303D&color=0D1117&logo=github&logoColor=FFFFFF&style=flat)](https://github.com/ShinSaikou/saikou/releases)
 
 [![CI](https://img.shields.io/github/actions/workflow/status/ShinSaikou/saikou/ci.yml?labelColor=27303D)](https://github.com/ShinSaikou/saikou/actions/workflows/ci.yml)
@@ -124,7 +125,7 @@ each project's GitHub repository on 2026-10-30.</sub>
 
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
 
-Before reporting a new issue, take a look at the [FAQ](https://shinsaikou.com/docs/faq), the [changelog](./CHANGELOG.md) and the already opened [issues](https://github.com/ShinSaikou/saikou/issues). Report security problems privately, as the security policy describes, not in a public issue.
+Before reporting a new issue, take a look at the [FAQ](https://shinsaikou.com/docs/faq), the [changelog](./CHANGELOG.md) and the already opened [issues](https://github.com/ShinSaikou/saikou/issues); if you have any questions, join our [Discord server](https://discord.gg/dH4rgaMqU). Report security problems privately, as the security policy describes, not in a public issue.
 
 ### Repositories
 
