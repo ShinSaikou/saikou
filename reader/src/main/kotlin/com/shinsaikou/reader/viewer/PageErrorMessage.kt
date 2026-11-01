@@ -41,6 +41,7 @@ class PageDecodeException(cause: Throwable?) : RuntimeException("the page could 
 /** The keys whose text says something true about a page, and carries no host or address. */
 private val PAGE_NETWORK_KEYS = setOf(
     ErrorKey.NO_NETWORK,
+    ErrorKey.CONNECTION_REFUSED,
     ErrorKey.HTTP,
     ErrorKey.TIMEOUT,
     ErrorKey.CLOUDFLARE,

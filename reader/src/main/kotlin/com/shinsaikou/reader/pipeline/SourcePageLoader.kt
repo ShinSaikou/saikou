@@ -251,8 +251,9 @@ class SourcePageLoader(
 
 /**
  * Whether a page download failed for a reason a short wait can fix: a timeout, a connection that
- * reset or a body cut short, or a server that answered 408 or a 5xx. Being offline, any other
- * status, a browser check and everything after the bytes arrived are not, so they fail at once.
+ * reset or a body cut short, or a server that answered 408 or a 5xx. Being offline, a refused
+ * connection, any other status, a browser check and everything after the bytes arrived are not, so
+ * they fail at once.
  */
 internal fun isTransientPageFailure(error: Throwable): Boolean {
     ErrorKey.httpCode(error)?.let { return it == HTTP_REQUEST_TIMEOUT || it in HTTP_SERVER_ERRORS }

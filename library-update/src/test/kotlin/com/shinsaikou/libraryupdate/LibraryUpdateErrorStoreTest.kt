@@ -24,6 +24,7 @@ import tachiyomi.domain.chapter.model.NoChaptersException
 import tachiyomi.domain.manga.model.Manga
 import java.io.File
 import java.io.IOException
+import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import kotlin.time.Duration.Companion.seconds
@@ -183,6 +184,7 @@ class LibraryUpdateErrorStoreTest {
                 failure(9L, PageListEmptyException(9L)),
                 failure(10L, IllegalStateException("raw text from a source")),
                 failure(11L, SiteStoppedException("example.invalid")),
+                failure(12L, IOException("interceptor text", ConnectException("Connection refused"))),
             ),
         )
 
@@ -201,6 +203,7 @@ class LibraryUpdateErrorStoreTest {
             ErrorKey.PAGE_LIST_EMPTY,
             ErrorKey.GENERIC,
             ErrorKey.SITE_STOPPED,
+            ErrorKey.CONNECTION_REFUSED,
         )
         // Every key an update can meet. Sync's keys (phase 3 unit G), the browser sign-in's (unit O),
         // Drive's (unit H), a tracker's (unit T1), the download queue's folder in use (R104 item 3)
@@ -209,8 +212,9 @@ class LibraryUpdateErrorStoreTest {
         // DownloadEngineTest cover them.
         reloaded.errors.value.map { it.key }.toSet() shouldBe
             ErrorKey.entries.filterNot { it.name.substringBefore('_') in NOT_UPDATE_KEY_PREFIXES }.toSet()
-        reloaded.errors.value.map { it.detail } shouldBe
-            listOf(null, null, null, "503", "429", null, null, null, null, "raw text from a source", "example.invalid")
+        reloaded.errors.value.map { it.detail } shouldBe listOf(
+            null, null, null, "503", "429", null, null, null, null, "raw text from a source", "example.invalid", null,
+        )
         // A named failure is its key: the message of the exception that carried it is not kept.
         store.file.readText() shouldNotContain "interceptor text"
     }

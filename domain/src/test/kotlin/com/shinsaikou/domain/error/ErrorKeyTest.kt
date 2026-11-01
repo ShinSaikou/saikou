@@ -73,9 +73,51 @@ class ErrorKeyTest {
         ErrorKey.of(budget) shouldBe ErrorKey.CLOUDFLARE_BUDGET
         ErrorKey.of(CloudflareBypassException()) shouldBe ErrorKey.CLOUDFLARE
         ErrorKey.of(UnknownHostException("example.invalid")) shouldBe ErrorKey.NO_NETWORK
-        ErrorKey.of(ConnectException("refused")) shouldBe ErrorKey.NO_NETWORK
+        ErrorKey.of(ConnectException(UNREACHABLE)) shouldBe ErrorKey.NO_NETWORK
         ErrorKey.of(HttpException(503)) shouldBe ErrorKey.HTTP
         ErrorKey.httpCode(HttpException(503)) shouldBe 503
+    }
+
+    /**
+     * A refused connection and an unreachable network are both a `ConnectException`, and only the
+     * platform's text, which OkHttp's own failure carries as its cause, says which. A refusal means
+     * something answered, so the device is online; any other connect failure is still no network.
+     */
+    @Test
+    fun `a refused connection has its own key, and a connection the network could not make is still no network`() {
+        val androidRefused = okHttpConnectFailure(ConnectException(ANDROID_REFUSED))
+        val jvmRefused = okHttpConnectFailure(ConnectException("Connection refused"))
+
+        ErrorKey.of(androidRefused) shouldBe ErrorKey.CONNECTION_REFUSED
+        ErrorKey.of(jvmRefused) shouldBe ErrorKey.CONNECTION_REFUSED
+        ErrorKey.of(ConnectException(ANDROID_REFUSED)) shouldBe ErrorKey.CONNECTION_REFUSED
+        ErrorKey.of(IOException("interceptor text", androidRefused)) shouldBe ErrorKey.CONNECTION_REFUSED
+        ErrorKey.detail(androidRefused) shouldBe null
+
+        ErrorKey.of(okHttpConnectFailure(ConnectException(UNREACHABLE))) shouldBe ErrorKey.NO_NETWORK
+        ErrorKey.of(okHttpConnectFailure(ConnectException())) shouldBe ErrorKey.NO_NETWORK
+        ErrorKey.of(ConnectException()) shouldBe ErrorKey.NO_NETWORK
+        // Only a connect failure's text counts: a refusal named anywhere else is not this key.
+        ErrorKey.of(IOException("Connection refused")) shouldBe ErrorKey.GENERIC
+    }
+
+    /** OkHttp tries a host's addresses side by side and throws the first failure, the others suppressed under it. */
+    @Test
+    fun `a refusal from any of a host's addresses is a refused connection`() {
+        val unreachableFirst = okHttpConnectFailure(ConnectException(UNREACHABLE)).apply {
+            addSuppressed(okHttpConnectFailure(ConnectException(ANDROID_REFUSED)))
+        }
+
+        ErrorKey.of(unreachableFirst) shouldBe ErrorKey.CONNECTION_REFUSED
+        ErrorKey.of(IOException("interceptor text", unreachableFirst)) shouldBe ErrorKey.CONNECTION_REFUSED
+
+        // The first address timed out and another refused: the host answered, it is not just slow.
+        val timeoutFirst = SocketTimeoutException("failed to connect to /192.0.2.1 (port 443) after 10000ms").apply {
+            addSuppressed(okHttpConnectFailure(ConnectException(ANDROID_REFUSED)))
+        }
+        ErrorKey.of(timeoutFirst) shouldBe ErrorKey.CONNECTION_REFUSED
+        ErrorKey.of(SocketTimeoutException("failed to connect to /192.0.2.1 (port 443) after 10000ms")) shouldBe
+            ErrorKey.TIMEOUT
     }
 
     /**
@@ -122,6 +164,7 @@ class ErrorKeyTest {
         ErrorKey.entries.associateWith { it.id } shouldBe mapOf(
             ErrorKey.CLOUDFLARE_BUDGET to "cloudflare_budget",
             ErrorKey.CLOUDFLARE to "cloudflare",
+            ErrorKey.CONNECTION_REFUSED to "connection_refused",
             ErrorKey.NO_NETWORK to "no_network",
             ErrorKey.HTTP to "http",
             ErrorKey.TIMEOUT to "timeout",
@@ -249,4 +292,17 @@ class ErrorKeyTest {
 
     // Matched only by simple name in ErrorKey, so a plain local subclass is enough to exercise that branch.
     private class CloudflareBypassException : Exception()
+
+    private companion object {
+        // What Android's socket says, its errno named in the text; the ErrnoException under it is
+        // left out, since the JVM tests cannot build one.
+        const val ANDROID_REFUSED = "failed to connect to /192.0.2.1 (port 443) from /192.0.2.9 (port 40000) " +
+            "after 10000ms: isConnected failed: ECONNREFUSED (Connection refused)"
+        const val UNREACHABLE = "failed to connect to /192.0.2.1 (port 443) from /:: (port 0) " +
+            "after 10000ms: connect failed: ENETUNREACH (Network is unreachable)"
+
+        /** OkHttp's own connect failure, which carries the platform's as its cause. */
+        fun okHttpConnectFailure(platform: ConnectException) =
+            ConnectException("Failed to connect to example.invalid/192.0.2.1:443").apply { initCause(platform) }
+    }
 }

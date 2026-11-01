@@ -24,6 +24,7 @@ class PageErrorMessageTest {
 
     private val resources = mockk<Resources> {
         every { getString(R.string.error_no_network) } returns "no network"
+        every { getString(R.string.error_connection_refused) } returns "refused"
         every { getString(R.string.error_timeout) } returns "timeout"
         every { getString(R.string.error_cloudflare) } returns "cloudflare"
         listOf(403, 404, 503).forEach { code ->
@@ -40,12 +41,13 @@ class PageErrorMessageTest {
     }
 
     @Test
-    fun `a status code, a timeout and being offline each say so`() {
+    fun `a status code, a timeout, being offline and a refused connection each say so`() {
         context.pageErrorMessage(HttpException(404)) shouldBe "http 404"
         context.pageErrorMessage(HttpException(503)) shouldBe "http 503"
         context.pageErrorMessage(SocketTimeoutException("read timed out")) shouldBe "timeout"
         context.pageErrorMessage(UnknownHostException("no address")) shouldBe "no network"
-        context.pageErrorMessage(ConnectException("refused")) shouldBe "no network"
+        context.pageErrorMessage(ConnectException("Network is unreachable")) shouldBe "no network"
+        context.pageErrorMessage(ConnectException("Connection refused")) shouldBe "refused"
     }
 
     @Test

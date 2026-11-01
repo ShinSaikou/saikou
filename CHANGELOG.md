@@ -15,6 +15,9 @@ release may change behaviour.
 - A failed download in the download queue shows the first line of the source's error, cut to 200
   characters, as the library update error list does, instead of the whole text (sometimes an
   entire error page).
+- A server that refuses the connection is named as such ("The server refused the connection")
+  instead of reading as "No network connection", in snackbars, the library update error list,
+  the download queue and the reader.
 
 ## 0.1.0 - 2026-11-01
 

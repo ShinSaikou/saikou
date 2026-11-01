@@ -68,6 +68,7 @@ class ErrorTextTest {
     private val resources = mockk<Resources> {
         every { getString(R.string.error_generic) } returns "generic"
         every { getString(R.string.error_no_network) } returns "no network"
+        every { getString(R.string.error_connection_refused) } returns "connection refused"
         every { getString(R.string.error_timeout) } returns "timeout"
         every { getString(R.string.error_cloudflare_budget) } returns "cloudflare budget"
         every { getString(R.string.error_source_not_installed) } returns "source not installed"
@@ -213,6 +214,11 @@ class ErrorTextTest {
     }
 
     @Test
+    fun `a refused connection returns the connection refused message, not no network`() {
+        ErrorText.of(resources, ConnectException("Connection refused")) shouldBe "connection refused"
+    }
+
+    @Test
     fun `a socket timeout exception returns the timeout message`() {
         ErrorText.of(resources, SocketTimeoutException()) shouldBe "timeout"
     }
@@ -320,8 +326,10 @@ class ErrorTextTest {
             Case(wrapped(CloudflareBypassException()), ErrorKey.CLOUDFLARE, "cloudflare"),
             Case(UnknownHostException("example.invalid"), ErrorKey.NO_NETWORK, "no network"),
             Case(wrapped(UnknownHostException()), ErrorKey.NO_NETWORK, "no network"),
-            Case(ConnectException("refused"), ErrorKey.NO_NETWORK, "no network"),
+            Case(ConnectException("Network is unreachable"), ErrorKey.NO_NETWORK, "no network"),
             Case(wrapped(ConnectException()), ErrorKey.NO_NETWORK, "no network"),
+            Case(ConnectException("Connection refused"), ErrorKey.CONNECTION_REFUSED, "connection refused"),
+            Case(wrapped(ConnectException("Connection refused")), ErrorKey.CONNECTION_REFUSED, "connection refused"),
             Case(HttpException(403), ErrorKey.HTTP, "HTTP error 403"),
             Case(HttpException(429), ErrorKey.HTTP, "HTTP error 429"),
             Case(HttpException(503), ErrorKey.HTTP, "HTTP error 503"),

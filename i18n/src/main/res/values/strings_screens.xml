@@ -795,6 +795,7 @@
 
     <!-- Error text (contract 08 section 5 preamble) -->
     <string name="error_no_network">No network connection</string>
+    <string name="error_connection_refused">The server refused the connection</string>
     <string name="error_timeout">The request timed out</string>
     <string name="error_cloudflare">This site asked for a browser check that could not be completed</string>
     <string name="error_cloudflare_budget">This request waited too long for another request\'s browser check on the same site, so it was stopped</string>

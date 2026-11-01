@@ -102,12 +102,14 @@ object CompareFailures {
 
     /**
      * A send that failed after it may have reached the service: an I/O failure that is not the
-     * interceptor refusing a refresh before the call, and not a connection that never opened. A
-     * sign-out between the read and the send ("User is not authenticated") reads as one too; the run
-     * stops either way.
+     * interceptor refusing a refresh before the call, and not a connection that never opened (no
+     * network, or a refused one). A sign-out between the read and the send ("User is not
+     * authenticated") reads as one too; the run stops either way.
      */
     private fun isUnanswered(error: Throwable): Boolean = error is IOException &&
         error !is TrackerAuthExpiredException &&
         error !is MALTokenRefreshFailed &&
-        ErrorKey.of(error) != ErrorKey.NO_NETWORK
+        ErrorKey.of(error) !in NEVER_CONNECTED
+
+    private val NEVER_CONNECTED = setOf(ErrorKey.NO_NETWORK, ErrorKey.CONNECTION_REFUSED)
 }

@@ -38,6 +38,7 @@ object ErrorKeyText {
     fun text(resources: Resources, key: ErrorKey, httpCode: Int?, detail: String? = null): String = when (key) {
         ErrorKey.CLOUDFLARE_BUDGET -> resources.getString(R.string.error_cloudflare_budget)
         ErrorKey.CLOUDFLARE -> resources.getString(R.string.error_cloudflare)
+        ErrorKey.CONNECTION_REFUSED -> resources.getString(R.string.error_connection_refused)
         ErrorKey.NO_NETWORK -> resources.getString(R.string.error_no_network)
         ErrorKey.HTTP -> httpCode?.let { resources.getString(R.string.error_http_format, it) }
             ?: resources.getString(R.string.error_generic)

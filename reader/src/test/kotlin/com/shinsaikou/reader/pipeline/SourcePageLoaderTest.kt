@@ -210,6 +210,7 @@ class SourcePageLoaderTest {
         listOf(
             UnknownHostException(),
             ConnectException(),
+            ConnectException("Connection refused"),
             HttpException(403),
             HttpException(404),
             HttpException(429),

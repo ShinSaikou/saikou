@@ -27,6 +27,13 @@ import java.net.UnknownHostException
 enum class ErrorKey(val id: String) {
     CLOUDFLARE_BUDGET("cloudflare_budget"),
     CLOUDFLARE("cloudflare"),
+
+    /**
+     * Something answered the connection with a refusal, so the device has a network: most often the
+     * server is down or nothing listens on its port. A failure stored before this key keeps reading
+     * as [NO_NETWORK].
+     */
+    CONNECTION_REFUSED("connection_refused"),
     NO_NETWORK("no_network"),
 
     /** Its text names the status code, which [httpCode] reads off the failure. */
@@ -164,6 +171,12 @@ enum class ErrorKey(val id: String) {
 
         private const val CLOUDFLARE_BYPASS = "CloudflareBypassException"
 
+        /** How a refused connection reads in the platform's text, on Android and on a JVM alike. */
+        private const val REFUSED_TEXT = "Connection refused"
+
+        /** How deep under a connect failure its refusal is looked for (see [causes]). */
+        private const val MAX_CAUSES = 4
+
         /** The longest [message] kept, its ellipsis included. */
         const val MESSAGE_MAX_LENGTH = 200
 
@@ -187,6 +200,12 @@ enum class ErrorKey(val id: String) {
          * Both timeouts are one key. A source's own network call gives up with a
          * [SocketTimeoutException]; the update pass's per-entry watchdog throws
          * [TimeoutCancellationException]. To the reader both mean the source took too long.
+         *
+         * A refused connection and a network that cannot reach the server are both a
+         * [ConnectException], so [isRefusal] reads which from its text. Any connect failure that
+         * names no refusal (no route, the network unreachable, no message at all) stays [NO_NETWORK].
+         * A connect that timed out on one of a host's addresses can carry another's refusal under
+         * it, and reads as refused too: something answered.
          */
         fun of(error: Throwable): ErrorKey = when {
             error is KeyedFailure -> error.errorKey
@@ -196,6 +215,8 @@ enum class ErrorKey(val id: String) {
             error.isOrCauseIs { it is CloudflareBudgetExceededException } -> CLOUDFLARE_BUDGET
             error.isOrCauseIs { it::class.simpleName == CLOUDFLARE_BYPASS || it is CloudflareSolveRecentlyFailedException } ->
                 CLOUDFLARE
+            error.isOrCauseIs { (it is ConnectException || it is SocketTimeoutException) && it.isRefusal() } ->
+                CONNECTION_REFUSED
             error.isOrCauseIs { it is UnknownHostException || it is ConnectException } -> NO_NETWORK
             httpCode(error) != null -> HTTP
             error.isOrCauseIs { it is SocketTimeoutException || it is TimeoutCancellationException } -> TIMEOUT
@@ -245,5 +266,22 @@ enum class ErrorKey(val id: String) {
 
         private inline fun Throwable.isOrCauseIs(match: (Throwable) -> Boolean): Boolean =
             match(this) || cause?.let(match) == true
+
+        /**
+         * Whether a connect failure was refused. Only the text says so: Android's socket names the
+         * errno there ("ECONNREFUSED (Connection refused)"; the `android.system.ErrnoException` under
+         * it is not something this module's JVM tests can build), a JVM's says "Connection refused",
+         * and OkHttp throws its own `ConnectException` with the platform's as its cause. OkHttp also
+         * tries a host's addresses side by side and suppresses the later failures under the first,
+         * so a refusal from any address counts: something answered, so the device has a network.
+         */
+        private fun Throwable.isRefusal(): Boolean = causes().any { failure ->
+            failure.saysRefused() || failure.suppressed.any { other -> other.causes().any { it.saysRefused() } }
+        }
+
+        // A coroutine's recovered copy, OkHttp's failure, the platform's and the errno under it.
+        private fun Throwable.causes(): Sequence<Throwable> = generateSequence(this) { it.cause }.take(MAX_CAUSES)
+
+        private fun Throwable.saysRefused(): Boolean = message?.contains(REFUSED_TEXT, ignoreCase = true) == true
     }
 }

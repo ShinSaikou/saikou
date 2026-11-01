@@ -559,7 +559,7 @@ class SyncSettingsViewModelTest {
         val other = viewModel()
         advanceUntilIdle()
         other.state.value.newerFormat shouldBe false
-        other.state.value.outcome shouldBe com.shinsaikou.sync.SyncOutcome.Failure(ErrorKey.NO_NETWORK, null)
+        other.state.value.outcome shouldBe com.shinsaikou.sync.SyncOutcome.Failure(ErrorKey.CONNECTION_REFUSED, null)
     }
 
     @Test
