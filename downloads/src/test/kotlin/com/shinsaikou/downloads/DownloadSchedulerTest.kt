@@ -9,6 +9,7 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.google.common.util.concurrent.ListenableFuture
 import com.shinsaikou.core.common.coroutines.Dispatchers
+import com.shinsaikou.core.common.crash.StartMode
 import com.shinsaikou.domain.preferences.DownloadPreferences
 import io.kotest.matchers.shouldBe
 import io.mockk.every
@@ -38,7 +39,12 @@ class DownloadSchedulerTest {
     private val TestScope.scheduler: DownloadScheduler
         get() {
             val dispatcher = StandardTestDispatcher(testScheduler)
-            return DownloadScheduler(lazyOf(workManager), preferences, Dispatchers(dispatcher, dispatcher, dispatcher))
+            return DownloadScheduler(
+                lazyOf(workManager),
+                preferences,
+                Dispatchers(dispatcher, dispatcher, dispatcher),
+                StartMode.NORMAL,
+            )
         }
 
     private var existing = emptyList<WorkInfo>()
@@ -141,6 +147,46 @@ class DownloadSchedulerTest {
             stopReason = WorkInfo.STOP_REASON_CONSTRAINT_CONNECTIVITY,
         )
         DownloadScheduler.statusOf(listOf(stopped), NOW) shouldBe DownloadStatus.WAITING_FOR_WIFI
+    }
+
+    /**
+     * A start without extensions: the worker hands every run back, so a request waiting for its
+     * network or its backoff, or the moment it runs, says what it really waits for.
+     */
+    @Test
+    fun `without extensions any unfinished request waits for them`() {
+        val unfinished = listOf(
+            work(WorkInfo.State.RUNNING, NetworkType.CONNECTED),
+            work(WorkInfo.State.ENQUEUED, NetworkType.UNMETERED),
+            work(WorkInfo.State.ENQUEUED, NetworkType.CONNECTED, nextRun = NOW + 30_000),
+            work(WorkInfo.State.BLOCKED, NetworkType.CONNECTED),
+        )
+        for (info in unfinished) {
+            DownloadScheduler.statusOf(listOf(info), NOW, withoutExtensions = true) shouldBe
+                DownloadStatus.WAITING_FOR_EXTENSIONS
+        }
+        val finished = work(WorkInfo.State.SUCCEEDED, NetworkType.CONNECTED)
+        DownloadScheduler.statusOf(emptyList(), NOW, withoutExtensions = true) shouldBe DownloadStatus.IDLE
+        DownloadScheduler.statusOf(listOf(finished), NOW, withoutExtensions = true) shouldBe DownloadStatus.IDLE
+    }
+
+    /**
+     * The start after one without extensions: the request waiting out the backoff its handed-back
+     * runs built up goes again at once, and nothing else is touched.
+     */
+    @Test
+    fun `after a start without extensions a waiting request is replaced and the rest left alone`() = runTest {
+        existing = listOf(work(WorkInfo.State.ENQUEUED, NetworkType.UNMETERED, nextRun = NOW + 300_000))
+        scheduler.resumeAfterWithoutExtensions()
+        runCurrent()
+        verifyEnqueued(ExistingWorkPolicy.REPLACE)
+
+        existing = listOf(work(WorkInfo.State.RUNNING, NetworkType.UNMETERED))
+        scheduler.resumeAfterWithoutExtensions()
+        existing = emptyList()
+        scheduler.resumeAfterWithoutExtensions()
+        runCurrent()
+        verify(exactly = 1) { workManager.enqueueUniqueWork(any(), any(), any<OneTimeWorkRequest>()) }
     }
 
     @Test

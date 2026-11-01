@@ -87,6 +87,13 @@ class DownloadNotifier(
         manager.cancel(ID_DOWNLOAD_PROGRESS)
     }
 
+    /**
+     * Whether the progress notification is up. After a process died during a run the system can
+     * bring WorkManager's foreground service back with that run's notification, before any run of
+     * the new process has entered the foreground.
+     */
+    fun isProgressShown(): Boolean = manager.activeNotifications.any { it.id == ID_DOWNLOAD_PROGRESS }
+
     /** The adoption worker's foreground notification, built here and posted by WorkManager. */
     fun adoptionProgressNotification(progress: DownloadAdoption.Progress?): Notification =
         builderOn(CHANNEL_PROGRESS)

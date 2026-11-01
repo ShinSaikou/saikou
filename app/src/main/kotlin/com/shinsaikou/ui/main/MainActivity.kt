@@ -85,6 +85,7 @@ class MainActivity : AppCompatActivity() {
                         mainViewModel.dismissCrashBanner()
                     },
                     onCrashDismissed = mainViewModel::dismissCrashBanner,
+                    onRestartWithExtensions = { AppRestart.restart(this, MainDestination.LIBRARY) },
                 )
             }
         }

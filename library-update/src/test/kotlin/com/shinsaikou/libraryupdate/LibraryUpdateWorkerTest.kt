@@ -222,6 +222,43 @@ class LibraryUpdateWorkerTest {
         preferences.lastUpdatedTimestamp.get() shouldBe 0L
     }
 
+    /**
+     * A start without extensions: the run would record every entry of an extension's source as not
+     * installed. It waits for the next start instead, shows nothing meanwhile, and cancels a plain
+     * progress notification a run cut off with the last process left.
+     */
+    @Test
+    fun `a run in a start without extensions retries later and does nothing`() = runTest {
+        every { scheduler.isPaused } returns true
+
+        for (workName in listOf(LibraryUpdateWorker.WORK_NAME_AUTO, LibraryUpdateWorker.WORK_NAME_MANUAL)) {
+            val updater = RefusingForegroundUpdater()
+            build(updater, workName).doWork() shouldBe ListenableWorker.Result.retry()
+            updater.calls shouldBe 0
+        }
+        coVerify(exactly = 0) { update.run(any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { errorStore.merge(any(), any(), any(), any()) }
+        verify(exactly = 2) { notifier.cancelProgress() }
+        verify(exactly = 0) { scheduler.setup() }
+        preferences.lastUpdatedTimestamp.get() shouldBe 0L
+    }
+
+    /**
+     * The system brought WorkManager's foreground service back with the last process's progress.
+     * WorkManager takes it down only for a run that entered the foreground, so the waiting run does.
+     */
+    @Test
+    fun `a waiting run takes the foreground when a dead run's progress is still up`() = runTest {
+        every { scheduler.isPaused } returns true
+        every { notifier.isProgressShown() } returns true
+        val updater = RefusingForegroundUpdater()
+
+        build(updater).doWork() shouldBe ListenableWorker.Result.retry()
+
+        updater.calls shouldBe 1
+        coVerify(exactly = 0) { update.run(any(), any(), any(), any(), any()) }
+    }
+
     /** The manual run is the one the check looks for, so it never waits on itself. */
     @Test
     fun `a manual run goes ahead whatever the manual check answers`() = runTest {

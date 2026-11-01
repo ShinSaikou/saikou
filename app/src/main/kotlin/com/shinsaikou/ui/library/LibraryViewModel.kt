@@ -397,14 +397,12 @@ class LibraryViewModel(
 
     /**
      * `startNow` answers false when a run is already going, which is the case the KEEP policy
-     * would otherwise swallow silently.
+     * would otherwise swallow silently, and in a start without extensions, where runs wait.
      */
     private fun startUpdate(categoryId: Long?, startedRes: Int) {
         viewModelScope.launch {
             val started = libraryUpdateScheduler.startNow(categoryId = categoryId)
-            eventChannel.send(
-                Event.Snackbar(if (started) startedRes else R.string.library_update_already_running),
-            )
+            eventChannel.send(Event.Snackbar(if (started) startedRes else notStartedRes()))
         }
     }
 
@@ -434,11 +432,15 @@ class LibraryViewModel(
             } else if (libraryUpdateScheduler.startNow(mangaIds = ids)) {
                 Event.Snackbar(R.string.library_update_entries_started)
             } else {
-                Event.Snackbar(R.string.library_update_already_running)
+                Event.Snackbar(notStartedRes())
             }
             eventChannel.send(event)
         }
     }
+
+    /** Why `startNow` started nothing. */
+    private fun notStartedRes(): Int =
+        if (libraryUpdateScheduler.isPaused) R.string.library_update_paused else R.string.library_update_already_running
 
     fun stopUpdate() {
         viewModelScope.launch { libraryUpdateScheduler.stop() }

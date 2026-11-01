@@ -8,9 +8,11 @@ import androidx.work.WorkerFactory
 import androidx.work.WorkerParameters
 import androidx.work.testing.TestListenableWorkerBuilder
 import com.google.common.util.concurrent.ListenableFuture
+import com.shinsaikou.core.common.crash.StartMode
 import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.CancellationException
@@ -79,7 +81,39 @@ class DownloadWorkerTest {
         verify(exactly = 1) { notifier.cancelProgress() }
     }
 
-    private fun build(updater: ForegroundUpdater): DownloadWorker =
+    /**
+     * A start without extensions: every chapter would fail as a source that is not installed, so
+     * the run is handed back untouched for the next start. Nothing is shown, and a plain progress
+     * notification a run cut off with the last process left is cancelled.
+     */
+    @Test
+    fun `a run in a start without extensions retries later and touches nothing`() = runTest {
+        val updater = ThrowingForegroundUpdater { IllegalStateException("fixture") }
+
+        build(updater, StartMode(withoutExtensions = true)).doWork() shouldBe ListenableWorker.Result.retry()
+
+        updater.calls shouldBe 0
+        coVerify(exactly = 0) { sweep.run() }
+        coVerify(exactly = 0) { engine.run(any()) }
+        verify(exactly = 1) { notifier.cancelProgress() }
+    }
+
+    /**
+     * The system brought WorkManager's foreground service back with the last process's progress.
+     * WorkManager takes it down only for a run that entered the foreground, so the waiting run does.
+     */
+    @Test
+    fun `a waiting run takes the foreground when a dead run's progress is still up`() = runTest {
+        every { notifier.isProgressShown() } returns true
+        val updater = ThrowingForegroundUpdater { IllegalStateException("fixture") }
+
+        build(updater, StartMode(withoutExtensions = true)).doWork() shouldBe ListenableWorker.Result.retry()
+
+        updater.calls shouldBe 1
+        coVerify(exactly = 0) { engine.run(any()) }
+    }
+
+    private fun build(updater: ForegroundUpdater, startMode: StartMode = StartMode.NORMAL): DownloadWorker =
         TestListenableWorkerBuilder.from(context, DownloadWorker::class.java)
             .setTags(listOf(DownloadWorker.TAG))
             .setForegroundUpdater(updater)
@@ -93,6 +127,7 @@ class DownloadWorkerTest {
                             sweep = sweep,
                             notifier = notifier,
                             timeSource = TimeSource.Monotonic,
+                            startMode = startMode,
                         )
                 },
             )

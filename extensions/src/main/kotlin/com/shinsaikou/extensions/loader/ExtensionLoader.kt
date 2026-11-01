@@ -120,31 +120,50 @@ class ExtensionLoader(
      * fails the pass; an unreadable file stays on disk and is reported so the user can remove it
      * from the extension list.
      */
-    suspend fun loadAll(): List<LoadResult> = withContext(ioDispatcher) {
-        val files = privateDir.listFiles()
-            ?.filter { it.isFile && it.extension == ExtensionMetadata.PRIVATE_EXTENSION_EXTENSION }
-            ?: return@withContext emptyList()
-        coroutineScope {
-            files.map { file ->
-                async {
-                    val archive = readArchiveBlocking(file)
-                    if (archive == null) {
-                        LoadResult.Error(null, LoadError.NOT_AN_EXTENSION, file = file)
-                    } else {
-                        load(archive)
-                    }
-                }
-            }.awaitAll()
-        }
-    }
+    suspend fun loadAll(): List<LoadResult> = eachFile { archive -> load(archive) }
+
+    /**
+     * [loadAll] for a start without extensions: every file is read as a package, which runs none of
+     * its code, and reported as [LoadError.EXTENSIONS_OFF], so the extension list still shows it,
+     * with its Uninstall and any update, and nothing of it is loaded.
+     */
+    suspend fun readAll(): List<LoadResult> = eachFile { archive -> archive.error(LoadError.EXTENSIONS_OFF) }
 
     /** Loads one installed package, or null when no `.ext` file exists for it. */
-    suspend fun loadPackage(packageName: String): LoadResult? = withContext(ioDispatcher) {
+    suspend fun loadPackage(packageName: String): LoadResult? = onePackage(packageName) { archive -> load(archive) }
+
+    /** [loadPackage] for a start without extensions, as [readAll] is for [loadAll]. */
+    suspend fun readPackage(packageName: String): LoadResult? =
+        onePackage(packageName) { archive -> archive.error(LoadError.EXTENSIONS_OFF) }
+
+    private suspend fun eachFile(outcome: suspend (ExtensionArchive) -> LoadResult): List<LoadResult> =
+        withContext(ioDispatcher) {
+            val files = privateDir.listFiles()
+                ?.filter { it.isFile && it.extension == ExtensionMetadata.PRIVATE_EXTENSION_EXTENSION }
+                ?: return@withContext emptyList()
+            coroutineScope {
+                files.map { file ->
+                    async {
+                        val archive = readArchiveBlocking(file)
+                        if (archive == null) {
+                            LoadResult.Error(null, LoadError.NOT_AN_EXTENSION, file = file)
+                        } else {
+                            outcome(archive)
+                        }
+                    }
+                }.awaitAll()
+            }
+        }
+
+    private suspend fun onePackage(
+        packageName: String,
+        outcome: suspend (ExtensionArchive) -> LoadResult,
+    ): LoadResult? = withContext(ioDispatcher) {
         val file = extFileFor(packageName)
         if (!file.isFile) return@withContext null
         val archive = readArchiveBlocking(file)
             ?: return@withContext LoadResult.Error(packageName, LoadError.NOT_AN_EXTENSION, file = file)
-        load(archive)
+        outcome(archive)
     }
 
     /** Loads from an archive already read off disk; used by install and by the trust flow. */

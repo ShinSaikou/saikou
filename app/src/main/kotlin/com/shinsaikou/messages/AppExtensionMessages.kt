@@ -56,4 +56,5 @@ internal val LoadError.messageRes: Int
         LoadError.INSTANTIATION_FAILED -> R.string.ext_load_error_instantiation_failed
         LoadError.UNKNOWN_SOURCE_TYPE -> R.string.ext_load_error_unknown_source_type
         LoadError.INJEKT_NOT_READY -> R.string.ext_load_error_injekt_not_ready
+        LoadError.EXTENSIONS_OFF -> R.string.ext_load_error_extensions_off
     }

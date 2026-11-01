@@ -134,6 +134,7 @@ fun SaikouAppNav(
     onBatterySkip: () -> Unit,
     onCrashExport: (String) -> Unit,
     onCrashDismissed: () -> Unit,
+    onRestartWithExtensions: () -> Unit,
 ) {
     val navController = rememberNavController()
     val activity = checkNotNull(LocalActivity.current) { "the navigation host is not in an activity" }
@@ -171,6 +172,7 @@ fun SaikouAppNav(
                 onBatterySkip = onBatterySkip,
                 onCrashExport = onCrashExport,
                 onCrashDismissed = onCrashDismissed,
+                onRestartWithExtensions = onRestartWithExtensions,
                 showUpdateErrors = pendingUpdateErrors,
                 onUpdateErrorsShown = { pendingUpdateErrors = false },
             )
@@ -188,6 +190,7 @@ private fun AppScaffold(
     onBatterySkip: () -> Unit,
     onCrashExport: (String) -> Unit,
     onCrashDismissed: () -> Unit,
+    onRestartWithExtensions: () -> Unit,
     showUpdateErrors: Boolean,
     onUpdateErrorsShown: () -> Unit,
 ) {
@@ -247,9 +250,10 @@ private fun AppScaffold(
             bottom = padding.calculateBottomPadding(),
         )
         val statusBar = PaddingValues(top = padding.calculateTopPadding())
-        val bannerShown = mainState.showCrashBanner || mainState.solves.isNotEmpty()
+        val bannerShown = mainState.extensionsOff || mainState.showCrashBanner || mainState.solves.isNotEmpty()
         Column(modifier = Modifier.fillMaxSize().padding(belowStatusBar).consumeWindowInsets(belowStatusBar)) {
             if (bannerShown) Spacer(Modifier.padding(statusBar))
+            if (mainState.extensionsOff) ExtensionsOffBanner(onRestart = onRestartWithExtensions)
             if (mainState.showCrashBanner) {
                 CrashBanner(
                     canExport = mainState.crashLogPath != null,

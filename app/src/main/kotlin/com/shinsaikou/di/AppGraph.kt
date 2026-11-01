@@ -24,6 +24,7 @@ import com.shinsaikou.backup.importer.BackupImporter
 import com.shinsaikou.backup.importer.BackupImportRequest
 import com.shinsaikou.core.common.coroutines.Dispatchers
 import com.shinsaikou.core.common.crash.CrashLog
+import com.shinsaikou.core.common.crash.StartMode
 import com.shinsaikou.core.common.network.CloudflareSolveCoordinator
 import com.shinsaikou.core.common.preferences.BasePreferences
 import com.shinsaikou.core.common.preferences.SecurityPreferences
@@ -439,8 +440,12 @@ interface AppGraph : MetroViewModelMultibindings {
      */
     val cloudflareSolveCoordinator: CloudflareSolveCoordinator
 
+    /**
+     * [startMode] is read before the graph exists, from the flag the crash screen leaves, so every
+     * binding sees the same answer for the life of the process.
+     */
     @DependencyGraph.Factory
     fun interface Factory {
-        fun create(@Provides application: Application): AppGraph
+        fun create(@Provides application: Application, @Provides startMode: StartMode): AppGraph
     }
 }

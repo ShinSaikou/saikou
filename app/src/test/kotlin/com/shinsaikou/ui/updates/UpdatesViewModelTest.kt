@@ -133,6 +133,8 @@ class UpdatesViewModelTest {
     @BeforeEach
     fun setUp() {
         KotlinxDispatchers.setMain(testDispatcher)
+        // Runs wait only in a start without extensions, which one test sets up.
+        every { libraryUpdateScheduler.isPaused } returns false
         every { getUpdates.subscribe(any(), any(), any(), any(), any(), any(), any()) } answers {
             val query = Query(
                 unread = secondArg(),
@@ -327,6 +329,21 @@ class UpdatesViewModelTest {
             advanceUntilIdle()
 
             awaitItem() shouldBe UpdatesViewModel.Event.Snackbar(R.string.library_update_already_running)
+        }
+    }
+
+    @Test
+    fun `refresh in a start without extensions says updates wait for a restart`() = runTest(testDispatcher) {
+        every { libraryUpdateScheduler.isPaused } returns true
+        coEvery { libraryUpdateScheduler.startNow() } returns false
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        viewModel.events.test {
+            viewModel.refresh()
+            advanceUntilIdle()
+
+            awaitItem() shouldBe UpdatesViewModel.Event.Snackbar(R.string.library_update_paused)
         }
     }
 

@@ -8,6 +8,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.shinsaikou.core.common.coroutines.Dispatchers
+import com.shinsaikou.core.common.crash.StartMode
 import com.shinsaikou.domain.preferences.DownloadPreferences
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
@@ -39,6 +40,7 @@ class DownloadScheduler(
     private val workManager: Lazy<WorkManager>,
     private val downloadPreferences: DownloadPreferences,
     private val dispatchers: Dispatchers,
+    private val startMode: StartMode,
 ) {
 
     /**
@@ -72,6 +74,19 @@ class DownloadScheduler(
     }
 
     /**
+     * The first start with extensions after a start without them, whose worker handed every run
+     * back: a request waiting out the backoff those runs built up is replaced, so the queue goes on
+     * as soon as its network allows instead of reading as a network problem meanwhile. A running
+     * worker, and a queue with no request (paused), are left as they are.
+     */
+    suspend fun resumeAfterWithoutExtensions() {
+        val states = unfinishedWork().map { it.state }
+        if (WorkInfo.State.ENQUEUED in states && WorkInfo.State.RUNNING !in states) {
+            enqueue(requiredNetworkType(), ExistingWorkPolicy.REPLACE)
+        }
+    }
+
+    /**
      * Calls [rearm] on every value of "only download over Wi-Fi", whoever writes it: the download
      * settings, a restore or a sync. `SaikouApp` calls this once, with the app's scope.
      */
@@ -100,7 +115,7 @@ class DownloadScheduler(
     /** What the worker is doing, from its requests' states and constraints. */
     val status: Flow<DownloadStatus>
         get() = workManager.value.getWorkInfosForUniqueWorkFlow(DownloadWorker.WORK_NAME)
-            .map { statusOf(it, now = System.currentTimeMillis()) }
+            .map { statusOf(it, now = System.currentTimeMillis(), withoutExtensions = startMode.withoutExtensions) }
 
     private fun requiredNetworkType(): NetworkType =
         if (downloadPreferences.downloadOnlyOverWifi.get()) NetworkType.UNMETERED else NetworkType.CONNECTED
@@ -135,8 +150,12 @@ class DownloadScheduler(
          * moment after a start it is also enqueued, on its way to running. A run the platform
          * stopped (Wi-Fi lost, say) has a stop reason, and waits for its network, whatever its next
          * run time says. [now] is epoch milliseconds.
+         *
+         * In a process started [withoutExtensions] any unfinished request is
+         * [DownloadStatus.WAITING_FOR_EXTENSIONS], a run included: the worker only hands it back.
          */
-        fun statusOf(infos: List<WorkInfo>, now: Long): DownloadStatus {
+        fun statusOf(infos: List<WorkInfo>, now: Long, withoutExtensions: Boolean = false): DownloadStatus {
+            if (withoutExtensions && infos.any { !it.state.isFinished }) return DownloadStatus.WAITING_FOR_EXTENSIONS
             if (infos.any { it.state == WorkInfo.State.RUNNING }) return DownloadStatus.RUNNING
             val waiting = infos.firstOrNull { it.state == WorkInfo.State.ENQUEUED } ?: return DownloadStatus.IDLE
             val retrying =

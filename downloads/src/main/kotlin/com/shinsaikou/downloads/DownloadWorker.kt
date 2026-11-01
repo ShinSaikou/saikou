@@ -6,6 +6,7 @@ import android.os.Build
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
+import com.shinsaikou.core.common.crash.StartMode
 import com.shinsaikou.core.common.work.WorkerInstanceFactory
 import com.shinsaikou.core.common.work.setForegroundSafely
 import dev.zacsweers.metro.Assisted
@@ -35,12 +36,20 @@ class DownloadWorker @AssistedInject constructor(
     private val sweep: DownloadManifestSweep,
     private val notifier: DownloadNotifier,
     private val timeSource: TimeSource,
+    private val startMode: StartMode,
 ) : CoroutineWorker(context, params) {
 
     override suspend fun getForegroundInfo(): ForegroundInfo = foregroundInfo(null)
 
     @Suppress("TooGenericExceptionCaught")
     override suspend fun doWork(): Result {
+        // A start without extensions: every chapter would fail as a source that is not installed.
+        // The rows stay queued and WorkManager runs the request again, in the next process too, so
+        // the queue goes on after a start with extensions.
+        if (startMode.withoutExtensions) {
+            clearLeftoverProgress()
+            return Result.retry()
+        }
         return try {
             // Inside the try, so the finally below clears the progress notification whatever
             // happens from here on, a stop while entering the foreground included.
@@ -69,6 +78,18 @@ class DownloadWorker @AssistedInject constructor(
         } finally {
             notifier.cancelProgress()
         }
+    }
+
+    /**
+     * Nothing of a run shows while it waits, but a run cut off with the last process can have left
+     * its progress up: as a plain notification, which is cancelled, or in WorkManager's foreground
+     * service, which the system brings back with the process. WorkManager stops that service only
+     * for a run that entered the foreground in this process, so this one enters it, and the service
+     * goes when the run ends.
+     */
+    private suspend fun clearLeftoverProgress() {
+        if (notifier.isProgressShown()) setForegroundSafely()
+        notifier.cancelProgress()
     }
 
     private fun foregroundInfo(progress: DownloadEngine.Progress?): ForegroundInfo {

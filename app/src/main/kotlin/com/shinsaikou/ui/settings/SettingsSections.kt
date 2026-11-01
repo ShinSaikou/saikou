@@ -1259,8 +1259,8 @@ private fun AdvancedSection(viewModel: SettingsViewModel, showMessage: (String, 
     val resetFailed = stringResource(R.string.pref_reset_viewer_flags_error)
     val rebuildDone = stringResource(R.string.pref_rebuild_library_counts_success)
     val rebuildFailed = stringResource(R.string.pref_rebuild_library_counts_error)
-    val updateStarted = stringResource(R.string.library_update_started)
-    val updateRunning = stringResource(R.string.library_update_already_running)
+    // The refresh answers with one of several strings; read through the resources Compose tracks.
+    val resources = LocalResources.current
 
     SettingsColumn {
         // The build a report is about, first in the section, and a tap copies it (phase 3 unit AD).
@@ -1374,7 +1374,7 @@ private fun AdvancedSection(viewModel: SettingsViewModel, showMessage: (String, 
             title = stringResource(R.string.pref_refresh_library_covers),
             detail = stringResource(R.string.pref_refresh_library_covers_summary),
             onClick = {
-                viewModel.refreshLibraryCovers { started -> showMessage(if (started) updateStarted else updateRunning, null) }
+                viewModel.refreshLibraryCovers { message -> showMessage(resources.getString(message), null) }
             },
         )
         ListRow(

@@ -11,6 +11,7 @@ import coil3.PlatformContext
 import coil3.SingletonImageLoader
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
 import com.shinsaikou.core.common.crash.CrashLog
+import com.shinsaikou.core.common.crash.StartMode
 import com.shinsaikou.di.AppGraph
 import com.shinsaikou.domain.preferences.ThemeMode
 import com.shinsaikou.image.GLUtil
@@ -100,7 +101,10 @@ class SaikouApp : Application(), Configuration.Provider, SingletonImageLoader.Fa
             )
             return
         }
-        graph = createGraphFactory<AppGraph.Factory>().create(this)
+        // Taken before the graph exists, so the crash screen's "Start without extensions" applies
+        // to this process alone: one or two small file operations on the main thread.
+        val startMode = StartMode.take(StartMode.filesOf(this))
+        graph = createGraphFactory<AppGraph.Factory>().create(this, startMode)
 
         // First, so a crash in anything below is still written to a file and shown on the crash
         // screen.
@@ -158,7 +162,8 @@ class SaikouApp : Application(), Configuration.Provider, SingletonImageLoader.Fa
                 .onFailure { logcat(LogPriority.ERROR, it) { "The sync start-up trigger failed" } }
 
             // Before start(): the loader refuses every extension with INJEKT_NOT_READY until the
-            // singletons extension bytecode resolves by name are registered.
+            // singletons extension bytecode resolves by name are registered. A start without
+            // extensions still calls start(), which then lists them without loading any.
             graph.injektBootstrap.install()
             graph.extensionManager.start()
             graph.sourceManager
@@ -166,6 +171,10 @@ class SaikouApp : Application(), Configuration.Provider, SingletonImageLoader.Fa
             graph.backupScheduler.setup()
             graph.libraryUpdateScheduler.setup()
             graph.downloadScheduler.followNetworkSetting(graph.appScope)
+            if (startMode.afterWithoutExtensions) {
+                runCatching { graph.downloadScheduler.resumeAfterWithoutExtensions() }
+                    .onFailure { logcat(LogPriority.ERROR, it) { "Could not resume the download queue" } }
+            }
 
             // Re-match orphan manifest rows and drop rows whose folder is gone (phase 2 Q7). The
             // download worker runs the same sweep when it starts.

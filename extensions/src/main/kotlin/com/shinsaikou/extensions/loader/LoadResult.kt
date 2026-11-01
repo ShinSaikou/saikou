@@ -49,6 +49,12 @@ enum class LoadError {
 
     /** A load was attempted before the Injekt singletons were registered. */
     INJEKT_NOT_READY,
+
+    /**
+     * Not loaded at all: the process started without extensions, from the crash screen. Only the
+     * package was read, so the list can still offer its Uninstall and its update.
+     */
+    EXTENSIONS_OFF,
 }
 
 /** Outcome of copying an APK into the private extension directory. */

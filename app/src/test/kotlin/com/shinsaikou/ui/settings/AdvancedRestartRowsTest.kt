@@ -80,7 +80,7 @@ class AdvancedRestartRowsTest {
         calls shouldContainExactly listOf(
             "if (success) rebuildDone else rebuildFailed, null",
             "if (context.clearWebViewData()) webViewCleared else webViewFailed, null",
-            "if (started) updateStarted else updateRunning, null",
+            "resources.getString(message), null",
             "if (success) resetDone else resetFailed, null",
         )
     }

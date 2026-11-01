@@ -2,6 +2,7 @@ package com.shinsaikou.ui.main
 
 import android.app.Activity
 import com.shinsaikou.core.common.crash.CrashLog
+import com.shinsaikou.core.common.crash.StartMode
 import com.shinsaikou.core.common.network.CloudflareSolveCoordinator
 import com.shinsaikou.core.common.network.CloudflareSolveCoordinator.InFlightSolve
 import com.shinsaikou.core.common.preferences.BasePreferences
@@ -75,7 +76,7 @@ class MainViewModelTest {
         KotlinxDispatchers.resetMain()
     }
 
-    private fun viewModel() = MainViewModel(
+    private fun viewModel(startMode: StartMode = StartMode.NORMAL) = MainViewModel(
         basePreferences = basePreferences,
         libraryPreferences = libraryPreferences,
         extensionsPreferences = extensionsPreferences,
@@ -84,6 +85,7 @@ class MainViewModelTest {
         dispatchers = AppDispatchers(io = testDispatcher, default = testDispatcher, main = testDispatcher),
         uiPreferences = uiPreferences,
         solveCoordinator = solveCoordinator,
+        startMode = startMode,
     )
 
     /** `state` only runs its upstream while something collects it, so every test needs this. */
@@ -134,6 +136,21 @@ class MainViewModelTest {
         viewModel.state.value.crashLogPath shouldBe null
         verify(exactly = 1) { crashLog.markExported() }
     }
+
+    /** The banner is the only word on screen that extensions are off and updates and downloads wait. */
+    @Test
+    fun `a start without extensions shows its banner from the first state, and a normal start does not`() =
+        runTest(testDispatcher) {
+            val off = viewModel(StartMode(withoutExtensions = true))
+            off.state.value.extensionsOff shouldBe true
+            subscribed(off)
+            advanceUntilIdle()
+            off.state.value.extensionsOff shouldBe true
+
+            val normal = subscribed(viewModel())
+            advanceUntilIdle()
+            normal.state.value.extensionsOff shouldBe false
+        }
 
     @Test
     fun `a solve in flight reaches the state while it runs and leaves with it`() = runTest(testDispatcher) {

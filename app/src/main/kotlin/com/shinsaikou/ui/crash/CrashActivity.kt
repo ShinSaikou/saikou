@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.Process
 import androidx.activity.addCallback
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
@@ -11,6 +12,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import com.shinsaikou.core.common.crash.CrashLog
 import com.shinsaikou.core.common.crash.CrashScreenLauncher
+import com.shinsaikou.core.common.crash.StartMode
 import com.shinsaikou.nightModeOf
 import com.shinsaikou.ui.main.MainActivity
 import eu.kanade.presentation.theme.SaikouTheme
@@ -20,7 +22,8 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * The crash screen: the crash the handler has just written, with Share, Restart and Close.
+ * The crash screen: the crash the handler has just written, with Share, Start without extensions,
+ * Restart and Close.
  *
  * It runs in a process of its own (`:crash` in the manifest), so it still opens when the main
  * process dies on every start, and `SaikouApp` builds no graph there. Nothing here reads the
@@ -55,6 +58,7 @@ class CrashActivity : AppCompatActivity() {
                     content = content,
                     onShare = { file -> CrashLogExport.share(this, file, CrashLogProvider.authority(this)) },
                     onRestart = ::restart,
+                    onStartWithoutExtensions = ::startWithoutExtensions,
                     onClose = ::close,
                 )
             }
@@ -76,6 +80,22 @@ class CrashActivity : AppCompatActivity() {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
         )
         finish()
+    }
+
+    /**
+     * [restart], with the next start of the main process going without extensions ([StartMode]).
+     * A main process already running has loaded them and the app would open in it, so it is ended.
+     * It is listed before the flag is written and ended after: background work can start a main
+     * process at any moment, and one that starts once the flag is there takes it and loads no
+     * extensions, so it is left to run, while ending it would lose the flag with it. If the flag
+     * cannot be written the app starts as Restart starts it, and a crash at start brings this
+     * screen back.
+     */
+    private fun startWithoutExtensions() {
+        val running = CrashProcess.mainProcessIds(this)
+        runCatching { StartMode.requestWithoutExtensions(this) }
+        running.forEach(Process::killProcess)
+        restart()
     }
 
     /** Close and Back: the task this screen took over goes too, and the next crash shows it again. */

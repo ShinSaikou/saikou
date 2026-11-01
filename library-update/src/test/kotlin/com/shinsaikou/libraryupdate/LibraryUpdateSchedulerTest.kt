@@ -7,6 +7,7 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.google.common.util.concurrent.ListenableFuture
+import com.shinsaikou.core.common.crash.StartMode
 import com.shinsaikou.domain.preferences.LibraryPreferences
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
@@ -31,7 +32,8 @@ class LibraryUpdateSchedulerTest {
 
     private val workManager = mockk<WorkManager>(relaxed = true)
     private val request = slot<OneTimeWorkRequest>()
-    private val scheduler = LibraryUpdateScheduler(mockk(), LibraryPreferences(InMemoryPreferenceStore()))
+    private val scheduler =
+        LibraryUpdateScheduler(mockk(), LibraryPreferences(InMemoryPreferenceStore()), StartMode.NORMAL)
 
     @BeforeEach
     fun setUp() {
@@ -42,7 +44,7 @@ class LibraryUpdateSchedulerTest {
         every {
             workManager.enqueueUniqueWork(
                 LibraryUpdateWorker.WORK_NAME_MANUAL,
-                ExistingWorkPolicy.KEEP,
+                ExistingWorkPolicy.REPLACE,
                 capture(request),
             )
         } returns mockk()
@@ -80,6 +82,42 @@ class LibraryUpdateSchedulerTest {
         shouldThrow<IllegalStateException> {
             workDataOf(LibraryUpdateWorker.KEY_MANGA_IDS to LongArray(LibraryUpdateWorker.MAX_MANGA_IDS * 4 / 3))
         }
+    }
+
+    /**
+     * A manual run a start without extensions sent back waits out its backoff after the restart. A
+     * new request replaces it rather than being dropped behind it while reported as started.
+     */
+    @Test
+    fun `a manual run that is waiting is replaced by a new one, and one that is going refuses it`() = runTest {
+        fun existing(runState: WorkInfo.State) {
+            val info = mockk<WorkInfo> { every { state } returns runState }
+            every { workManager.getWorkInfosByTag(LibraryUpdateWorker.TAG) } returns
+                mockk<ListenableFuture<List<WorkInfo>>> { every { get() } returns listOf(info) }
+        }
+
+        existing(WorkInfo.State.ENQUEUED)
+        scheduler.startNow(mangaIds = listOf(7L)) shouldBe true
+        request.captured.workSpec.input.getLongArray(LibraryUpdateWorker.KEY_MANGA_IDS)!!.toList() shouldBe listOf(7L)
+
+        existing(WorkInfo.State.RUNNING)
+        scheduler.startNow() shouldBe false
+        verify(exactly = 1) { workManager.enqueueUniqueWork(any<String>(), any(), any<OneTimeWorkRequest>()) }
+    }
+
+    /** A start without extensions: the run would record every entry as a source not installed. */
+    @Test
+    fun `a manual run is refused, and nothing enqueued, in a start without extensions`() = runTest {
+        val paused = LibraryUpdateScheduler(
+            mockk(),
+            LibraryPreferences(InMemoryPreferenceStore()),
+            StartMode(withoutExtensions = true),
+        )
+
+        paused.isPaused shouldBe true
+        paused.startNow() shouldBe false
+
+        verify(exactly = 0) { workManager.enqueueUniqueWork(any<String>(), any(), any<OneTimeWorkRequest>()) }
     }
 
     @Test

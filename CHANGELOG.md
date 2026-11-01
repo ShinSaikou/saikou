@@ -7,6 +7,13 @@ release may change behaviour.
 
 ## Unreleased
 
+### Added
+
+- Start without extensions, on the crash screen, for when an extension makes Saikou close at every
+  start. Until Saikou restarts no extension runs, library updates and downloads wait, and a banner
+  says so with a Restart button. The Extensions tab still lists each extension, so the one at
+  fault can be uninstalled or updated.
+
 ### Fixed
 
 - On Android 8 and 9, turning pure black off in the dark theme gives the navigation bar back its

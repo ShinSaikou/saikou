@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.google.common.util.concurrent.ListenableFuture
+import com.shinsaikou.core.common.crash.StartMode
 import com.shinsaikou.domain.preferences.LibraryPreferences
 import io.mockk.every
 import io.mockk.mockk
@@ -29,7 +30,8 @@ class LibraryUpdateStopTest {
     private val workManager = mockk<WorkManager>(relaxed = true)
     private val manual = UUID.randomUUID()
     private val automatic = UUID.randomUUID()
-    private val scheduler = LibraryUpdateScheduler(mockk(), LibraryPreferences(InMemoryPreferenceStore()))
+    private val scheduler =
+        LibraryUpdateScheduler(mockk(), LibraryPreferences(InMemoryPreferenceStore()), StartMode.NORMAL)
 
     @BeforeEach
     fun setUp() {

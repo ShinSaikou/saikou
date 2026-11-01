@@ -1,5 +1,6 @@
 package com.shinsaikou.extensions
 
+import com.shinsaikou.core.common.crash.StartMode
 import com.shinsaikou.domain.extension.repository.ExtensionStoreRepository
 import com.shinsaikou.domain.preferences.ExtensionsPreferences
 import com.shinsaikou.extensions.install.ExtensionInstaller
@@ -53,6 +54,11 @@ import kotlin.time.Duration.Companion.hours
  * Nothing here runs on the main thread beyond [start]'s first statement. Every mutation of the
  * three package maps goes through one mutex-guarded function, so two concurrent installs cannot
  * lose a publication.
+ *
+ * In a process started without extensions ([StartMode]) no extension is loaded, not even one
+ * installed or updated meanwhile: each package on disk is listed among the [loadErrors] as
+ * [com.shinsaikou.extensions.loader.LoadError.EXTENSIONS_OFF], where it keeps its Uninstall and
+ * its update, which is how the extension that took the app down can be removed or replaced.
  */
 @SingleIn(AppScope::class)
 @ContributesIntoSet(AppScope::class)
@@ -65,6 +71,7 @@ class ExtensionManager(
     private val installer: ExtensionInstaller,
     private val preferences: ExtensionsPreferences,
     private val libVersionPolicy: LibVersionPolicy,
+    private val startMode: StartMode,
     private val scope: CoroutineScope,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : SourceProvider {
@@ -151,11 +158,16 @@ class ExtensionManager(
      * process. It is written only where it is known (ruling R46): after an index fetch, after a
      * load or an uninstall while the available list is loaded, and here only when nothing is
      * installed, where zero is the answer without an index.
+     *
+     * Without extensions the pass reads the packages instead of loading them, still turns the flag,
+     * and stops there: no index is fetched and the count stays the last process's.
      */
     fun start() {
         scope.launch {
             val results = try {
-                withContext(ioDispatcher) { loader.loadAll() }
+                withContext(ioDispatcher) {
+                    if (startMode.withoutExtensions) loader.readAll() else loader.loadAll()
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
@@ -167,6 +179,7 @@ class ExtensionManager(
             }
             publish(results)
             _isInitialized.value = true
+            if (startMode.withoutExtensions) return@launch
 
             if (preferences.autoCheckUpdates.get()) {
                 val hasStores = withContext(ioDispatcher) { stores.getAll().isNotEmpty() }
@@ -293,9 +306,15 @@ class ExtensionManager(
         reload(extension.packageName)
     }
 
-    /** Reloads one installed package; used after a trust override and after an update. */
+    /**
+     * Reloads one installed package; used after a trust override and after an update. Without
+     * extensions the package is only read, so an install or an update this process lists it as off.
+     */
     suspend fun reload(packageName: String): LoadResult? {
-        val result = loader.loadPackage(packageName) ?: return null
+        val result = when {
+            startMode.withoutExtensions -> loader.readPackage(packageName)
+            else -> loader.loadPackage(packageName)
+        } ?: return null
         mutex.withLock { apply(packageName, result) }
         return result
     }

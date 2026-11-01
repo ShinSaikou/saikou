@@ -1,5 +1,6 @@
 package com.shinsaikou.extensions
 
+import com.shinsaikou.core.common.crash.StartMode
 import com.shinsaikou.domain.extension.repository.ExtensionStoreRepository
 import com.shinsaikou.domain.preferences.ExtensionsPreferences
 import com.shinsaikou.extensions.install.ExtensionInstaller
@@ -70,7 +71,7 @@ class ExtensionManagerTest {
         managerScope?.cancel()
     }
 
-    private fun TestScope.buildManager(): ExtensionManager {
+    private fun TestScope.buildManager(startMode: StartMode = StartMode.NORMAL): ExtensionManager {
         val scope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler))
         managerScope = scope
         return ExtensionManager(
@@ -81,6 +82,7 @@ class ExtensionManagerTest {
             installer = installer,
             preferences = preferences,
             libVersionPolicy = LibVersionPolicy(preferences),
+            startMode = startMode,
             scope = scope,
             ioDispatcher = StandardTestDispatcher(testScheduler),
         )
@@ -423,6 +425,48 @@ class ExtensionManagerTest {
 
         coVerify(exactly = 1) { loader.deleteUnreadable(file) }
         manager.loadErrors.value.shouldBeEmpty()
+    }
+
+    /**
+     * The crash screen's way out of an extension that takes the app down at start: nothing is
+     * loaded, every package is still listed so it can be removed, the flag still turns so nothing
+     * waiting on the registry hangs, and no index is fetched on the way.
+     */
+    @Test
+    fun `a start without extensions lists every package unloaded and still ends initialized`() = runTest {
+        val off = LoadResult.Error(PACKAGE, LoadError.EXTENSIONS_OFF, versionCode = 1L, libVersion = 1.6)
+        coEvery { loader.readAll() } returns listOf(off)
+        preferences.extensionUpdatesCount.set(3)
+        seedIndex(available(PACKAGE, versionCode = 2L))
+        val manager = buildManager(StartMode(withoutExtensions = true))
+
+        manager.start()
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { loader.loadAll() }
+        manager.isInitialized.value shouldBe true
+        manager.sources.value.shouldBeEmpty()
+        manager.installedExtensions.value.shouldBeEmpty()
+        manager.loadErrors.value shouldBe listOf(off)
+        coVerify(exactly = 0) { repoClient.fetch(any()) }
+        preferences.extensionUpdatesCount.get() shouldBe 3
+    }
+
+    @Test
+    fun `without extensions an installed or updated package is read, not loaded`() = runTest {
+        val off = LoadResult.Error(PACKAGE, LoadError.EXTENSIONS_OFF, versionCode = 2L, libVersion = 1.6)
+        coEvery { loader.readAll() } returns emptyList()
+        coEvery { loader.readPackage(PACKAGE) } returns off
+        coEvery { stores.getAll() } returns emptyList()
+        val manager = buildManager(StartMode(withoutExtensions = true))
+        manager.start()
+        advanceUntilIdle()
+
+        manager.reload(PACKAGE) shouldBe off
+
+        coVerify(exactly = 0) { loader.loadPackage(any()) }
+        manager.loadErrors.value shouldBe listOf(off)
+        manager.sources.value.shouldBeEmpty()
     }
 
     /** One configured store whose index lists [entries]. */

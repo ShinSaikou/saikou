@@ -136,6 +136,8 @@ class LibraryViewModelTest {
     @BeforeEach
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
+        // Runs wait only in a start without extensions, which one test sets up.
+        every { libraryUpdateScheduler.isPaused } returns false
         coEvery { errorStore.load() } returns Unit
         // Unranked unless a test ranks the title.
         coEvery { getScanlatorPriority.await(any()) } returns emptyMap()
@@ -895,6 +897,23 @@ class LibraryViewModelTest {
             advanceUntilIdle()
 
             awaitItem() shouldBe LibraryViewModel.Event.Snackbar(R.string.library_update_already_running)
+        }
+    }
+
+    @Test
+    fun `updateNow in a start without extensions says updates wait for a restart`() = runTest(testDispatcher) {
+        feed(emptyList())
+        every { libraryUpdateScheduler.isPaused } returns true
+        coEvery { libraryUpdateScheduler.startNow() } returns false
+
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        viewModel.events.test {
+            viewModel.updateNow()
+            advanceUntilIdle()
+
+            awaitItem() shouldBe LibraryViewModel.Event.Snackbar(R.string.library_update_paused)
         }
     }
 

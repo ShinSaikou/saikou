@@ -61,6 +61,12 @@ enum class DownloadStatus {
 
     /** No request, and too little storage free for the queue's next chapter ([isLowOnSpace]). */
     STORAGE_FULL,
+
+    /**
+     * A request this process will not run: it started without extensions, from the crash screen,
+     * and the worker leaves the queue to the next start ([DownloadWorker]).
+     */
+    WAITING_FOR_EXTENSIONS,
 }
 
 /** What is already on disk. Every read goes through the manifest, never through a directory walk. */

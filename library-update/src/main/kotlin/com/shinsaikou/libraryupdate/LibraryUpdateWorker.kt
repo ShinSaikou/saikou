@@ -67,6 +67,12 @@ class LibraryUpdateWorker @AssistedInject constructor(
     )
 
     override suspend fun doWork(): Result {
+        // A start without extensions: the run waits for the next start rather than recording every
+        // entry as a source that is not installed.
+        if (scheduler.isPaused) {
+            clearLeftoverProgress()
+            return Result.retry()
+        }
         if (automatic && !canRunAutomatically()) return Result.retry()
         // Upstream's rule: an automatic run that comes due while a manual one is going tries again
         // later. Two runs at once ask the same sites with two budgets, share one progress
@@ -130,6 +136,18 @@ class LibraryUpdateWorker @AssistedInject constructor(
                 scheduler.setup()
             }
         }
+    }
+
+    /**
+     * Nothing of a run shows while it waits, but a run cut off with the last process can have left
+     * its progress up: as a plain notification, which is cancelled, or in WorkManager's foreground
+     * service, which the system brings back with the process. WorkManager stops that service only
+     * for a run that entered the foreground in this process, so this one enters it, and the service
+     * goes when the run ends.
+     */
+    private suspend fun clearLeftoverProgress() {
+        if (notifier.isProgressShown()) setForegroundSafely()
+        notifier.cancelProgress()
     }
 
     private fun foregroundInfo(progress: FlatLibraryUpdate.Progress): ForegroundInfo {

@@ -73,6 +73,13 @@ class LibraryUpdateNotifier(
     }
 
     /**
+     * Whether the progress notification is up. After a process died during a run the system can
+     * bring WorkManager's foreground service back with that run's notification, before any run of
+     * the new process has entered the foreground.
+     */
+    fun isProgressShown(): Boolean = manager.activeNotifications.any { it.id == ID_LIBRARY_PROGRESS }
+
+    /**
      * One summary that names every updated entry plus, unless notification content is hidden, one
      * notification for each of the first [MAX_ENTRY_NOTIFICATIONS] entries. Android drops an app's
      * notifications past about fifty, so an uncapped run of a large library lost entries, and the

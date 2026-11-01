@@ -119,6 +119,7 @@ private fun statusLabel(status: DownloadStatus): Int = when (status) {
     DownloadStatus.WAITING_FOR_NETWORK -> R.string.download_queue_waiting_for_network
     DownloadStatus.RETRYING -> R.string.download_queue_retrying
     DownloadStatus.STORAGE_FULL -> R.string.download_queue_storage_full
+    DownloadStatus.WAITING_FOR_EXTENSIONS -> R.string.download_queue_waiting_for_extensions
 }
 
 @Composable

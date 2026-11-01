@@ -6,6 +6,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
+import com.shinsaikou.core.common.crash.StartMode
 import com.shinsaikou.domain.preferences.LibraryPreferences
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
@@ -24,7 +25,16 @@ import kotlinx.coroutines.withContext
 class LibraryUpdateScheduler(
     private val context: Context,
     private val libraryPreferences: LibraryPreferences,
+    private val startMode: StartMode,
 ) {
+
+    /**
+     * True in a process started without extensions ([StartMode]): every entry of an extension's
+     * source would fail as not installed and fill the error list, so [startNow] starts nothing and
+     * a run already waiting asks to be retried, which leaves it to the next start.
+     */
+    val isPaused: Boolean
+        get() = startMode.withoutExtensions
 
     private val workManager: WorkManager
         get() = WorkManager.getInstance(context)
@@ -35,8 +45,10 @@ class LibraryUpdateScheduler(
     }
 
     /**
-     * Enqueues a manual run. Returns false when a run is already going, which is when the KEEP
-     * policy would silently drop the request.
+     * Enqueues a manual run. Returns false when a run is already going, and while runs are
+     * [isPaused]. A manual run that is waiting, not going, is replaced: one that a start without
+     * extensions sent back waits out its backoff after the restart, and keeping it would drop this
+     * request while reporting it started.
      *
      * [mangaIds], when given, are the entries to update in place of the categories, at most
      * [LibraryUpdateWorker.MAX_MANGA_IDS] of them: the ids travel in the request's input data,
@@ -50,7 +62,7 @@ class LibraryUpdateScheduler(
         require(mangaIds == null || mangaIds.size <= LibraryUpdateWorker.MAX_MANGA_IDS) {
             "${mangaIds?.size} entries are more than one run's input can name"
         }
-        if (isAnyRunRunning()) return false
+        if (isPaused || isAnyRunRunning()) return false
 
         val input = workDataOf(
             LibraryUpdateWorker.KEY_CATEGORY to (categoryId ?: LibraryUpdateWorker.CATEGORY_ALL),
@@ -62,7 +74,7 @@ class LibraryUpdateScheduler(
             .addTag(LibraryUpdateWorker.WORK_NAME_MANUAL)
             .setInputData(input)
             .build()
-        workManager.enqueueUniqueWork(LibraryUpdateWorker.WORK_NAME_MANUAL, ExistingWorkPolicy.KEEP, request)
+        workManager.enqueueUniqueWork(LibraryUpdateWorker.WORK_NAME_MANUAL, ExistingWorkPolicy.REPLACE, request)
         return true
     }
 

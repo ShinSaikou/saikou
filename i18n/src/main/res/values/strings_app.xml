@@ -20,6 +20,7 @@
     <string name="ext_load_error_instantiation_failed">The entry point failed to start</string>
     <string name="ext_load_error_unknown_source_type">The entry point is of an unknown type</string>
     <string name="ext_load_error_injekt_not_ready">Loaded before the app finished starting</string>
+    <string name="ext_load_error_extensions_off">Not loaded: extensions are off until Saikou restarts</string>
 
     <string name="error_no_storage_location">No place to save the picture</string>
     <string name="error_page_not_ready">The page has not finished loading</string>

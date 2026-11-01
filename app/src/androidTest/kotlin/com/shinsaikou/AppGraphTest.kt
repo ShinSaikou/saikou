@@ -35,6 +35,7 @@ import androidx.work.NetworkType
 import androidx.work.WorkManager
 import com.shinsaikou.backup.export.BackupExportWorker
 import com.shinsaikou.backup.importer.BackupImportWorker
+import com.shinsaikou.core.common.crash.StartMode
 import com.shinsaikou.core.common.oauth.Pkce
 import com.shinsaikou.data.sync.SyncStoreImpl
 import com.shinsaikou.data.sync.SyncStoreSnapshotImpl
@@ -1056,7 +1057,7 @@ class AppGraphTest {
      */
     @Test
     fun theGraphFactoryBuildsAnEquivalentGraph() {
-        val fresh = createGraphFactory<AppGraph.Factory>().create(app)
+        val fresh = createGraphFactory<AppGraph.Factory>().create(app, StartMode.NORMAL)
 
         assertEquals(graph.viewModelProviders.keys, fresh.viewModelProviders.keys)
         assertEquals(graph.assistedFactoryProviders.keys, fresh.assistedFactoryProviders.keys)

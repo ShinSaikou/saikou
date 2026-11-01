@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shinsaikou.core.common.coroutines.Dispatchers
 import com.shinsaikou.core.common.crash.CrashLog
+import com.shinsaikou.core.common.crash.StartMode
 import com.shinsaikou.core.common.network.CloudflareSolveCoordinator
 import com.shinsaikou.core.common.network.CloudflareSolveCoordinator.InFlightSolve
 import com.shinsaikou.core.common.preferences.BasePreferences
@@ -44,6 +45,8 @@ data class MainUiState(
     val crashLogPath: String? = null,
     /** Every browser check running now, keyed by host. The banner above the tabs reads it. */
     val solves: Map<String, InFlightSolve> = emptyMap(),
+    /** This process started without extensions, from the crash screen; a banner says so until a restart. */
+    val extensionsOff: Boolean = false,
 )
 
 /**
@@ -68,6 +71,7 @@ class MainViewModel(
     private val dispatchers: Dispatchers,
     uiPreferences: UiPreferences,
     solveCoordinator: CloudflareSolveCoordinator,
+    startMode: StartMode,
 ) : ViewModel() {
 
     private val themeState: Flow<ThemeState> = combine(
@@ -114,8 +118,14 @@ class MainViewModel(
             showCrashBanner = launch.showCrashBanner,
             crashLogPath = launch.crashLogPath,
             solves = solves,
+            extensionsOff = startMode.withoutExtensions,
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MainUiState())
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        // From the first frame, so the banner does not arrive a frame after the screen it sits above.
+        MainUiState(extensionsOff = startMode.withoutExtensions),
+    )
 
     init {
         viewModelScope.launch {

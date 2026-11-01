@@ -1,5 +1,6 @@
 package com.shinsaikou.extensions.source
 
+import com.shinsaikou.core.common.crash.StartMode
 import com.shinsaikou.domain.extension.repository.ExtensionStoreRepository
 import com.shinsaikou.domain.preferences.ExtensionsPreferences
 import com.shinsaikou.extensions.ExtensionManager
@@ -164,6 +165,7 @@ class DefaultSourceManagerTest {
             installer = mockk(),
             preferences = ExtensionsPreferences(InMemoryPreferenceStore()),
             libVersionPolicy = mockk(),
+            startMode = StartMode.NORMAL,
             scope = scope(),
             ioDispatcher = StandardTestDispatcher(testScheduler),
         )

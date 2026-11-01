@@ -42,7 +42,13 @@ class CrashScreenLayoutTest {
         compose.setContent {
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                 SaikouTheme {
-                    CrashScreen(content = CrashScreenContent.Unreadable, onShare = { false }, onRestart = {}, onClose = {})
+                    CrashScreen(
+                        content = CrashScreenContent.Unreadable,
+                        onShare = { false },
+                        onRestart = {},
+                        onStartWithoutExtensions = {},
+                        onClose = {},
+                    )
                 }
             }
         }

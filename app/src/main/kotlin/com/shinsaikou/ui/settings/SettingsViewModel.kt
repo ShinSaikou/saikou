@@ -32,6 +32,7 @@ import com.shinsaikou.downloads.adoption.AdoptionSummaryStore
 import com.shinsaikou.downloads.export.DownloadExportScheduler
 import com.shinsaikou.extensions.ExtensionManager
 import com.shinsaikou.extensions.trust.TrustStore
+import com.shinsaikou.i18n.R
 import com.shinsaikou.libraryupdate.LibraryUpdateScheduler
 import com.shinsaikou.navigation.SettingsSection
 import com.shinsaikou.presentation.core.viewmodel.StateViewModel
@@ -357,11 +358,18 @@ class SettingsViewModel(
     /**
      * Upstream's "Refresh library covers", as `design/plans/phase4-start.md` section 5 decides it: Saikou
      * has no details-only job, so this is a manual library update with details, which also fetches
-     * chapters and feeds auto-download. [onResult] gets false when a run is already going.
+     * chapters and feeds auto-download. [onResult] gets the message to show: started, a run
+     * already going, or runs waiting in a start without extensions.
      */
-    fun refreshLibraryCovers(onResult: (Boolean) -> Unit) {
+    fun refreshLibraryCovers(onResult: (Int) -> Unit) {
         viewModelScope.launch {
-            onResult(libraryUpdateScheduler.startNow(refreshMetadata = true))
+            onResult(
+                when {
+                    libraryUpdateScheduler.startNow(refreshMetadata = true) -> R.string.library_update_started
+                    libraryUpdateScheduler.isPaused -> R.string.library_update_paused
+                    else -> R.string.library_update_already_running
+                },
+            )
         }
     }
 

@@ -337,7 +337,7 @@ class UpdatesViewModel(
             val event = if (libraryUpdateScheduler.startNow(mangaIds = ids)) {
                 Event.Snackbar(R.string.library_update_entries_started)
             } else {
-                Event.Snackbar(R.string.library_update_already_running)
+                Event.Snackbar(notStartedRes())
             }
             eventChannel.send(event)
         }
@@ -345,18 +345,19 @@ class UpdatesViewModel(
 
     /**
      * The manual library update behind the pull gesture. `startNow` answers false when a run is
-     * already going, which is the case the KEEP policy would otherwise swallow silently.
+     * already going, which is the case the KEEP policy would otherwise swallow silently, and in a
+     * start without extensions, where runs wait.
      */
     fun refresh() {
         viewModelScope.launch {
             val started = libraryUpdateScheduler.startNow()
-            eventChannel.send(
-                Event.Snackbar(
-                    if (started) R.string.library_update_started else R.string.library_update_already_running,
-                ),
-            )
+            eventChannel.send(Event.Snackbar(if (started) R.string.library_update_started else notStartedRes()))
         }
     }
+
+    /** Why `startNow` started nothing. */
+    private fun notStartedRes(): Int =
+        if (libraryUpdateScheduler.isPaused) R.string.library_update_paused else R.string.library_update_already_running
 
     /** The toolbar's filter icon. */
     fun showFilterDialog() {

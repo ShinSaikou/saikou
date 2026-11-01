@@ -58,6 +58,7 @@
     <string name="library_update_started">Updating the library</string>
     <string name="library_update_category_started">Updating the category</string>
     <string name="library_update_already_running">A library update is already running</string>
+    <string name="library_update_paused">Update not started: extensions are off until Saikou restarts</string>
     <!-- A manual update over chosen entries: the library selection's Update, or Retry on the update errors. -->
     <string name="library_update_entries_started">Updating the chosen entries</string>
     <string name="library_update_too_many_format">An update can take at most %1$d chosen entries</string>
@@ -778,6 +779,8 @@
     <!-- The crash screen, shown in its own process right after a crash. -->
     <string name="crash_screen_title">Saikou closed unexpectedly</string>
     <string name="crash_screen_text">A crash log was saved on this device. It stays here unless you share it.</string>
+    <string name="crash_start_without_extensions">Start without extensions</string>
+    <string name="extensions_off_banner_text">Extensions are off until Saikou restarts. Library updates and downloads wait until then.</string>
 
     <!-- The banner shown while a site's browser check runs. The host is a runtime argument. -->
     <plurals name="solve_banner_waiting_format">
@@ -1077,6 +1080,7 @@
     <string name="download_queue_waiting_for_network">Waiting for a network connection</string>
     <string name="download_queue_retrying">Network problem: trying again shortly</string>
     <string name="download_queue_storage_full">Stopped: less than 200 MB of storage is free</string>
+    <string name="download_queue_waiting_for_extensions">Waiting until Saikou restarts with extensions</string>
     <string name="download_state_queued">Queued</string>
     <string name="download_state_starting">Starting</string>
     <string name="download_state_progress_format">%1$d of %2$d pages</string>

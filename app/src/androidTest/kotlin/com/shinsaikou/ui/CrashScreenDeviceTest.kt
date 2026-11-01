@@ -14,6 +14,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.shinsaikou.SaikouApp
 import com.shinsaikou.core.common.crash.CrashScreenLauncher
+import com.shinsaikou.core.common.crash.StartMode
 import com.shinsaikou.i18n.R
 import com.shinsaikou.ui.crash.CrashActivity
 import com.shinsaikou.ui.crash.CrashLogProvider
@@ -71,6 +72,8 @@ class CrashScreenDeviceTest {
     /**
      * The screen shows the log from its own process, settles the launch banner as reading a log on
      * the crash log screen does (R80), and Close takes it away and clears the relaunch guard.
+     * Start without extensions is offered beside Restart; tapping it ends the main process, which is
+     * this test's own, so its round is checked by hand on a device.
      */
     @Test
     fun theScreenShowsTheLogFromItsOwnProcessAndCloseLeavesIt() {
@@ -89,6 +92,11 @@ class CrashScreenDeviceTest {
         awaitTrue(SCREEN_TIMEOUT_MILLIS, "showing the log did not settle the banner") {
             !graph.crashLog.hasUnexportedCrash()
         }
+
+        awaitNode(SCREEN_TIMEOUT_MILLIS, "no Start without extensions on the crash screen") {
+            it.hasText(R.string.crash_start_without_extensions)
+        }
+        assertFalse("showing the screen asked for a start without extensions", StartMode.filesOf(context).flag.exists())
 
         clickable(awaitNode(SCREEN_TIMEOUT_MILLIS, "no Close on the crash screen") { it.hasText(R.string.action_close) })
             .performAction(AccessibilityNodeInfo.ACTION_CLICK)

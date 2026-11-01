@@ -31,6 +31,7 @@ import com.shinsaikou.extensions.ExtensionManager
 import com.shinsaikou.extensions.trust.TrustStore
 import com.shinsaikou.extensions.model.AvailableSource
 import com.shinsaikou.extensions.model.Extension
+import com.shinsaikou.i18n.R
 import com.shinsaikou.libraryupdate.LibraryUpdateScheduler
 import com.shinsaikou.navigation.SettingsSection
 import com.shinsaikou.reader.cache.ChapterCache
@@ -394,14 +395,28 @@ class SettingsViewModelTest {
         runTest(testDispatcher) {
             coEvery { libraryUpdateScheduler.startNow(refreshMetadata = true) } returnsMany listOf(true, false)
             val viewModel = viewModel()
-            val results = mutableListOf<Boolean>()
+            val results = mutableListOf<Int>()
 
             viewModel.refreshLibraryCovers { results += it }
             viewModel.refreshLibraryCovers { results += it }
             advanceUntilIdle()
 
-            results shouldBe listOf(true, false)
+            results shouldBe listOf(R.string.library_update_started, R.string.library_update_already_running)
             coVerify(exactly = 2) { libraryUpdateScheduler.startNow(categoryId = null, refreshMetadata = true) }
+        }
+
+    @Test
+    fun `refresh library covers in a start without extensions says updates wait for a restart`() =
+        runTest(testDispatcher) {
+            every { libraryUpdateScheduler.isPaused } returns true
+            coEvery { libraryUpdateScheduler.startNow(refreshMetadata = true) } returns false
+            val viewModel = viewModel()
+            val results = mutableListOf<Int>()
+
+            viewModel.refreshLibraryCovers { results += it }
+            advanceUntilIdle()
+
+            results shouldBe listOf(R.string.library_update_paused)
         }
 
     @Test
