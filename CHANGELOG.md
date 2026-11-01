@@ -7,6 +7,12 @@ release may change behaviour.
 
 ## Unreleased
 
+### Fixed
+
+- On Android 8 and 9, turning pure black off in the dark theme gives the navigation bar back its
+  usual shade at once, instead of leaving it see-through until the screen rotated or the app
+  restarted.
+
 ## 0.1.0 - 2026-11-01
 
 The first public release.

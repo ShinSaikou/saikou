@@ -104,14 +104,21 @@ fun BaseSaikouTheme(
  * `enableEdgeToEdge` before anything is drawn (Android 15 and later force it anyway); this clears
  * both bar colours and turns contrast enforcement off while pure black is showing, so the black
  * content draws all the way through, and restores the enforcement for every other theme.
+ *
+ * Below Android 10 there is no enforcement to restore: the scrim `enableEdgeToEdge` draws there is
+ * the navigation bar's colour itself, so turning pure black off left a transparent bar until
+ * something re-created the activity. The colours the window had before pure black first cleared
+ * them are kept and put back instead.
  */
 @Composable
 private fun PureBlackSystemBars(isDark: Boolean, isPureBlack: Boolean) {
     val view = LocalView.current
     if (view.isInEditMode) return
     val window = view.context.findActivity()?.window ?: return
+    // Read in the first composition, before the SideEffect below has ever run on this window.
+    val ownColors = remember(window) { window.barColors() }
     SideEffect {
-        window.setTransparentBars(isPureBlack)
+        window.setTransparentBars(isPureBlack, ownColors)
         WindowInsetsControllerCompat(window, view).apply {
             isAppearanceLightStatusBars = !isDark
             isAppearanceLightNavigationBars = !isDark
@@ -119,16 +126,23 @@ private fun PureBlackSystemBars(isDark: Boolean, isPureBlack: Boolean) {
     }
 }
 
+/** A window's status and navigation bar colours, as the platform draws them below Android 15. */
+private class BarColors(val status: Int, val navigation: Int)
+
 @Suppress("DEPRECATION")
-private fun Window.setTransparentBars(transparent: Boolean) {
+private fun Window.barColors() = BarColors(status = statusBarColor, navigation = navigationBarColor)
+
+/** Clears the bars for pure black, or puts back [own], the colours the window had before. */
+@Suppress("DEPRECATION")
+private fun Window.setTransparentBars(transparent: Boolean, own: BarColors) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         // True is the platform default: a scrim so the buttons stay legible over light content.
         isNavigationBarContrastEnforced = !transparent
     }
     // No-ops from API 35 on, where the platform always draws the bars transparent.
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM && transparent) {
-        statusBarColor = AndroidColor.TRANSPARENT
-        navigationBarColor = AndroidColor.TRANSPARENT
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+        statusBarColor = if (transparent) AndroidColor.TRANSPARENT else own.status
+        navigationBarColor = if (transparent) AndroidColor.TRANSPARENT else own.navigation
     }
 }
 

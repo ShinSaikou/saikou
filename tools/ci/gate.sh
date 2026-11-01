@@ -413,6 +413,7 @@ DEVICE_CLASSES_APP=(
     com.shinsaikou.ui.CrashLogShareTest
     com.shinsaikou.ui.CrashScreenDeviceTest
     com.shinsaikou.ui.MainActivitySmokeTest
+    com.shinsaikou.ui.PureBlackBarsTest
     com.shinsaikou.ui.SearchFieldTypingTest
     com.shinsaikou.ui.TwoPaneLayoutTest
     com.shinsaikou.ui.backup.ImportReportDeviceTest
