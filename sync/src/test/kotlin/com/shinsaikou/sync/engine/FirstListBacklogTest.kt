@@ -4,6 +4,7 @@ import com.shinsaikou.core.common.coroutines.Dispatchers
 import com.shinsaikou.data.DatabaseTransactionRunner
 import com.shinsaikou.data.chapter.ScanlatorPriorityRepositoryImpl
 import com.shinsaikou.data.download.DownloadManifestRepositoryImpl
+import com.shinsaikou.domain.chapter.ChapterReplacements
 import com.shinsaikou.domain.chapter.interactor.GetExcludedScanlators
 import com.shinsaikou.domain.chapter.interactor.GetScanlatorPriority
 import com.shinsaikou.domain.chapter.interactor.SyncChaptersWithSource
@@ -114,6 +115,7 @@ class FirstListBacklogTest {
         libraryPreferences = libraryPreferences,
         getExcludedScanlators = GetExcludedScanlators(mangas),
         historyRepository = HistoryRepositoryImpl(device.handler),
+        chapterReplacements = ChapterReplacements(chapters, DatabaseTransactionRunner(device.handler)),
     )
 
     private fun libraryUpdate(): FlatLibraryUpdate.Outcome = runBlocking {

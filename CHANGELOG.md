@@ -23,6 +23,9 @@ release may change behaviour.
   scanlator saved with "Disallow non-ASCII filenames" on.
 - Picking a folder to copy downloads from while a copy is already running no longer keeps a
   permanent read permission on that folder; the permission is taken only for a copy that starts.
+- Progress and history in a chapter left open in the reader while a refresh finds it under a new
+  address go to that chapter as the source now lists it, instead of being lost or written to
+  another chapter. A page read just before the refresh is kept too.
 
 ## 0.1.0 - 2026-11-01
 

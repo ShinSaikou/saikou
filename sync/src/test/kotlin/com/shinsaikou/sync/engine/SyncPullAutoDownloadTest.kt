@@ -4,6 +4,7 @@ import com.shinsaikou.data.DatabaseTransactionRunner
 import com.shinsaikou.data.chapter.ScanlatorPriorityRepositoryImpl
 import com.shinsaikou.data.download.DownloadManifestRepositoryImpl
 import com.shinsaikou.data.download.DownloadQueueRepositoryImpl
+import com.shinsaikou.domain.chapter.ChapterReplacements
 import com.shinsaikou.domain.chapter.interactor.GetExcludedScanlators
 import com.shinsaikou.domain.chapter.interactor.GetScanlatorPriority
 import com.shinsaikou.domain.chapter.interactor.SyncChaptersWithSource
@@ -136,6 +137,7 @@ class SyncPullAutoDownloadTest {
             libraryPreferences = LibraryPreferences(InMemoryPreferenceStore()),
             getExcludedScanlators = GetExcludedScanlators(mangas),
             historyRepository = HistoryRepositoryImpl(handler),
+            chapterReplacements = ChapterReplacements(chapters, DatabaseTransactionRunner(handler)),
         ).await(urls.map { ChapterInfo(url = it, name = "Chapter ${it.substringAfterLast('/')}") }, mangas.getMangaById(mangaId))
     }
 

@@ -4,6 +4,7 @@ import com.shinsaikou.core.common.coroutines.Dispatchers
 import com.shinsaikou.data.DatabaseTransactionRunner
 import com.shinsaikou.data.chapter.ScanlatorPriorityRepositoryImpl
 import com.shinsaikou.data.download.DownloadManifestRepositoryImpl
+import com.shinsaikou.domain.chapter.ChapterReplacements
 import com.shinsaikou.domain.chapter.interactor.GetExcludedScanlators
 import com.shinsaikou.domain.chapter.interactor.GetScanlatorPriority
 import com.shinsaikou.domain.chapter.interactor.SyncChaptersWithSource
@@ -137,6 +138,7 @@ class SyncNewEntryBacklogTest {
             libraryPreferences = libraryPreferences,
             getExcludedScanlators = GetExcludedScanlators(mangas),
             historyRepository = HistoryRepositoryImpl(device.handler),
+            chapterReplacements = ChapterReplacements(chapters, DatabaseTransactionRunner(device.handler)),
         )
 
         /** One run of the library update, [automatic] as the worker passes it, with the preferences' defaults. */

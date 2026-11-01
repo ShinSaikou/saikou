@@ -7,6 +7,7 @@ import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import com.shinsaikou.data.AndroidDatabaseHandler
 import com.shinsaikou.data.DatabaseTransactionRunner
 import com.shinsaikou.data.download.DownloadManifestRepositoryImpl
+import com.shinsaikou.domain.chapter.ChapterReplacements
 import com.shinsaikou.domain.chapter.interactor.GetExcludedScanlators
 import com.shinsaikou.domain.chapter.interactor.SetReadStatus
 import com.shinsaikou.domain.chapter.interactor.SyncChaptersWithSource
@@ -186,6 +187,7 @@ internal class MigrationTestEnvironment(val filesDir: File) : AutoCloseable {
             libraryPreferences = libraryPreferences,
             getExcludedScanlators = GetExcludedScanlators(mangaRepository),
             historyRepository = HistoryRepositoryImpl(handler),
+            chapterReplacements = ChapterReplacements(chapterRepository, transactionRunner),
         ),
         fetchInterval = fetchInterval,
         libraryPreferences = libraryPreferences,

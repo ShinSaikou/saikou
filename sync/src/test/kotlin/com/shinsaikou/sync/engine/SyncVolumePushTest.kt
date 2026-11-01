@@ -2,6 +2,7 @@ package com.shinsaikou.sync.engine
 
 import com.shinsaikou.data.DatabaseTransactionRunner
 import com.shinsaikou.data.download.DownloadManifestRepositoryImpl
+import com.shinsaikou.domain.chapter.ChapterReplacements
 import com.shinsaikou.domain.chapter.interactor.GetExcludedScanlators
 import com.shinsaikou.domain.chapter.interactor.SyncChaptersWithSource
 import com.shinsaikou.domain.manga.interactor.UpdateManga
@@ -95,6 +96,7 @@ class SyncVolumePushTest {
             libraryPreferences = LibraryPreferences(InMemoryPreferenceStore()),
             getExcludedScanlators = GetExcludedScanlators(mangas),
             historyRepository = HistoryRepositoryImpl(handler),
+            chapterReplacements = ChapterReplacements(chapters, DatabaseTransactionRunner(handler)),
         )
         entries.forEach { (entry, infos) -> sync.await(infos, mangas.getMangaById(entry.toLong())) }
     }

@@ -1,5 +1,6 @@
 package com.shinsaikou.domain.chapter.interactor
 
+import com.shinsaikou.domain.chapter.ChapterReplacements
 import com.shinsaikou.domain.chapter.VolumeRecognition
 import com.shinsaikou.domain.manga.interactor.UpdateManga
 import com.shinsaikou.domain.database.TransactionRunner
@@ -62,6 +63,10 @@ import tachiyomi.domain.manga.model.Manga
  * A chapter a source lists under a new url, with the number of a row it no longer lists, takes
  * that row's progress and its reading history. The history would otherwise go with the old row: by
  * the delete's cascade, or out of History, which shows live chapters only, for a soft-deleted row.
+ * Both are read in the transaction that removes the row, so a page the reader wrote to it after the
+ * chapters were read is carried too. Where the number is one removed row's and one new chapter's,
+ * a reader still open on the old row writes to the new one from then on ([ChapterReplacements]);
+ * with two on either side, which took whose place is a guess, and the reader is not sent there.
  *
  * A new chapter from a scanlator the owner excluded for the entry is stored but not returned, as
  * upstream v0.20.4's sync leaves it out: it is hidden from the entry's list, so it is not news to
@@ -78,6 +83,7 @@ class SyncChaptersWithSource(
     private val libraryPreferences: LibraryPreferences,
     private val getExcludedScanlators: GetExcludedScanlators,
     private val historyRepository: HistoryRepository,
+    private val chapterReplacements: ChapterReplacements,
 ) {
 
     /** Returns the chapters that are new to the database, not marked read and not from an excluded scanlator. */
@@ -165,6 +171,9 @@ class SyncChaptersWithSource(
             manga.favorite && it > 0L && dbChapters.isEmpty() && deletedByUrl.isEmpty()
         }
         val backlogUrls = mutableSetOf<String>()
+        // The row each new chapter takes its progress from, by the new chapter's url. The progress
+        // itself is read in the transaction.
+        val carriedFrom = mutableMapOf<String, Chapter>()
         // The row each new chapter replaces, by the new chapter's url. Only the first new chapter of
         // a number takes it, so a reading history moves once.
         val replaced = mutableMapOf<String, Chapter>()
@@ -181,12 +190,8 @@ class SyncChaptersWithSource(
                 chapter.copy(dateFetch = backlogFetch ?: now, read = chapter.read || duplicateOfRead)
             } else {
                 if (replaced.values.none { it.id == previous.id }) replaced[chapter.url] = previous
-                chapter.copy(
-                    read = previous.read,
-                    bookmark = previous.bookmark,
-                    lastPageRead = previous.lastPageRead,
-                    dateFetch = previous.dateFetch,
-                )
+                carriedFrom[chapter.url] = previous
+                chapter
             }
         }
 
@@ -200,36 +205,61 @@ class SyncChaptersWithSource(
             return emptyList()
         }
 
-        // The reading history each replacing chapter takes over, by its url.
-        val movedHistory = if (replaced.isEmpty()) emptyMap() else historyToMove(manga.id, replaced)
+        // The replacements a reader open on the old row can follow, by the old url: a number one
+        // removed row and one new chapter share.
+        val removedPerNumber = removed.filter { it.isRecognizedNumber }.groupingBy { it.chapterNumber }.eachCount()
+        val newPerNumber = toInsert.filter { it.isRecognizedNumber }.groupingBy { it.chapterNumber }.eachCount()
+        val successors = carriedFrom.entries
+            .filter { (_, previous) ->
+                removedPerNumber[previous.chapterNumber] == 1 && newPerNumber[previous.chapterNumber] == 1
+            }
+            .associate { (url, previous) -> previous.url to url }
 
-        val inserted = transactionRunner.inTransaction {
-            // A hard-deleted row's history goes with it by the cascade. A soft-deleted row keeps its
-            // own, which would count the reading time twice, so it is removed here.
-            val softDeletedIds = softDeleted.mapTo(HashSet()) { it.id }
-            movedHistory.values
-                .filter { it.chapterId in softDeletedIds }
-                .forEach { historyRepository.resetHistory(it.id) }
-            if (hardDeleted.isNotEmpty()) {
-                chapterRepository.removeChaptersWithIds(hardDeleted.map { it.id })
-            }
-            if (softDeleted.isNotEmpty()) {
-                chapterRepository.softDelete(softDeleted.map { it.id }, now)
-            }
-            val insertedRows = if (toInsert.isNotEmpty()) chapterRepository.addAll(toInsert) else emptyList()
-            for (row in insertedRows) {
-                val history = movedHistory[row.url] ?: continue
-                val readAt = checkNotNull(history.readAt)
-                historyRepository.upsertHistory(HistoryUpdate(row.id, readAt, history.readDuration))
-            }
-            if (changed.isNotEmpty()) {
-                chapterRepository.updateAll(
-                    changed.map {
-                        it.sourceUpdate(clearVolume = it.id in volumeCleared, clearDeletedAt = it.id in restored)
-                    },
-                )
-            }
-            insertedRows
+        // Recorded inside the transaction, so a transaction that does not commit takes them back.
+        var committed = false
+        val inserted = try {
+            transactionRunner.inTransaction {
+                // The replaced rows' progress and history are read here, in the transaction that removes
+                // them. Read with the chapters above, a page the reader wrote to one since was lost.
+                val carried = currentRows(carriedFrom)
+                // The reading history each replacing chapter takes over, by its url.
+                val movedHistory = if (replaced.isEmpty()) emptyMap() else historyToMove(manga.id, replaced)
+                // A hard-deleted row's history goes with it by the cascade. A soft-deleted row keeps its
+                // own, which would count the reading time twice, so it is removed here.
+                val softDeletedIds = softDeleted.mapTo(HashSet()) { it.id }
+                movedHistory.values
+                    .filter { it.chapterId in softDeletedIds }
+                    .forEach { historyRepository.resetHistory(it.id) }
+                if (hardDeleted.isNotEmpty()) {
+                    chapterRepository.removeChaptersWithIds(hardDeleted.map { it.id })
+                }
+                if (softDeleted.isNotEmpty()) {
+                    chapterRepository.softDelete(softDeleted.map { it.id }, now)
+                }
+                val insertedRows = if (toInsert.isNotEmpty()) {
+                    chapterRepository.addAll(
+                        toInsert.map { chapter -> carried[chapter.url]?.let { chapter.carry(it) } ?: chapter },
+                    )
+                } else {
+                    emptyList()
+                }
+                for (row in insertedRows) {
+                    val history = movedHistory[row.url] ?: continue
+                    val readAt = checkNotNull(history.readAt)
+                    historyRepository.upsertHistory(HistoryUpdate(row.id, readAt, history.readDuration))
+                }
+                if (changed.isNotEmpty()) {
+                    chapterRepository.updateAll(
+                        changed.map {
+                            it.sourceUpdate(clearVolume = it.id in volumeCleared, clearDeletedAt = it.id in restored)
+                        },
+                    )
+                }
+                chapterReplacements.record(manga.id, successors)
+                insertedRows
+            }.also { committed = true }
+        } finally {
+            if (!committed) chapterReplacements.forget(manga.id, successors)
         }
 
         if (inserted.isNotEmpty()) {
@@ -242,6 +272,22 @@ class SyncChaptersWithSource(
         val excluded = getExcludedScanlators.await(manga.id)
         return news.filterNot { it.scanlator in excluded }
     }
+
+    /** Each row of [carriedFrom] as it is now, by the same url; as it was read where it is gone. */
+    private suspend fun currentRows(carriedFrom: Map<String, Chapter>): Map<String, Chapter> {
+        if (carriedFrom.isEmpty()) return emptyMap()
+        val current = chapterRepository.getChaptersByIds(carriedFrom.values.map { it.id }.distinct())
+            .associateBy { it.id }
+        return carriedFrom.mapValues { (_, previous) -> current[previous.id] ?: previous }
+    }
+
+    /** This new chapter with [previous]'s progress, and its fetch date, so it stays out of Updates. */
+    private fun Chapter.carry(previous: Chapter) = copy(
+        read = previous.read,
+        bookmark = previous.bookmark,
+        lastPageRead = previous.lastPageRead,
+        dateFetch = previous.dateFetch,
+    )
 
     /** The history of each row in [replaced] that has a read time, keyed by the url replacing it. */
     private suspend fun historyToMove(mangaId: Long, replaced: Map<String, Chapter>): Map<String, History> {

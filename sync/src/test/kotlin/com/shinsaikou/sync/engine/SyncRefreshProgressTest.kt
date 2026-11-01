@@ -2,6 +2,7 @@ package com.shinsaikou.sync.engine
 
 import com.shinsaikou.data.DatabaseTransactionRunner
 import com.shinsaikou.data.download.DownloadManifestRepositoryImpl
+import com.shinsaikou.domain.chapter.ChapterReplacements
 import com.shinsaikou.domain.chapter.interactor.GetExcludedScanlators
 import com.shinsaikou.domain.chapter.interactor.SyncChaptersWithSource
 import com.shinsaikou.domain.database.TransactionRunner
@@ -60,6 +61,7 @@ class SyncRefreshProgressTest {
             libraryPreferences = LibraryPreferences(InMemoryPreferenceStore()),
             getExcludedScanlators = GetExcludedScanlators(mangas),
             historyRepository = HistoryRepositoryImpl(device.handler),
+            chapterReplacements = ChapterReplacements(chapters, real),
         ).await(infos.toList(), mangas.getMangaById(ENTRY))
     }
 

@@ -1,5 +1,6 @@
 package com.shinsaikou.reader.state
 
+import com.shinsaikou.domain.database.TransactionRunner
 import com.shinsaikou.reader.memory.DisplayInfoProvider
 import com.shinsaikou.reader.memory.MemoryInfoProvider
 import com.shinsaikou.reader.pipeline.PageLoader
@@ -170,4 +171,9 @@ class CountingLoader : PageLoader {
     override fun recycle() {
         recycled++
     }
+}
+
+/** No transaction to open: the repositories it stands between are fakes or mocks. */
+object ImmediateTransactionRunner : TransactionRunner {
+    override suspend fun <T> inTransaction(block: suspend () -> T): T = block()
 }

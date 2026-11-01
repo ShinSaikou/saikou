@@ -2,11 +2,13 @@ package com.shinsaikou.reader
 
 import app.cash.turbine.Event
 import app.cash.turbine.test
+import com.shinsaikou.domain.chapter.ChapterReplacements
 import com.shinsaikou.domain.error.ErrorKey
 import com.shinsaikou.domain.preferences.LibraryPreferences
 import com.shinsaikou.domain.preferences.TrackPreferences
 import com.shinsaikou.domain.manga.model.MangaNotFoundException
 import com.shinsaikou.domain.manga.model.ReadingMode
+import com.shinsaikou.reader.state.ImmediateTransactionRunner
 import com.shinsaikou.reader.state.MANGA_ID
 import com.shinsaikou.reader.state.ProgressCommitter
 import com.shinsaikou.reader.state.ReaderEffect
@@ -36,6 +38,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import tachiyomi.core.common.preference.InMemoryPreferenceStore
 import tachiyomi.domain.chapter.interactor.UpdateChapter
+import tachiyomi.domain.chapter.repository.ChapterRepository
 import tachiyomi.domain.history.interactor.UpsertHistory
 import tachiyomi.domain.history.repository.HistoryRepository
 import tachiyomi.domain.manga.interactor.GetManga
@@ -216,6 +219,11 @@ class ReaderViewModelEntryGoneTest {
         trackProgress = mockk(relaxed = true),
         autoDownload = mockk(relaxed = true),
         readChapterCleanup = mockk(relaxed = true),
+        // The chapter's row is still there when the insert's transaction looks it up.
+        chapterReplacements = ChapterReplacements(
+            mockk<ChapterRepository> { coEvery { getChapterById(any()) } answers { chapter(firstArg()) } },
+            ImmediateTransactionRunner,
+        ),
         dispatchers = AppDispatchers(io = testDispatcher, default = testDispatcher, main = testDispatcher),
     )
 

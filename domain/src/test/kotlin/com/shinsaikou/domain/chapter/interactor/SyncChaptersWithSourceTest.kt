@@ -1,5 +1,6 @@
 package com.shinsaikou.domain.chapter.interactor
 
+import com.shinsaikou.domain.chapter.ChapterReplacements
 import com.shinsaikou.domain.manga.interactor.UpdateManga
 import com.shinsaikou.domain.database.TransactionRunner
 import com.shinsaikou.domain.download.model.DownloadManifestEntry
@@ -42,7 +43,12 @@ class SyncChaptersWithSourceTest {
     private lateinit var updateManga: UpdateManga
     private lateinit var manifest: DownloadManifestRepository
     private lateinit var libraryPreferences: LibraryPreferences
+    private lateinit var replacements: ChapterReplacements
+    private var failCommit = false
     private lateinit var sync: SyncChaptersWithSource
+
+    /** Run as the refresh's transaction begins, after its reads: what the reader writes in between. */
+    private var beforeTransaction: suspend () -> Unit = {}
 
     /** The scanlators the owner excluded for [manga]. */
     private var excludedScanlators = emptySet<String>()
@@ -59,16 +65,23 @@ class SyncChaptersWithSourceTest {
         updateManga = mockk(relaxed = true)
         manifest = mockk { coEvery { getByMangaId(any()) } returns emptyList() }
         libraryPreferences = LibraryPreferences(InMemoryPreferenceStore())
+        replacements = ChapterReplacements(repository, ImmediateTransactionRunner)
         sync = SyncChaptersWithSource(
             chapterRepository = repository,
             shouldUpdateDbChapter = ShouldUpdateDbChapter(),
             updateManga = updateManga,
             getChaptersByMangaId = GetChaptersByMangaId(repository),
-            transactionRunner = ImmediateTransactionRunner,
+            transactionRunner = object : TransactionRunner {
+                override suspend fun <T> inTransaction(block: suspend () -> T): T {
+                    beforeTransaction()
+                    return block().also { if (failCommit) throw IllegalStateException("fixture: the commit failed") }
+                }
+            },
             downloadManifestRepository = manifest,
             libraryPreferences = libraryPreferences,
             getExcludedScanlators = mockk { coEvery { await(manga.id) } answers { excludedScanlators } },
             historyRepository = historyRepository,
+            chapterReplacements = replacements,
         )
     }
 
@@ -264,6 +277,127 @@ class SyncChaptersWithSourceTest {
         sync.await(listOf(info("/a", "Chapter 1"), info("/b", "Chapter 1")), manga)
 
         coVerify(exactly = 1) { historyRepository.upsertHistory(any()) }
+    }
+
+    /**
+     * The progress and the history to carry are read in the transaction that removes the old row.
+     * Read with the chapters, the page and the history row the reader wrote in between were lost.
+     */
+    @Test
+    fun `a page and a history row written to the replaced row after the read are carried`() = runTest {
+        repository.seed(stored("/old", "Chapter 1", lastPageRead = 2L))
+        histories = listOf(History(id = 9L, chapterId = 1L, readAt = Date(500L), readDuration = 60_000L))
+        beforeTransaction = {
+            repository.stored.replaceAll { if (it.id == 1L) it.copy(read = true, lastPageRead = 7L) else it }
+            histories = listOf(History(id = 9L, chapterId = 1L, readAt = Date(900L), readDuration = 90_000L))
+        }
+
+        sync.await(listOf(info("/new", "Chapter 1")), manga)
+
+        val replacement = repository.stored.single { it.url == "/new" }
+        replacement.read shouldBe true
+        replacement.lastPageRead shouldBe 7L
+        coVerify(exactly = 1) { historyRepository.upsertHistory(HistoryUpdate(replacement.id, Date(900L), 90_000L)) }
+    }
+
+    @Test
+    fun `a reader open on a replaced chapter writes to the chapter that replaced it`() = runTest {
+        val old = stored("/old", "Chapter 1")
+        repository.seed(old)
+        val follower = replacements.follow()
+
+        sync.await(listOf(info("/new", "Chapter 1")), manga)
+
+        follower.write(old) { it } shouldBe repository.stored.single { it.url == "/new" }.id
+    }
+
+    /** A soft-deleted row is still there, but its history moved: the replacement takes the writes. */
+    @Test
+    fun `a reader open on a replaced chapter with a download writes to the chapter that replaced it`() = runTest {
+        val old = stored("/1", "Chapter 1")
+        repository.seed(old)
+        coEvery { manifest.getByMangaId(1L) } returns listOf(downloaded(chapterId = 1L))
+        val follower = replacements.follow()
+
+        sync.await(listOf(info("/new", "Chapter 1")), manga)
+
+        repository.softDeleted shouldBe listOf(1L)
+        follower.write(old) { it } shouldBe repository.stored.single { it.url == "/new" }.id
+    }
+
+    /** As before: the soft-deleted row keeps the progress for a relisting. */
+    @Test
+    fun `a reader open on a soft-deleted chapter nothing replaced keeps writing to it`() = runTest {
+        val gone = stored("/2", "Chapter 2", chapterNumber = 2.0)
+        repository.seed(stored("/1", "Chapter 1"), gone)
+        coEvery { manifest.getByMangaId(1L) } returns listOf(downloaded(chapterId = 2L))
+        val follower = replacements.follow()
+
+        sync.await(listOf(info("/1", "Chapter 1")), manga)
+
+        follower.write(gone) { it } shouldBe 2L
+    }
+
+    /**
+     * With two rows of a number gone, the carry-over takes one of them and the reader of the other
+     * would write over the wrong chapter's progress; with two new chapters of it, the reader's write
+     * would land on one of them by chance. Neither is a replacement the reader is sent to.
+     */
+    @Test
+    fun `a reader is not sent anywhere when two rows of its number left`() = runTest {
+        val first = stored("/11", "Chapter 1")
+        val second = stored("/12", "Chapter 1")
+        repository.seed(first, second)
+        val follower = replacements.follow()
+
+        sync.await(listOf(info("/new", "Chapter 1")), manga)
+
+        follower.write(first) { it }.shouldBeNull()
+        follower.write(second) { it }.shouldBeNull()
+    }
+
+    @Test
+    fun `a reader is not sent anywhere when two chapters of its number came`() = runTest {
+        val old = stored("/1", "Chapter 1")
+        repository.seed(old)
+        val follower = replacements.follow()
+
+        sync.await(listOf(info("/21", "Chapter 1"), info("/22", "Chapter 1")), manga)
+
+        follower.write(old) { it }.shouldBeNull()
+    }
+
+    /**
+     * A refresh whose transaction did not commit left its replacements recorded; a later refresh that
+     * replaced the same row ambiguously then sent the reader to the first one's guess.
+     */
+    @Test
+    fun `a replacement from a refresh that did not commit is forgotten`() = runTest {
+        val old = stored("/old", "Chapter 1")
+        repository.seed(old)
+        val follower = replacements.follow()
+
+        failCommit = true
+        shouldThrow<IllegalStateException> { sync.await(listOf(info("/new", "Chapter 1")), manga) }
+        failCommit = false
+        // What the rollback leaves: the old row alone, as before the refresh.
+        repository.stored.clear()
+        repository.seed(old)
+        sync.await(listOf(info("/new", "Chapter 1"), info("/other", "Chapter 1")), manga)
+
+        follower.write(old) { it }.shouldBeNull()
+    }
+
+    @Test
+    fun `a follower closed before the refresh is not told of it`() = runTest {
+        val old = stored("/old", "Chapter 1")
+        repository.seed(old)
+        val follower = replacements.follow()
+        follower.close()
+
+        sync.await(listOf(info("/new", "Chapter 1")), manga)
+
+        follower.write(old) { it }.shouldBeNull()
     }
 
     @Test

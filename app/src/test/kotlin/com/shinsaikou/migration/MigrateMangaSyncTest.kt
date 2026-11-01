@@ -7,6 +7,7 @@ import com.shinsaikou.data.download.DownloadManifestRepositoryImpl
 import com.shinsaikou.data.source.SourceAliasRepositoryImpl
 import com.shinsaikou.data.sync.SyncChangeLogRepositoryImpl
 import com.shinsaikou.data.sync.SyncStoreImpl
+import com.shinsaikou.domain.chapter.ChapterReplacements
 import com.shinsaikou.domain.chapter.interactor.GetExcludedScanlators
 import com.shinsaikou.domain.chapter.interactor.GetScanlatorPriority
 import com.shinsaikou.domain.chapter.interactor.SyncChaptersWithSource
@@ -176,6 +177,10 @@ class MigrateMangaSyncTest {
                     libraryPreferences = libraryPreferences,
                     getExcludedScanlators = GetExcludedScanlators(mangas),
                     historyRepository = HistoryRepositoryImpl(env.handler),
+                    chapterReplacements = ChapterReplacements(
+                        chapterRepository,
+                        DatabaseTransactionRunner(env.handler),
+                    ),
                 ),
                 updateManga = updateManga,
                 fetchInterval = fetchInterval,

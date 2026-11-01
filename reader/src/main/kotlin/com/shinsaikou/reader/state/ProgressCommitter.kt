@@ -1,6 +1,7 @@
 package com.shinsaikou.reader.state
 
 import com.shinsaikou.core.common.coroutines.Dispatchers
+import com.shinsaikou.domain.chapter.ChapterReplacements
 import com.shinsaikou.domain.chapter.interactor.SetReadStatus
 import com.shinsaikou.domain.download.AutoDownload
 import com.shinsaikou.domain.download.ReadChapterCleanup
@@ -44,6 +45,10 @@ import java.util.Date
  * caller's thread before the write moves to the IO dispatcher. That order is what lets
  * [deletePendingChapters] run after the flush a finish asked for first: the flush's write is what
  * stages the chapter just finished.
+ *
+ * The page and the history row go to the row [ChapterReplacements] names, followed from the
+ * committer's creation until its [scope] ends: a refresh while the reader is open can replace the
+ * chapter's row with a new one under a new url, and the old id is then gone or another chapter's.
  */
 class ProgressCommitter @AssistedInject constructor(
     @Assisted private val scope: CoroutineScope,
@@ -56,6 +61,7 @@ class ProgressCommitter @AssistedInject constructor(
     private val trackProgress: TrackProgress,
     private val autoDownload: AutoDownload,
     private val readChapterCleanup: ReadChapterCleanup,
+    chapterReplacements: ChapterReplacements,
     private val dispatchers: Dispatchers,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
@@ -69,6 +75,14 @@ class ProgressCommitter @AssistedInject constructor(
     private var pendingJob: Job? = null
     private var timerStart: Long? = null
     private val writeLock = Mutex()
+
+    /**
+     * Opened with the committer, before the session reads its chapters, so no replacement falls
+     * between the two. Closed with the scope; a write that outlives it still reads what it holds.
+     */
+    private val replacements = chapterReplacements.follow().also { follower ->
+        scope.coroutineContext[Job]?.invokeOnCompletion { follower.close() }
+    }
 
     /**
      * Advances the in-memory page index at once, then schedules the write. A newer index replaces a
@@ -150,10 +164,11 @@ class ProgressCommitter @AssistedInject constructor(
      * Closes out the History row for [chapter] and resets the timer. A duration of zero is still
      * written: the `last_read` update is what the History screen orders by.
      *
-     * A failure is logged (phase 4 unit BF). The row is an insert whose `chapter_id` must name a
-     * chapter, and a chapter change launches this apart from the pending page write [discard]
-     * drops, so an entry deleted from a second window between the launch and the insert fails the
-     * foreign key here; uncaught, it would end the process.
+     * A failure is logged (phase 4 unit BF): uncaught, it would end the process. The row is an
+     * insert whose `chapter_id` must name a chapter, and a chapter change launches this apart from
+     * the pending page write [discard] drops, so an entry deleted from a second window could fail
+     * the foreign key here. The insert runs in one transaction with the lookup of its row
+     * ([ChapterReplacements]), and a chapter gone with nothing in its place gets no row.
      */
     suspend fun commitHistory(chapter: ReaderChapter) {
         val start = timerStart
@@ -161,13 +176,15 @@ class ProgressCommitter @AssistedInject constructor(
         timerStart = null
         withContext(dispatchers.io + NonCancellable) {
             try {
-                upsertHistory.await(
-                    HistoryUpdate(
-                        chapterId = chapter.chapter.id,
-                        readAt = Date(now),
-                        sessionReadDuration = start?.let { now - it } ?: 0L,
-                    ),
-                )
+                replacements.write(chapter.chapter) { chapterId ->
+                    upsertHistory.await(
+                        HistoryUpdate(
+                            chapterId = chapterId,
+                            readAt = Date(now),
+                            sessionReadDuration = start?.let { now - it } ?: 0L,
+                        ),
+                    )
+                }
             } catch (e: Exception) {
                 logcat(LogPriority.WARN, e) { "Could not write the history row of chapter ${chapter.chapter.id}" }
             }
@@ -211,16 +228,26 @@ class ProgressCommitter @AssistedInject constructor(
         if (next.chapterFinished) {
             // The reader never writes read = false; a chapter re-read keeps its flag.
             chapter.chapter = chapter.chapter.copy(read = true)
-            updateChapter.await(
-                ChapterUpdate(id = chapter.chapter.id, read = true, lastPageRead = next.pageIndex.toLong()),
-            )
+            writeProgress(chapter) { id -> ChapterUpdate(id = id, read = true, lastPageRead = next.pageIndex.toLong()) }
             recordTrackProgress(chapter)
             stageReadChapter(chapter, next.readBack)
             markDuplicatesRead(chapter)
         } else {
-            updateChapter.await(
-                ChapterUpdate(id = chapter.chapter.id, lastPageRead = next.pageIndex.toLong()),
-            )
+            writeProgress(chapter) { id -> ChapterUpdate(id = id, lastPageRead = next.pageIndex.toLong()) }
+        }
+    }
+
+    /**
+     * The update to the row [ChapterReplacements] finds for [chapter], none when it finds no row.
+     * [UpdateChapter] logs a failed write; a failed lookup is logged here.
+     */
+    private suspend fun writeProgress(chapter: ReaderChapter, update: (chapterId: Long) -> ChapterUpdate) {
+        try {
+            replacements.write(chapter.chapter) { id -> updateChapter.await(update(id)) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logcat(LogPriority.WARN, e) { "Could not write the progress of chapter ${chapter.chapter.id}" }
         }
     }
 

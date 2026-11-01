@@ -1,6 +1,7 @@
 package com.shinsaikou.reader.state
 
 import com.shinsaikou.core.common.coroutines.Dispatchers
+import com.shinsaikou.domain.chapter.ChapterReplacements
 import com.shinsaikou.domain.chapter.interactor.SetReadStatus
 import com.shinsaikou.domain.download.AutoDownload
 import com.shinsaikou.domain.download.ReadChapterCleanup
@@ -51,6 +52,11 @@ class ProgressCommitterTest {
     private val autoDownload = RecordingAutoDownload()
     private val cleanup = RecordingReadChapterCleanup()
     private var now = 1_000L
+
+    init {
+        // Each chapter's own row, still there, so its writes go to its own id.
+        coEvery { chapterRepository.getChapterById(any()) } answers { chapter(firstArg()) }
+    }
 
     // ---- The debounce ----
 
@@ -494,6 +500,7 @@ class ProgressCommitterTest {
             trackProgress = trackProgress,
             autoDownload = autoDownload,
             readChapterCleanup = cleanup,
+            chapterReplacements = ChapterReplacements(chapterRepository, ImmediateTransactionRunner),
             dispatchers = Dispatchers(io = dispatcher, default = dispatcher, main = dispatcher),
             clock = { now },
         )

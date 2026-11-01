@@ -5,6 +5,7 @@ import app.cash.sqldelight.async.coroutines.awaitAsOne
 import com.shinsaikou.data.AndroidDatabaseHandler
 import com.shinsaikou.data.DatabaseTransactionRunner
 import com.shinsaikou.di.AppGraph
+import com.shinsaikou.domain.chapter.ChapterReplacements
 import com.shinsaikou.domain.chapter.interactor.GetExcludedScanlators
 import com.shinsaikou.domain.chapter.interactor.SyncChaptersWithSource
 import com.shinsaikou.libraryupdate.FlatLibraryUpdate
@@ -129,6 +130,10 @@ object SyncPairBacklog {
                 libraryPreferences = graph.libraryPreferences,
                 getExcludedScanlators = GetExcludedScanlators(graph.mangaRepository),
                 historyRepository = graph.historyRepository,
+                chapterReplacements = ChapterReplacements(
+                    graph.chapterRepository,
+                    DatabaseTransactionRunner(AndroidDatabaseHandler(graph.database)),
+                ),
             ),
             updateManga = graph.updateManga,
             fetchInterval = FetchInterval(getChaptersByMangaId),
