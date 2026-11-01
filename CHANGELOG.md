@@ -12,6 +12,9 @@ release may change behaviour.
 - On Android 8 and 9, turning pure black off in the dark theme gives the navigation bar back its
   usual shade at once, instead of leaving it see-through until the screen rotated or the app
   restarted.
+- A failed download in the download queue shows the first line of the source's error, cut to 200
+  characters, as the library update error list does, instead of the whole text (sometimes an
+  entire error page).
 
 ## 0.1.0 - 2026-11-01
 

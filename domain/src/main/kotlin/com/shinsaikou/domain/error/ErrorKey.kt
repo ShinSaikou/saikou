@@ -228,9 +228,9 @@ enum class ErrorKey(val id: String) {
 
         /**
          * A [GENERIC] failure's own message, as a screen shows it and the library update error list
-         * keeps it: the first line that is not blank, trimmed and cut to [MESSAGE_MAX_LENGTH], or null
-         * when there is none. An extension's message is often the only thing that says why (a sign-in
-         * it needs, a rate limit), but it can also be a whole error page.
+         * and the download queue keep it: the first line that is not blank, trimmed and cut to
+         * [MESSAGE_MAX_LENGTH], or null when there is none. An extension's message is often the only
+         * thing that says why (a sign-in it needs, a rate limit), but it can also be a whole error page.
          */
         fun message(error: Throwable): String? {
             val line = error.message?.lineSequence()?.map { it.trim() }?.firstOrNull { it.isNotEmpty() } ?: return null

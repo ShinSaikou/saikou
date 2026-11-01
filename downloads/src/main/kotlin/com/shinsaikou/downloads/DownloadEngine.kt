@@ -537,13 +537,17 @@ class DownloadEngine(
     /**
      * What a failed row keeps: a named failure whose text needs no detail as its [ErrorKey.id], so
      * the queue screen names it in the reader's language when it is shown (ruling R67 rule 3), and
-     * anything else as its message, as before. An [HttpException][eu.kanade.tachiyomi.network.HttpException]
-     * keeps "HTTP error 503", since one column cannot hold the key and its status code. A row
-     * written before this stored text and still reads as it was (R67 rule 5, no migration).
+     * anything else as its message, as [ErrorKey.message] cuts it for a snackbar and the library
+     * update error list: a source's message can be a whole error page. An
+     * [HttpException] keeps "HTTP error 503", since one column cannot hold the key and its status
+     * code, and so does one wrapped in another failure, whose own message may not name the code. A
+     * row written before this stored text and still reads as it was (R67 rule 5, no migration).
      */
     private fun storedError(e: Throwable): String? {
         val key = ErrorKey.of(e)
-        return if (key != ErrorKey.GENERIC && ErrorKey.detail(e) == null) key.id else e.message ?: e::class.simpleName
+        if (key != ErrorKey.GENERIC && ErrorKey.detail(e) == null) return key.id
+        ErrorKey.httpCode(e)?.let { return HttpException(it).message }
+        return ErrorKey.message(e) ?: e::class.simpleName
     }
 
     private fun now(): Long = Clock.System.now().toEpochMilliseconds()

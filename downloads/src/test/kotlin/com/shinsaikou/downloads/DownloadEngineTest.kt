@@ -440,6 +440,36 @@ class DownloadEngineTest : DownloadTestBase() {
     }
 
     @Test
+    fun `an HTTP status wrapped in another failure keeps the status in its row, not the wrapper's text`() = runTest {
+        source.onImage = { page, _ ->
+            if (page.imageUrl == FakeSource.imageUrl("/ch/10", 1)) throw IOException("Request failed", HttpException(503))
+        }
+        queueRepository.enqueue(chapterId = 10, mangaId = 1, now = 0)
+
+        newEngine().run() shouldBe DownloadEngine.Outcome(completed = 0, failed = 1)
+
+        queueRepository.getByChapterId(10).shouldNotBeNull().errorMessage shouldBe "HTTP error 503"
+    }
+
+    /** A source's message can be a whole error page; the row keeps what a snackbar shows of it. */
+    @Test
+    fun `a page that keeps failing for another reason keeps its message's first line, cut to the cap`() = runTest {
+        val errorPage = "<html>" + "x".repeat(5_000)
+        source.onImage = { page, _ ->
+            if (page.imageUrl == FakeSource.imageUrl("/ch/10", 1)) {
+                throw IllegalStateException("\n  $errorPage  \n<body>the rest of the page</body>")
+            }
+        }
+        queueRepository.enqueue(chapterId = 10, mangaId = 1, now = 0)
+
+        newEngine().run() shouldBe DownloadEngine.Outcome(completed = 0, failed = 1)
+
+        val failed = queueRepository.getByChapterId(10).shouldNotBeNull()
+        failed.state shouldBe DownloadState.ERROR
+        failed.errorMessage shouldBe "<html>" + "x".repeat(ErrorKey.MESSAGE_MAX_LENGTH - 7) + "\u2026"
+    }
+
+    @Test
     fun `a chapter whose source is not installed stores the key, not the exception's message`() = runTest {
         insertManga(id = 2, sourceId = SOURCE_ID + 1)
         insertChapter(id = 20, mangaId = 2)
