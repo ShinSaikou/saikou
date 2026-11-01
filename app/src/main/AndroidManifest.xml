@@ -49,8 +49,9 @@
 
               Contract 08 section 6.5 lists BROWSABLE on both of these filters. It is left off here,
               and that is deliberate: BROWSABLE is what makes a filter reachable from a web page,
-              and this app publishes exactly one entry point on purpose (see REMAINING.md section 5
-              group 7 item 16, where an added library published a second one). Both filters still
+              and MainActivity takes none on purpose (see REMAINING.md section 5 group 7 item 16,
+              where an added library published a second one). The app's one web-reachable entry is
+              SignInReturnActivity below, which reads nothing from its intent. Both filters still
               answer an explicit VIEW from a file manager, from another app, and from `adb shell am
               start`, which is every way the owner actually reaches them.
             -->
@@ -83,6 +84,30 @@
             <meta-data
                 android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts" />
+        </activity>
+
+        <!--
+          saikou://sign-in-return: the "Return to Saikou" button on the page the browser shows once
+          a sign-in's callback has arrived. BROWSABLE, so it is the one entry point a web page can
+          reach, and for that reason it reads nothing from its intent: it brings back the activity
+          the sign-in started from and finishes undrawn. Its own empty task affinity keeps it out of
+          that activity's task, so the activity is not stacked a second time over it.
+        -->
+        <activity
+            android:name=".signin.SignInReturnActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="sign-in-return"
+                    android:scheme="saikou" />
+            </intent-filter>
         </activity>
 
         <!--

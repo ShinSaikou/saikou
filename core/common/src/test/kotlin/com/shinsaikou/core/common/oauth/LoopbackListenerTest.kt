@@ -383,6 +383,50 @@ class LoopbackListenerTest {
     }
 
     @Test
+    fun `a return link is a button under the message on every page, escaped, and there is none without one`() {
+        runBlocking {
+            val withLink = LoopbackPages(
+                title = "Saikou",
+                signedIn = "Signed in, switch back",
+                notSignedIn = "Not signed in",
+                returnLink = LoopbackPages.ReturnLink(
+                    url = "saikou://sign-in-return?a=1&b=\"2\"",
+                    label = "Return to <Saikou>",
+                ),
+            )
+            val button = "<p><a class=\"return\" href=\"saikou://sign-in-return?a=1&amp;b=&quot;2&quot;\">" +
+                "Return to &lt;Saikou&gt;</a></p>"
+
+            val plain = open()
+            val plainResult = waiting(plain)
+            get(plain.port, "/callback?state=${plain.state}&code=abc") shouldNotContain "class=\"return\""
+            withTimeout(5.seconds) { plainResult.await() }.getOrThrow()
+
+            val signedIn = LoopbackListener.open(0, withLink).also(opened::add)
+            val signedInResult = waiting(signedIn)
+            val signedInPage = get(signedIn.port, "/callback?state=${signedIn.state}&code=abc")
+            signedInPage shouldContain "<p>Signed in, switch back</p>$button"
+            signedInPage shouldContain "<meta name=\"color-scheme\" content=\"light dark\">"
+            withTimeout(5.seconds) { signedInResult.await() }.getOrThrow()
+
+            val denied = LoopbackListener.open(0, withLink).also(opened::add)
+            val deniedResult = waiting(denied)
+            get(denied.port, "/callback?state=${denied.state}&error=access_denied") shouldContain
+                "<p>Not signed in</p>$button"
+            (withTimeout(5.seconds) { deniedResult.await() }.exceptionOrNull() is LoopbackDeniedException) shouldBe true
+
+            val token = LoopbackListener.open(0, withLink, response = LoopbackResponse.TOKEN).also(opened::add)
+            val tokenResult = waiting(token)
+            val fragmentPage = get(token.port, "/callback")
+            fragmentPage shouldContain "<div id=\"m\" hidden><p>Not signed in</p>$button</div>"
+            fragmentPage shouldContain "<noscript><p>Not signed in</p>$button</noscript>"
+            get(token.port, "/callback?access_token=t&state=${token.state}") shouldContain
+                "<p>Signed in, switch back</p>$button"
+            withTimeout(5.seconds) { tokenResult.await() }.getOrThrow()
+        }
+    }
+
+    @Test
     fun `each listener draws its own state`() {
         val states = List(5) { open().state }
         states.toSet().size shouldBe 5

@@ -54,6 +54,7 @@
     <string name="notification_sign_in_done">Signed in, tap to return</string>
     <string name="sign_in_page_signed_in">Signed in. Switch back to Saikou to finish.</string>
     <string name="sign_in_page_not_signed_in">Sign-in did not finish. Switch back to Saikou.</string>
+    <string name="sign_in_page_return">Return to Saikou</string>
 
     <!-- A tracker's notice: a background push met a sign-in the service no longer accepts. It opens Settings > Tracking, and its action is tracking_sign_in_again. -->
     <string name="channel_tracking">Tracking</string>

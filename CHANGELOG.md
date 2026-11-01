@@ -13,6 +13,8 @@ release may change behaviour.
   start. Until Saikou restarts no extension runs, library updates and downloads wait, and a banner
   says so with a Restart button. The Extensions tab still lists each extension, so the one at
   fault can be uninstalled or updated.
+- A **Return to Saikou** button on the page the browser shows after you sign in to Google Drive,
+  MyAnimeList or AniList, so you no longer have to switch back by hand.
 
 ### Fixed
 

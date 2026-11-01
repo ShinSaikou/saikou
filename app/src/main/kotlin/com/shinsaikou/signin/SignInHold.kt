@@ -37,6 +37,15 @@ class SignInHold(private val workManager: Lazy<WorkManager>) {
     private val current = AtomicReference<Hold?>(null)
 
     /**
+     * The return intent of the latest [start], kept after its hold ends, since the owner taps the
+     * page's "Return to Saikou" after the callback has arrived ([SignInReturnActivity]). Null until a
+     * sign-in starts in this process.
+     */
+    @Volatile
+    var lastReturnIntent: Intent? = null
+        private set
+
+    /**
      * Holds the foreground until [end] is called with the returned [Handle]; [returnIntent] is the
      * activity the notifications bring the owner back to. [Handle.inForeground] says whether the
      * worker entered the foreground within [ENTER_TIMEOUT]: false when the platform refused it or
@@ -45,6 +54,7 @@ class SignInHold(private val workManager: Lazy<WorkManager>) {
      */
     suspend fun start(returnIntent: Intent): Handle {
         val hold = Hold(returnIntent)
+        lastReturnIntent = returnIntent
         current.getAndSet(hold)?.ended?.complete(false)
         var handle: Handle? = null
         try {

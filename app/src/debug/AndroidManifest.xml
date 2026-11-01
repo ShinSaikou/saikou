@@ -2,8 +2,9 @@
 <!--
   The debug build's own entry point for the one Google round trip (phase 3 unit O, owner item 2):
   a second launcher icon, in the debug build type only. Its own task, so the sign-in notifications
-  bring the owner back to it and not to the library. No BROWSABLE category (R30): the browser comes
-  back through the loopback listener, never through an intent.
+  bring the owner back to it and not to the library. No BROWSABLE category (R30): the sign-in comes
+  back through the loopback listener, never through an intent, and the page's "Return to Saikou"
+  button goes to SignInReturnActivity, which brings this activity back the way the notifications do.
 
   It keeps LAUNCHER because owner item 2's phone steps open "Saikou Google test" from the app drawer
   (O's report, section 9), so a debug build has two MAIN and LAUNCHER entries and anything that

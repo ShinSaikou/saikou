@@ -173,6 +173,26 @@ class SignInHoldTest {
     }
 
     /**
+     * The page's "Return to Saikou" is tapped after the callback, so the latest start's return intent
+     * outlives its hold, and a later start replaces it.
+     */
+    @Test
+    fun `the latest start's return intent is kept after its hold ends`() = runTest {
+        workManagerRunsTheWorker()
+        hold.lastReturnIntent shouldBe null
+
+        val first = hold.start(returnIntent)
+        hold.end(first, signedIn = true)
+        runs.single().await()
+        hold.active() shouldBe null
+        hold.lastReturnIntent shouldBe returnIntent
+
+        val later = mockk<Intent>()
+        hold.end(hold.start(later), signedIn = false)
+        hold.lastReturnIntent shouldBe later
+    }
+
+    /**
      * Fix round 1 item 2: sign-in A, abandoned in the browser, then sign-in B. A's end arrives after
      * B's start, as signed in or not; B's hold and B's worker are untouched, and only B's own end
      * ends them.

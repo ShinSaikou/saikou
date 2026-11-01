@@ -7,6 +7,7 @@ import com.shinsaikou.core.common.oauth.LoopbackListener
 import com.shinsaikou.core.common.oauth.LoopbackPages
 import com.shinsaikou.core.common.oauth.LoopbackResponse
 import com.shinsaikou.i18n.R
+import com.shinsaikou.ui.main.MainIntents
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
@@ -103,11 +104,18 @@ class BrowserSignIn(private val context: Context, private val hold: SignInHold, 
 
     companion object {
 
-        /** The page the browser shows once the callback has arrived, in the app's own words. */
+        /**
+         * The page the browser shows once the callback has arrived, in the app's own words, with a
+         * button that opens [SignInReturnActivity].
+         */
         fun pages(context: Context): LoopbackPages = LoopbackPages(
             title = context.getString(R.string.app_name),
             signedIn = context.getString(R.string.sign_in_page_signed_in),
             notSignedIn = context.getString(R.string.sign_in_page_not_signed_in),
+            returnLink = LoopbackPages.ReturnLink(
+                url = "${MainIntents.SCHEME}://${SignInReturnActivity.HOST}",
+                label = context.getString(R.string.sign_in_page_return),
+            ),
         )
     }
 }

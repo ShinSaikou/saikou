@@ -43,8 +43,9 @@ import kotlin.time.TimeSource
  * the timeout, counted from [open], passes ([LoopbackTimeoutException]). Each connection is served on its own, since a
  * browser opens speculative connections it may never use:
  *
- * - a request with the expected `state` gets the page that tells the owner to switch back, and ends
- *   the wait: with its `code` ([LoopbackCallback]), or with its `error` ([LoopbackDeniedException]);
+ * - a request with the expected `state` gets the page that tells the owner to switch back, with a
+ *   button that does so when [LoopbackPages.returnLink] is set, and ends the wait: with its `code`
+ *   ([LoopbackCallback]), or with its `error` ([LoopbackDeniedException]);
  * - with [LoopbackResponse.TOKEN], a request for [CALLBACK_PATH] with no query at all gets a page
  *   whose script asks for the same path again with the redirect's fragment as its query, since a
  *   browser never sends a fragment; that second request is then read as above, its `access_token`
@@ -187,7 +188,7 @@ class LoopbackListener private constructor(
             is Outcome.Code -> pages.signedIn
             is Outcome.Denied -> pages.notSignedIn
         }
-        output.write(pageResponse(pages.title, page))
+        output.write(pageResponse(pages, page))
         output.flush()
         if (outcome.complete(result)) server.closeQuietly()
     }
@@ -304,18 +305,24 @@ class LoopbackListener private constructor(
             return match.groupValues[2].takeIf { match.groupValues[1] == "GET" }
         }
 
-        private fun pageResponse(title: String, text: String): ByteArray =
-            htmlResponse(title, "<p>${text.escapeHtml()}</p>")
+        private fun pageResponse(pages: LoopbackPages, text: String): ByteArray =
+            htmlResponse(pages.title, messageHtml(pages, text))
+
+        /** [text] as a paragraph, followed by [LoopbackPages.returnLink] as a button when there is one. */
+        private fun messageHtml(pages: LoopbackPages, text: String): String =
+            "<p>${text.escapeHtml()}</p>" + pages.returnLink?.let {
+                "<p><a class=\"return\" href=\"${it.url.escapeHtml()}\">${it.label.escapeHtml()}</a></p>"
+            }.orEmpty()
 
         /**
          * The page an implicit grant's redirect gets: its script asks for [CALLBACK_PATH] again with
          * the fragment as the query, replacing this page in the history. With no fragment, or no
-         * script, it shows [LoopbackPages.notSignedIn].
+         * script, it shows [LoopbackPages.notSignedIn], with the return link if there is one.
          */
         private fun fragmentResponse(pages: LoopbackPages): ByteArray = htmlResponse(
             pages.title,
-            "<p id=\"m\" hidden>${pages.notSignedIn.escapeHtml()}</p>" +
-                "<noscript><p>${pages.notSignedIn.escapeHtml()}</p></noscript>" +
+            "<div id=\"m\" hidden>${messageHtml(pages, pages.notSignedIn)}</div>" +
+                "<noscript>${messageHtml(pages, pages.notSignedIn)}</noscript>" +
                 "<script>var f = location.hash.substring(1); " +
                 "if (f) { location.replace(\"$CALLBACK_PATH?\" + f); } " +
                 "else { document.getElementById(\"m\").hidden = false; }</script>",
@@ -325,7 +332,11 @@ class LoopbackListener private constructor(
             val body = (
                 "<!DOCTYPE html><html><head><meta charset=\"utf-8\">" +
                     "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">" +
-                    "<title>${title.escapeHtml()}</title></head>" +
+                    "<meta name=\"color-scheme\" content=\"light dark\">" +
+                    "<title>${title.escapeHtml()}</title>" +
+                    "<style>a.return { display: inline-block; padding: 0.75em 1.5em; border-radius: 999px; " +
+                    "background: #A82D17; color: #fff; font-weight: 600; text-decoration: none; }</style>" +
+                    "</head>" +
                     "<body style=\"font-family: sans-serif; margin: 2em;\">$bodyHtml</body></html>"
                 ).toByteArray(Charsets.UTF_8)
             val head = "HTTP/1.1 200 OK\r\n" +
@@ -367,9 +378,19 @@ enum class LoopbackResponse(internal val parameter: String) {
 
 /**
  * The texts of the page the browser shows once the callback arrived: [signedIn] with a code,
- * [notSignedIn] with an error. The app supplies them from its string resources.
+ * [notSignedIn] with an error, each followed by [returnLink] as a button when there is one. The app
+ * supplies them from its string resources.
  */
-class LoopbackPages(val title: String, val signedIn: String, val notSignedIn: String)
+class LoopbackPages(
+    val title: String,
+    val signedIn: String,
+    val notSignedIn: String,
+    val returnLink: ReturnLink? = null,
+) {
+
+    /** A link the owner taps to go back to the app, [label] on a button that opens [url]. */
+    class ReturnLink(val url: String, val label: String)
+}
 
 /**
  * The callback that carried the expected state and a [code], with every query parameter it carried

@@ -74,7 +74,10 @@ object MainIntents {
 
     const val EXTRA_MANGA_ID = "com.shinsaikou.extra.MANGA_ID"
 
-    /** The host of `saikou://extension-store?url=...`, the one link the manifest accepts. */
+    /**
+     * The host of `saikou://extension-store?url=...`, the one link this activity accepts. The other
+     * `saikou` link, `saikou://sign-in-return`, goes to `SignInReturnActivity` and never here.
+     */
     const val HOST_EXTENSION_STORE = "extension-store"
 
     /** The scheme of that link. Kept here so the manifest and this mapping cannot drift apart. */
