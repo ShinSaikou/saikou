@@ -66,6 +66,8 @@ import okio.BufferedSource
  *  - `context.imageLoader` is Coil 2; Coil 3 spells it `SingletonImageLoader.get(context)`.
  *  - The hardware bitmap check of an AVIF, HEIF or JXL page reads the route's size, because
  *    BitmapFactory cannot bound those on every API level and would report no size at all.
+ *  - A page already shown starts its zoom over when the view's size changes ([onSizeChanged]):
+ *    the reader is kept through a rotation, where upstream's activity is recreated.
  */
 open class ReaderPageImageView @JvmOverloads constructor(
     context: Context,
@@ -133,13 +135,14 @@ open class ReaderPageImageView @JvmOverloads constructor(
         }
     }
 
-    private fun SubsamplingScaleImageView.landscapeZoom(forward: Boolean) {
+    /** [atFit] skips the check that the page is at its fit, for a page just set there (see [onSizeChanged]). */
+    private fun SubsamplingScaleImageView.landscapeZoom(forward: Boolean, atFit: Boolean = false) {
         if (
             config != null &&
             config!!.landscapeZoom &&
             config!!.minimumScaleType == SCALE_TYPE_CENTER_INSIDE &&
             sWidth > sHeight &&
-            scale == minScale
+            (atFit || scale == minScale)
         ) {
             handler?.postDelayed(500) {
                 val point = when (config!!.zoomStartPosition) {
@@ -262,16 +265,40 @@ open class ReaderPageImageView @JvmOverloads constructor(
         addView(pageView, MATCH_PARENT, MATCH_PARENT)
     }
 
-    private fun SubsamplingScaleImageView.setupZoom(config: Config?) {
+    /** [fit] is the scale the limits count from, the image's own when it first comes up. */
+    private fun SubsamplingScaleImageView.setupZoom(config: Config?, fit: Float = scale, centre: PointF? = center) {
         // 5x zoom
-        maxScale = scale * MAX_ZOOM_SCALE
-        setDoubleTapZoomScale(scale * 2)
+        maxScale = fit * MAX_ZOOM_SCALE
+        setDoubleTapZoomScale(fit * 2)
 
         when (config?.zoomStartPosition) {
-            ZoomStartPosition.LEFT -> setScaleAndCenter(scale, PointF(0F, 0F))
-            ZoomStartPosition.RIGHT -> setScaleAndCenter(scale, PointF(sWidth.toFloat(), 0F))
-            ZoomStartPosition.CENTER -> setScaleAndCenter(scale, center)
+            ZoomStartPosition.LEFT -> setScaleAndCenter(fit, PointF(0F, 0F))
+            ZoomStartPosition.RIGHT -> setScaleAndCenter(fit, PointF(sWidth.toFloat(), 0F))
+            ZoomStartPosition.CENTER -> setScaleAndCenter(fit, centre)
             null -> {}
+        }
+    }
+
+    /**
+     * A rotation or a window resize keeps this view, where upstream's activity is recreated and
+     * sets the page up again: the zoom kept the old size's scale and limits, so a wide page zoomed
+     * to fit a portrait height stayed that far in on a landscape screen. A page already shown starts
+     * over at the new size as a fresh one would, at the fit, with its zoom limits, start position
+     * and landscape zoom. The long strip is laid out by its list and is left alone.
+     */
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        if (isWebtoon || oldw == 0 || oldh == 0) return
+        val view = pageView as? SubsamplingScaleImageView ?: return
+        if (!view.isReady) return
+        // Posted so the image view has its new size, and with it the new fit as its minimum scale.
+        view.post {
+            if (!view.isReady) return@post
+            val fit = view.minScale
+            val middle = PointF(view.sWidth / 2F, view.sHeight / 2F)
+            view.setScaleAndCenter(fit, middle)
+            view.setupZoom(config, fit, middle)
+            if (isVisibleOnScreen()) view.landscapeZoom(forward = true, atFit = true)
         }
     }
 

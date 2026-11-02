@@ -81,6 +81,8 @@ release may change behaviour.
 - Progress and history in a chapter left open in the reader while a refresh finds it under a new
   address go to that chapter as the source now lists it, instead of being lost or written to
   another chapter. A page read just before the refresh is kept too.
+- After a rotation, the page on screen in the paged reader fits the new screen again, with its
+  zoom limits and the automatic zoom into wide images, instead of keeping the old orientation's zoom.
 - The crash screen's buttons keep the same distance from the right edge as its text keeps from the
   left one.
 
