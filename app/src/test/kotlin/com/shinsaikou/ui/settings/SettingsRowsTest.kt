@@ -30,6 +30,7 @@ import com.shinsaikou.i18n.R
 import com.shinsaikou.image.GLUtil
 import com.shinsaikou.libraryupdate.LibraryUpdateScheduler
 import com.shinsaikou.reader.cache.ChapterCache
+import com.shinsaikou.reader.settings.ReaderSettingsOptions
 import com.shinsaikou.reader.settings.titleRes
 import com.shinsaikou.reader.ui.stringRes
 import com.shinsaikou.tracking.TrackerManager
@@ -214,6 +215,28 @@ class SettingsRowsTest {
             default = ReaderOrientation.FREE.flagValue,
             written = ReaderOrientation.LOCKED_LANDSCAPE.flagValue,
         )
+    }
+
+    @Test
+    fun `background color offers upstream's four backgrounds in its order, black by default`() {
+        readerBackgroundChoices.map { it.first } shouldContainExactly listOf(1, 2, 0, 3)
+        readerBackgroundChoices.map { it.second } shouldContainExactly listOf(
+            R.string.black_background,
+            R.string.gray_background,
+            R.string.white_background,
+            R.string.automatic_background,
+        )
+        viewModel().readerPreferences.readerTheme.shouldBeUpstreams(
+            key = "pref_reader_theme_key",
+            default = 1,
+            written = 0,
+        )
+    }
+
+    @Test
+    fun `the tap zones row turns zones off with its last choice, which greys out the inversion`() {
+        DISABLED_TAP_ZONES shouldBe ReaderSettingsOptions.TapZones.lastIndex
+        ReaderSettingsOptions.TapZones[DISABLED_TAP_ZONES] shouldBe R.string.disabled_nav
     }
 
     @Test

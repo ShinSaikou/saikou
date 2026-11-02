@@ -83,8 +83,12 @@
     <string name="pager_viewer">Paged</string>
     <string name="picture_saved">Picture saved</string>
     <string name="pref_always_show_chapter_transition">Always show chapter transition</string>
+    <string name="pref_category_display">Display</string>
+    <!-- Upstream's E-Ink heading, a literal there. -->
+    <string name="pref_category_eink">E-Ink</string>
     <string name="pref_category_for_this_series">For this series</string>
     <string name="pref_category_general">General</string>
+    <string name="pref_category_reading">Reading</string>
     <string name="pref_category_reading_mode">Reading mode</string>
     <string name="pref_color_filter_mode">Color filter blend mode</string>
     <string name="pref_crop_borders">Crop borders</string>
@@ -93,10 +97,12 @@
     <string name="pref_cutout_short">Show content in cutout area</string>
     <string name="pref_double_tap_zoom">Double tap to zoom</string>
     <string name="pref_dual_page_invert">Invert split page placement</string>
+    <string name="pref_dual_page_invert_summary">If the placement of the split wide pages does not match the reading direction</string>
     <string name="pref_dual_page_split">Split wide pages</string>
     <string name="pref_flash_duration">Flash duration</string>
     <string name="pref_flash_duration_summary">%1$s ms</string>
     <string name="pref_flash_page">Flash on page change</string>
+    <string name="pref_flash_page_summ">Reduces ghosting on e-ink displays</string>
     <string name="pref_flash_page_interval">Flash every</string>
     <string name="pref_flash_style_black">Black</string>
     <string name="pref_flash_style_white">White</string>
@@ -116,6 +122,8 @@
     <string name="pref_page_rotate">Rotate wide pages to fit</string>
     <string name="pref_page_rotate_invert">Flip orientation of rotated wide pages</string>
     <string name="pref_page_transitions">Animate page transitions</string>
+    <string name="pref_reader_actions">Actions</string>
+    <string name="pref_reader_navigation">Navigation</string>
     <string name="pref_reader_theme">Background color</string>
     <string name="pref_read_with_long_tap">Show actions on long tap</string>
     <string name="pref_read_with_tapping_inverted">Invert tap zones</string>

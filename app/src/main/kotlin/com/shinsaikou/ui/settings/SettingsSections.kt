@@ -49,6 +49,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -62,10 +63,13 @@ import com.shinsaikou.core.common.preferences.SecurityPreferences.SecureScreenMo
 import com.shinsaikou.domain.manga.model.ReaderOrientation
 import com.shinsaikou.domain.manga.model.ReadingMode
 import com.shinsaikou.domain.preferences.BackupPreferences
+import com.shinsaikou.domain.preferences.FlashColor
 import com.shinsaikou.domain.preferences.LibraryPreferences
 import com.shinsaikou.domain.preferences.LibraryUpdateRestrictions
 import com.shinsaikou.domain.preferences.ReaderHideThreshold
+import com.shinsaikou.domain.preferences.ReaderPreferences
 import com.shinsaikou.domain.preferences.TabletUiMode
+import com.shinsaikou.domain.preferences.TappingInvertMode
 import com.shinsaikou.domain.preferences.ThemeMode
 import com.shinsaikou.domain.preferences.UiPreferences
 import com.shinsaikou.i18n.R
@@ -75,6 +79,7 @@ import com.shinsaikou.navigation.LocalNavigator
 import com.shinsaikou.navigation.Route
 import com.shinsaikou.navigation.SettingsSection
 import com.shinsaikou.presentation.core.theme.titleRes
+import com.shinsaikou.reader.settings.ReaderSettingsOptions
 import com.shinsaikou.reader.settings.titleRes
 import com.shinsaikou.reader.ui.stringRes
 import com.shinsaikou.ui.appupdate.AppUpdateViewModel
@@ -110,8 +115,10 @@ import eu.kanade.tachiyomi.network.PREF_DOH_SHECAN
 import eu.kanade.tachiyomi.util.storage.DiskUtil
 import eu.kanade.tachiyomi.util.system.AuthenticatorUtil.authenticate
 import eu.kanade.tachiyomi.util.system.AuthenticatorUtil.isAuthenticationSupported
+import eu.kanade.tachiyomi.util.system.hasDisplayCutout
 import eu.kanade.tachiyomi.util.system.setDefaultSettings
 import eu.kanade.tachiyomi.util.system.toast
+import java.text.NumberFormat
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.toggle
 import tachiyomi.domain.category.model.Category
@@ -195,6 +202,17 @@ internal val doubleTapAnimSpeedChoices = listOf(
     500 to R.string.double_tap_anim_speed_normal,
     250 to R.string.double_tap_anim_speed_fast,
 )
+
+/** Upstream's reader backgrounds, `pref_reader_theme` values with their labels, in its order. */
+internal val readerBackgroundChoices = listOf(
+    1 to R.string.black_background,
+    2 to R.string.gray_background,
+    0 to R.string.white_background,
+    3 to R.string.automatic_background,
+)
+
+/** The tap zones value that turns them off: the last of `ReaderSettingsOptions.TapZones`. */
+internal const val DISABLED_TAP_ZONES = 5
 
 /** Upstream's sensitivities for hiding the long strip's menu on scroll, in its order. */
 internal val readerHideThresholdChoices = listOf(
@@ -639,14 +657,19 @@ private fun LibrarySection(viewModel: SettingsViewModel) {
  * actions groups, each row over the key the reader already reads. The three Saikou had take upstream's
  * display group order too, Fullscreen, Keep screen on, Show page number (phase 4 unit MP1).
  */
+/**
+ * Upstream's Settings > Reader, in its groups: the general rows, then Display, E-Ink, Reading, Paged,
+ * Long strip, Navigation and Actions. Every row here is also in the reader's own settings sheet,
+ * which shows only the reading mode it is open in; here they can be set without opening a chapter.
+ * A row that depends on another is shown greyed out while that one is off, as volume keys' inverted
+ * row already was, where upstream hides it, except the sliders, which have no disabled look and are
+ * shown only while they apply.
+ */
 @Composable
 private fun ReaderSection(viewModel: SettingsViewModel) {
     val preferences = viewModel.readerPreferences
     val defaultReadingMode by preferences.defaultReadingMode.collectAsState()
     val doubleTapAnimSpeed by preferences.doubleTapAnimSpeed.collectAsState()
-    val defaultRotation by preferences.defaultOrientationType.collectAsState()
-    val hideThreshold by preferences.readerHideThreshold.collectAsState()
-    val volumeKeys by preferences.readWithVolumeKeys.collectAsState()
     SettingsColumn {
         ChoiceRow(
             labelRes = R.string.pref_viewer_type,
@@ -672,50 +695,271 @@ private fun ReaderSection(viewModel: SettingsViewModel) {
             detailRes = R.string.pref_show_navigation_mode_summary,
             pref = preferences.showNavigationOverlayOnStart,
         )
-        ChoiceRow(
-            labelRes = R.string.pref_rotation_type,
-            choices = defaultRotationChoices,
-            selected = { it.flagValue == defaultRotation },
-            label = { stringResource(it.stringRes) },
-            onSelect = { preferences.defaultOrientationType.set(it.flagValue) },
-        )
-        CheckboxRow(
-            labelRes = R.string.pref_fullscreen,
-            detailRes = R.string.pref_fullscreen_detail,
-            pref = preferences.fullscreen,
-        )
-        CheckboxRow(
-            labelRes = R.string.pref_keep_screen_on,
-            detailRes = R.string.pref_keep_screen_on_detail,
-            pref = preferences.keepScreenOn,
-        )
-        CheckboxRow(
-            labelRes = R.string.pref_show_page_number,
-            detailRes = R.string.pref_show_page_number_detail,
-            pref = preferences.showPageNumber,
-        )
+        CheckboxRow(labelRes = R.string.pref_page_transitions, pref = preferences.pageTransitions)
+
+        ReaderDisplayRows(preferences)
+        ReaderEInkRows(preferences)
+
+        HeadingItem(R.string.pref_category_reading)
         CheckboxRow(labelRes = R.string.pref_skip_read_chapters, pref = preferences.skipRead)
         CheckboxRow(labelRes = R.string.pref_skip_filtered_chapters, pref = preferences.skipFiltered)
         CheckboxRow(labelRes = R.string.pref_skip_dupe_chapters, pref = preferences.skipDupe)
-        ChoiceRow(
-            labelRes = R.string.pref_hide_threshold,
-            choices = readerHideThresholdChoices,
-            selected = { it == hideThreshold },
-            label = { stringResource(it.titleRes) },
-            onSelect = preferences.readerHideThreshold::set,
-        )
-        CheckboxRow(labelRes = R.string.pref_read_with_volume_keys, pref = preferences.readWithVolumeKeys)
         CheckboxRow(
-            labelRes = R.string.pref_read_with_volume_keys_inverted,
-            pref = preferences.readWithVolumeKeysInverted,
-            enabled = volumeKeys,
+            labelRes = R.string.pref_always_show_chapter_transition,
+            pref = preferences.alwaysShowChapterTransition,
         )
+
+        ReaderPagedRows(preferences)
+        ReaderLongStripRows(preferences)
+        ReaderNavigationRows(preferences)
+
+        HeadingItem(R.string.pref_reader_actions)
+        CheckboxRow(labelRes = R.string.pref_read_with_long_tap, pref = preferences.readWithLongTap)
         CheckboxRow(
             labelRes = R.string.pref_create_folder_per_manga,
             detailRes = R.string.pref_create_folder_per_manga_summary,
             pref = preferences.folderPerManga,
         )
     }
+}
+
+@Composable
+private fun ReaderDisplayRows(preferences: ReaderPreferences) {
+    val defaultRotation by preferences.defaultOrientationType.collectAsState()
+    val readerTheme by preferences.readerTheme.collectAsState()
+    val fullscreen by preferences.fullscreen.collectAsState()
+    HeadingItem(R.string.pref_category_display)
+    ChoiceRow(
+        labelRes = R.string.pref_rotation_type,
+        choices = defaultRotationChoices,
+        selected = { it.flagValue == defaultRotation },
+        label = { stringResource(it.stringRes) },
+        onSelect = { preferences.defaultOrientationType.set(it.flagValue) },
+    )
+    ChoiceRow(
+        labelRes = R.string.pref_reader_theme,
+        choices = readerBackgroundChoices,
+        selected = { (value, _) -> value == readerTheme },
+        label = { (_, label) -> stringResource(label) },
+        onSelect = { (value, _) -> preferences.readerTheme.set(value) },
+    )
+    CheckboxRow(
+        labelRes = R.string.pref_fullscreen,
+        detailRes = R.string.pref_fullscreen_detail,
+        pref = preferences.fullscreen,
+    )
+    // Upstream shows it only on a display with a cutout; only fullscreen draws under one.
+    if (LocalView.current.hasDisplayCutout()) {
+        CheckboxRow(labelRes = R.string.pref_cutout_short, pref = preferences.drawUnderCutout, enabled = fullscreen)
+    }
+    CheckboxRow(
+        labelRes = R.string.pref_keep_screen_on,
+        detailRes = R.string.pref_keep_screen_on_detail,
+        pref = preferences.keepScreenOn,
+    )
+    CheckboxRow(
+        labelRes = R.string.pref_show_page_number,
+        detailRes = R.string.pref_show_page_number_detail,
+        pref = preferences.showPageNumber,
+    )
+}
+
+@Composable
+private fun ReaderEInkRows(preferences: ReaderPreferences) {
+    val flash by preferences.flashOnPageChange.collectAsState()
+    val flashMillis by preferences.flashDurationMillis.collectAsState()
+    val flashInterval by preferences.flashPageInterval.collectAsState()
+    val flashColor by preferences.flashColor.collectAsState()
+    HeadingItem(R.string.pref_category_eink)
+    CheckboxRow(
+        labelRes = R.string.pref_flash_page,
+        detailRes = R.string.pref_flash_page_summ,
+        pref = preferences.flashOnPageChange,
+    )
+    ShownWhen(flash) {
+        Column {
+            SliderItem(
+                value = flashMillis / ReaderSettingsOptions.MILLI_CONVERSION,
+                valueRange = 1..15,
+                label = stringResource(R.string.pref_flash_duration),
+                valueString = stringResource(R.string.pref_flash_duration_summary, flashMillis),
+                onChange = { preferences.flashDurationMillis.set(it * ReaderSettingsOptions.MILLI_CONVERSION) },
+            )
+            SliderItem(
+                value = flashInterval,
+                valueRange = 1..10,
+                label = stringResource(R.string.pref_flash_page_interval),
+                valueString = pluralStringResource(R.plurals.pref_pages, flashInterval, flashInterval),
+                onChange = preferences.flashPageInterval::set,
+            )
+            ChoiceRow(
+                labelRes = R.string.pref_flash_with,
+                choices = FlashColor.entries,
+                selected = { it == flashColor },
+                label = { stringResource(it.titleRes) },
+                onSelect = preferences.flashColor::set,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReaderPagedRows(preferences: ReaderPreferences) {
+    val navigationMode by preferences.navigationModePager.collectAsState()
+    val navInverted by preferences.pagerNavInverted.collectAsState()
+    val imageScaleType by preferences.imageScaleType.collectAsState()
+    val zoomStart by preferences.zoomStart.collectAsState()
+    val dualPageSplit by preferences.dualPageSplitPaged.collectAsState()
+    val rotateToFit by preferences.dualPageRotateToFit.collectAsState()
+    HeadingItem(R.string.pager_viewer)
+    TapZoneRows(
+        selected = navigationMode,
+        onSelect = preferences.navigationModePager::set,
+        invertMode = navInverted,
+        onSelectInvertMode = preferences.pagerNavInverted::set,
+    )
+    ChoiceRow(
+        labelRes = R.string.pref_image_scale_type,
+        // The stored value is the index plus one (ReaderSettingsOptions).
+        choices = ReaderSettingsOptions.ImageScaleType.indices.toList(),
+        selected = { it + 1 == imageScaleType },
+        label = { stringResource(ReaderSettingsOptions.ImageScaleType[it]) },
+        onSelect = { preferences.imageScaleType.set(it + 1) },
+    )
+    ChoiceRow(
+        labelRes = R.string.pref_zoom_start,
+        choices = ReaderSettingsOptions.ZoomStart.indices.toList(),
+        selected = { it + 1 == zoomStart },
+        label = { stringResource(ReaderSettingsOptions.ZoomStart[it]) },
+        onSelect = { preferences.zoomStart.set(it + 1) },
+    )
+    CheckboxRow(labelRes = R.string.pref_crop_borders, pref = preferences.cropBorders)
+    CheckboxRow(labelRes = R.string.pref_landscape_zoom, pref = preferences.landscapeZoom)
+    CheckboxRow(labelRes = R.string.pref_navigate_pan, pref = preferences.navigateToPan)
+    CheckboxRow(labelRes = R.string.pref_dual_page_split, pref = preferences.dualPageSplitPaged)
+    CheckboxRow(
+        labelRes = R.string.pref_dual_page_invert,
+        detailRes = R.string.pref_dual_page_invert_summary,
+        pref = preferences.dualPageInvertPaged,
+        enabled = dualPageSplit,
+    )
+    CheckboxRow(labelRes = R.string.pref_page_rotate, pref = preferences.dualPageRotateToFit)
+    CheckboxRow(
+        labelRes = R.string.pref_page_rotate_invert,
+        pref = preferences.dualPageRotateToFitInvert,
+        enabled = rotateToFit,
+    )
+}
+
+@Composable
+private fun ReaderLongStripRows(preferences: ReaderPreferences) {
+    val navigationMode by preferences.navigationModeWebtoon.collectAsState()
+    val navInverted by preferences.webtoonNavInverted.collectAsState()
+    val sidePadding by preferences.webtoonSidePadding.collectAsState()
+    val hideThreshold by preferences.readerHideThreshold.collectAsState()
+    val dualPageSplit by preferences.dualPageSplitWebtoon.collectAsState()
+    val rotateToFit by preferences.dualPageRotateToFitWebtoon.collectAsState()
+    val percent = remember { NumberFormat.getPercentInstance() }
+    HeadingItem(R.string.webtoon_viewer)
+    TapZoneRows(
+        selected = navigationMode,
+        onSelect = preferences.navigationModeWebtoon::set,
+        invertMode = navInverted,
+        onSelectInvertMode = preferences.webtoonNavInverted::set,
+    )
+    SliderItem(
+        value = sidePadding,
+        valueRange = ReaderSettingsOptions.WEBTOON_PADDING_MIN..ReaderSettingsOptions.WEBTOON_PADDING_MAX,
+        label = stringResource(R.string.pref_webtoon_side_padding),
+        valueString = percent.format(sidePadding / 100f),
+        onChange = preferences.webtoonSidePadding::set,
+    )
+    ChoiceRow(
+        labelRes = R.string.pref_hide_threshold,
+        choices = readerHideThresholdChoices,
+        selected = { it == hideThreshold },
+        label = { stringResource(it.titleRes) },
+        onSelect = preferences.readerHideThreshold::set,
+    )
+    CheckboxRow(labelRes = R.string.pref_crop_borders, pref = preferences.cropBordersWebtoon)
+    CheckboxRow(labelRes = R.string.pref_dual_page_split, pref = preferences.dualPageSplitWebtoon)
+    CheckboxRow(
+        labelRes = R.string.pref_dual_page_invert,
+        detailRes = R.string.pref_dual_page_invert_summary,
+        pref = preferences.dualPageInvertWebtoon,
+        enabled = dualPageSplit,
+    )
+    CheckboxRow(labelRes = R.string.pref_page_rotate, pref = preferences.dualPageRotateToFitWebtoon)
+    CheckboxRow(
+        labelRes = R.string.pref_page_rotate_invert,
+        pref = preferences.dualPageRotateToFitInvertWebtoon,
+        enabled = rotateToFit,
+    )
+    CheckboxRow(labelRes = R.string.pref_double_tap_zoom, pref = preferences.webtoonDoubleTapZoomEnabled)
+    CheckboxRow(labelRes = R.string.pref_webtoon_disable_zoom_out, pref = preferences.webtoonDisableZoomOut)
+}
+
+@Composable
+private fun ReaderNavigationRows(preferences: ReaderPreferences) {
+    val volumeKeys by preferences.readWithVolumeKeys.collectAsState()
+    val verticalModes by preferences.verticalNavigator.collectAsState()
+    val navigatorHeight by preferences.verticalNavigatorHeight.collectAsState()
+    HeadingItem(R.string.pref_reader_navigation)
+    CheckboxRow(labelRes = R.string.pref_read_with_volume_keys, pref = preferences.readWithVolumeKeys)
+    CheckboxRow(
+        labelRes = R.string.pref_read_with_volume_keys_inverted,
+        pref = preferences.readWithVolumeKeysInverted,
+        enabled = volumeKeys,
+    )
+    // By name, as the reader reads the set (ReaderChrome.chapterNavigatorType).
+    ChoiceSetRow(
+        labelRes = R.string.pref_vertical_navigator,
+        choices = defaultReadingModeChoices.map { it.name to it.stringRes },
+        selected = verticalModes,
+        onChange = preferences.verticalNavigator::set,
+    )
+    CheckboxRow(
+        labelRes = R.string.pref_webtoon_vertical_navigator_on_left,
+        pref = preferences.verticalNavigatorOnLeft,
+        enabled = verticalModes.isNotEmpty(),
+    )
+    ShownWhen(verticalModes.isNotEmpty()) {
+        SliderItem(
+            value = navigatorHeight,
+            valueRange = 65..100,
+            steps = 6,
+            label = stringResource(R.string.pref_vertical_navigator_height),
+            onChange = preferences.verticalNavigatorHeight::set,
+        )
+    }
+}
+
+/**
+ * One viewer's tap zones and their inversion, as the reader's sheet draws them; the inversion is
+ * greyed out while the zones are off ([DISABLED_TAP_ZONES]).
+ */
+@Composable
+private fun TapZoneRows(
+    selected: Int,
+    onSelect: (Int) -> Unit,
+    invertMode: TappingInvertMode,
+    onSelectInvertMode: (TappingInvertMode) -> Unit,
+) {
+    ChoiceRow(
+        labelRes = R.string.pref_viewer_nav,
+        choices = ReaderSettingsOptions.TapZones.indices.toList(),
+        selected = { it == selected },
+        label = { stringResource(ReaderSettingsOptions.TapZones[it]) },
+        onSelect = onSelect,
+    )
+    ChoiceRow(
+        labelRes = R.string.pref_read_with_tapping_inverted,
+        choices = TappingInvertMode.entries,
+        selected = { it == invertMode },
+        label = { stringResource(it.titleRes) },
+        enabled = selected != DISABLED_TAP_ZONES,
+        onSelect = onSelectInvertMode,
+    )
 }
 
 @Composable

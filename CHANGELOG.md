@@ -15,6 +15,10 @@ release may change behaviour.
   fault can be uninstalled or updated.
 - A **Return to Saikou** button on the page the browser shows after you sign in to Google Drive,
   MyAnimeList or AniList, so you no longer have to switch back by hand.
+- Every reader option in Settings > Reader, in groups (Display, E-Ink, Reading, Paged, Long strip,
+  Navigation and Actions), so tap zones, scale type, crop borders, the long strip options and the
+  rest can be set without opening a chapter. Before, part of them were only in the reader's own
+  settings.
 
 ### Changed
 
