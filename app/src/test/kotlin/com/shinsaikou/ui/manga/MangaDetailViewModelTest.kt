@@ -65,10 +65,13 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
@@ -1075,6 +1078,97 @@ class MangaDetailViewModelTest {
         coVerify(exactly = 1) { setMangaDefaultChapterFlags.await(any()) }
         (viewModel.state.value as MangaDetailViewModel.State.Success).manga.sorting shouldBe Manga.CHAPTER_SORTING_NUMBER
     }
+
+    /**
+     * Upstream 7ff97761b: the reader open over the entry screen stops the screen watching, and the
+     * progress it writes on every page then re-projects nothing until the screen watches again.
+     */
+    @Test
+    fun `a screen that stopped watching is not projected again until it watches again`() = runTest(testDispatcher) {
+        val manga = fixtureManga(favorite = true)
+        val emissions = MutableStateFlow(manga to listOf(fixtureChapter(name = "Chapter 1")))
+        coEvery { getMangaWithChapters.subscribe(manga.id, applyScanlatorFilter = true) } returns emissions
+        every { sourceManager.get(manga.source) } returns fixtureSource()
+        coEvery { getNextChapters.await(manga.id) } returns emptyList()
+        val viewModel = viewModel(manga.id, fromSource = false)
+        // Not the background scope: advanceUntilIdle stops once only background work is left, and
+        // the watcher letting go is that work.
+        val screen = launch { viewModel.state.collect {} }
+        advanceUntilIdle()
+
+        screen.cancel()
+        advanceUntilIdle()
+        emissions.value = manga to listOf(fixtureChapter(name = "Chapter 1, read"))
+        advanceUntilIdle()
+
+        (viewModel.state.value as MangaDetailViewModel.State.Success).chapters.single().name shouldBe "Chapter 1"
+        coVerify(exactly = 1) { getNextChapters.await(manga.id) }
+
+        val back = launch { viewModel.state.collect {} }
+        advanceUntilIdle()
+
+        (viewModel.state.value as MangaDetailViewModel.State.Success).chapters.single().name shouldBe
+            "Chapter 1, read"
+        back.cancel()
+    }
+
+    @Test
+    fun `a screen away for four seconds, as in a rotation, is still projected, and one away for six is not`() =
+        runTest(testDispatcher) {
+            val manga = fixtureManga(favorite = true)
+            val emissions = MutableStateFlow(manga to listOf(fixtureChapter(name = "Chapter 1")))
+            coEvery { getMangaWithChapters.subscribe(manga.id, applyScanlatorFilter = true) } returns emissions
+            every { sourceManager.get(manga.source) } returns fixtureSource()
+            coEvery { getNextChapters.await(manga.id) } returns emptyList()
+            val viewModel = viewModel(manga.id, fromSource = false)
+            val screen = launch { viewModel.state.collect {} }
+            advanceUntilIdle()
+
+            screen.cancel()
+            advanceTimeBy(4_000)
+            emissions.value = manga to listOf(fixtureChapter(name = "Chapter 1, read"))
+            runCurrent()
+
+            (viewModel.state.value as MangaDetailViewModel.State.Success).chapters.single().name shouldBe
+                "Chapter 1, read"
+            coVerify(exactly = 2) { getNextChapters.await(manga.id) }
+
+            advanceTimeBy(2_000)
+            emissions.value = manga to listOf(fixtureChapter(name = "Chapter 1, read twice"))
+            runCurrent()
+
+            (viewModel.state.value as MangaDetailViewModel.State.Success).chapters.single().name shouldBe
+                "Chapter 1, read"
+            coVerify(exactly = 2) { getNextChapters.await(manga.id) }
+        }
+
+    /** A rotation: the screen comes back inside the timeout, and the pause it started never lands. */
+    @Test
+    fun `a screen back before the timeout is still projected after it, with no re-collection between`() =
+        runTest(testDispatcher) {
+            val manga = fixtureManga(favorite = true)
+            val emissions = MutableStateFlow(manga to listOf(fixtureChapter(name = "Chapter 1")))
+            coEvery { getMangaWithChapters.subscribe(manga.id, applyScanlatorFilter = true) } returns emissions
+            every { sourceManager.get(manga.source) } returns fixtureSource()
+            coEvery { getNextChapters.await(manga.id) } returns emptyList()
+            val viewModel = viewModel(manga.id, fromSource = false)
+            val screen = launch { viewModel.state.collect {} }
+            advanceUntilIdle()
+
+            screen.cancel()
+            advanceTimeBy(4_000)
+            val back = launch { viewModel.state.collect {} }
+            runCurrent()
+            advanceTimeBy(2_000)
+            emissions.value = manga to listOf(fixtureChapter(name = "Chapter 1, read"))
+            runCurrent()
+
+            (viewModel.state.value as MangaDetailViewModel.State.Success).chapters.single().name shouldBe
+                "Chapter 1, read"
+            // The first projection and this one: a pause that landed and lifted would have re-run it.
+            coVerify(exactly = 2) { getNextChapters.await(manga.id) }
+            back.cancel()
+        }
 
     @Test
     fun `opening an entry in the library leaves its chapter settings alone`() = runTest(testDispatcher) {

@@ -55,14 +55,21 @@ import dev.zacsweers.metrox.viewmodel.ManualViewModelAssistedFactory
 import dev.zacsweers.metrox.viewmodel.ManualViewModelAssistedFactoryKey
 import eu.kanade.tachiyomi.util.chapter.removeDuplicates
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.dropWhile
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -424,6 +431,31 @@ class MangaDetailViewModel(
      */
     private var allChapters: List<Chapter> = emptyList()
 
+    /**
+     * Whether the entry's flows are worth collecting: always until the screen first watches
+     * [state], so nothing read before then waits on a subscriber, and after that while the screen
+     * watches it and for [STOP_TIMEOUT_MS] after it stops, which a rotation or a quick switch away
+     * stays inside.
+     *
+     * Upstream collects only while subscribed too (7ff97761b). With the reader open over this
+     * screen, each page's progress write re-ran the whole projection here, the next chapter query
+     * and the chapter list's filter and sort, for a screen nobody was looking at. Watching again
+     * collects again, so the screen comes back with whatever changed meanwhile.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val watched: Flow<Boolean> = mutableState.subscriptionCount
+        .map { it > 0 }
+        .dropWhile { !it }
+        .transformLatest { watching ->
+            if (!watching) delay(STOP_TIMEOUT_MS)
+            emit(watching)
+        }
+        .onStart { emit(true) }
+        .distinctUntilChanged()
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun <T> Flow<T>.whileWatched(): Flow<T> = watched.flatMapLatest { if (it) this else emptyFlow() }
+
     /** Everything the projection reads that arrives as a flow. */
     private data class Inputs(
         val manga: Manga,
@@ -454,6 +486,7 @@ class MangaDetailViewModel(
                     Inputs(manga, chapters, excluded, available, downloaded, downloadedOnly, ranking)
                 }
             }
+                .whileWatched()
                 .flowOn(dispatchers.io)
                 .collect { inputs -> if (inputs == null) mutableState.value = State.NotFound else project(inputs) }
         }
@@ -461,6 +494,7 @@ class MangaDetailViewModel(
             downloadQueue.subscribe()
                 .map { rows -> rows.filter { it.mangaId == mangaId }.associateBy { it.chapterId } }
                 .distinctUntilChanged()
+                .whileWatched()
                 .flowOn(dispatchers.io)
                 .collect { rows ->
                     queued = rows
@@ -1366,3 +1400,6 @@ class MangaDetailViewModel(
         fun create(mangaId: Long, fromSource: Boolean): MangaDetailViewModel
     }
 }
+
+/** Upstream's `WhileSubscribed` timeout for the entry screen. */
+private const val STOP_TIMEOUT_MS = 5_000L

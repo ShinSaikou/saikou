@@ -60,6 +60,8 @@ release may change behaviour.
 - A server that refuses the connection is named as such ("The server refused the connection")
   instead of reading as "No network connection", in snackbars, the library update error list,
   the download queue and the reader.
+- An entry's screen left open behind the reader no longer reloads its chapter list after every page
+  read. It pauses a few seconds after it leaves the screen and catches up when it comes back.
 - Copying downloads from a folder also finds chapters with a scanlator that a compatible reader's
   latest releases saved without the hash at the end of the folder name: a long name, or a non-ASCII
   scanlator saved with "Disallow non-ASCII filenames" on.
