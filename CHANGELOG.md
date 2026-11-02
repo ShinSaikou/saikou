@@ -59,6 +59,11 @@ release may change behaviour.
 - Copying downloads from a folder also finds chapters with a scanlator that a compatible reader's
   latest releases saved without the hash at the end of the folder name: a long name, or a non-ASCII
   scanlator saved with "Disallow non-ASCII filenames" on.
+- Saving a page from the reader also posts a notification with the page, which opens it, and a
+  Share button (on Android 10 and later; earlier, the notification shows the page only).
+- A page shared from the reader goes with "title: chapter, page N" as its text.
+- A page saved or shared at a chapter boundary in the long strip is named after its own chapter,
+  not the chapter the reader was still counting as current.
 - Picking a folder to copy downloads from while a copy is already running no longer keeps a
   permanent read permission on that folder; the permission is taken only for a copy that starts.
 - Progress and history in a chapter left open in the reader while a refresh finds it under a new

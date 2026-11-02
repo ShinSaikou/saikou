@@ -45,6 +45,7 @@ class AppPageImageActions(
     private val coverCache: CoverCache,
     private val coverManager: LocalCoverManager,
     private val updateManga: UpdateManga,
+    private val savedPageNotifier: SavedPageNotifier,
     private val dispatchers: Dispatchers,
 ) : PageImageActions {
 
@@ -55,18 +56,20 @@ class AppPageImageActions(
      * the public folder would need `WRITE_EXTERNAL_STORAGE`, which Saikou does not hold by decision.
      * In each, a folder per entry only while `create_folder_per_manga` is on, as upstream's save path
      * reads it (phase 4 unit SR); upstream's default is off, so a page saved by an owner who never set
-     * it lands in the root.
+     * it lands in the root. Once saved, [SavedPageNotifier] posts upstream's notification for it.
      */
     override suspend fun save(manga: Manga, chapter: Chapter, page: ReaderPage): Result<Uri> =
         withContext(dispatchers.io) {
             runCatching {
                 val open = page.readyStream()
                 val type = ImageUtil.findImageType(open)
+                val mimeType = type?.mime ?: FALLBACK_MIME_TYPE
                 savedPictures.save(
                     displayName = fileName(manga, chapter, page, type),
-                    mimeType = type?.mime ?: FALLBACK_MIME_TYPE,
+                    mimeType = mimeType,
                     subFolder = savedPageSubFolder(manga.title, readerPreferences.folderPerManga.get()),
                 ) { output -> open().use { input -> input.copyTo(output) } }
+                    .also { uri -> savedPageNotifier.showSaved(uri, mimeType, caption(manga, chapter, page)) }
             }
         }
 
@@ -79,7 +82,8 @@ class AppPageImageActions(
                 val target = File(directory, fileName(manga, chapter, page, type))
                 open().use { input -> target.outputStream().use(input::copyTo) }
                 val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", target)
-                context.startActivity(shareChooser(uri, type?.mime ?: FALLBACK_MIME_TYPE))
+                val mimeType = type?.mime ?: FALLBACK_MIME_TYPE
+                context.startActivity(shareChooser(uri, mimeType, caption(manga, chapter, page)))
                 uri
             }
         }
@@ -100,6 +104,10 @@ class AppPageImageActions(
                 Unit
             }
         }
+
+    /** Upstream's caption for a shared page, "title: chapter, page N", for an app that shows text with it. */
+    private fun caption(manga: Manga, chapter: Chapter, page: ReaderPage): String =
+        context.getString(R.string.share_page_info, manga.displayTitle, chapter.name, page.number)
 
     private fun ReaderPage.readyStream(): () -> InputStream =
         stream ?: throw IOException(context.getString(R.string.error_page_not_ready))
@@ -123,11 +131,15 @@ class AppPageImageActions(
 /** Matches the `cache-path` entry of `provider_paths.xml`; nothing else is shareable. */
 internal const val SHARE_DIRECTORY = "share"
 
-/** The system share sheet for [uri], a file under [SHARE_DIRECTORY] read through the app's provider. */
-internal fun shareChooser(uri: Uri, mimeType: String): Intent {
+/**
+ * The system share sheet for [uri], a file under [SHARE_DIRECTORY] read through the app's provider or
+ * a saved picture's content address, with [caption] as the text where there is one.
+ */
+internal fun shareChooser(uri: Uri, mimeType: String, caption: String? = null): Intent {
     val send = Intent(Intent.ACTION_SEND).apply {
         type = mimeType
         putExtra(Intent.EXTRA_STREAM, uri)
+        caption?.let { putExtra(Intent.EXTRA_TEXT, it) }
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         clipData = ClipData.newRawUri(null, uri)
     }

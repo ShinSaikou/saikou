@@ -82,8 +82,10 @@ internal fun ReaderDialogs(
 
         is ReaderDialog.PageActions -> {
             val manga = state.manga
-            val chapter = state.currentChapter?.chapter
-            if (manga == null || chapter == null) {
+            // The long-pressed page's own chapter, as upstream names the file after it: at a long
+            // strip's chapter boundary the page can be the next chapter's while this is still current.
+            val chapter = dialog.page.chapter.chapter
+            if (manga == null) {
                 dismiss()
             } else {
                 ReaderPageActionsDialog(
