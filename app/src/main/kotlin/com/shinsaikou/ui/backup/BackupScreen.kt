@@ -14,21 +14,25 @@ import com.shinsaikou.ui.storage.rememberStorageLocationPicker
 import com.shinsaikou.ui.storage.storageLocationSummary
 import java.text.DateFormat
 import java.util.Date
+import kotlinx.coroutines.flow.first
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -38,6 +42,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
@@ -59,6 +64,7 @@ import eu.kanade.tachiyomi.data.backup.restore.RestoreOptions
 import tachiyomi.presentation.core.components.CheckboxItem
 import tachiyomi.presentation.core.components.HeadingItem
 import tachiyomi.presentation.core.components.material.Scaffold
+import tachiyomi.presentation.core.components.material.TabText
 import tachiyomi.presentation.core.i18n.stringResource
 
 private const val BACKUP_MIME = "application/octet-stream"
@@ -66,12 +72,17 @@ private const val ANY_MIME = "*/*"
 private const val BACKUP_FILE_NAME = "saikou-backup.tachibk"
 
 /**
- * [restoreUri] is set when the screen was opened by a file the owner tapped outside the app, in
- * which case the picker is skipped and that document is checked.
+ * Create and Restore as two tabs under one top bar, so the owner who came to restore sees it
+ * without scrolling past the export options first. The Restore tab also lists the kept automatic
+ * backups, since what a row offers is to restore it or copy it out.
  *
- * A picked or tapped file is checked before anything is queued (unit restore-report): the restore
- * half then shows the file, what it names that this device lacks, and Restore and Cancel, and the
- * list scrolls to it, since a tapped file opens the screen at its top.
+ * A file picked with Restore backup is restored as soon as it reads: picking it was the
+ * confirmation, so there is no second button to tap on coming back from the picker.
+ *
+ * [restoreUri] is set when the screen was opened by a file the owner tapped outside the app, in
+ * which case the screen opens on Restore and that document is checked before anything is queued
+ * (unit restore-report): the tab shows the file, what it names that this device lacks, and Restore
+ * and Cancel, and its list scrolls to them when the options above push them out of view.
  */
 @Composable
 fun BackupScreen(restoreUri: String? = null) {
@@ -116,7 +127,7 @@ fun BackupScreen(restoreUri: String? = null) {
             runCatching {
                 context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            viewModel.check(uri)
+            viewModel.restorePicked(uri)
         }
     }
 
@@ -130,137 +141,70 @@ fun BackupScreen(restoreUri: String? = null) {
         }
     }
 
-    val listState = rememberLazyListState()
+    var tab by rememberSaveable { mutableStateOf(if (restoreUri != null) BackupTab.RESTORE else BackupTab.CREATE) }
+    // Each tab keeps its own place, so a look at the other one comes back to where the owner was.
+    val createListState = rememberLazyListState()
+    val restoreListState = rememberLazyListState()
     val pendingUri = state.pendingRestore?.uri
     LaunchedEffect(pendingUri) {
-        if (pendingUri != null) listState.animateScrollToItem(RESTORE_HEADING_INDEX)
+        if (pendingUri == null) return@LaunchedEffect
+        tab = BackupTab.RESTORE
+        // The first layout that shows the check, or that ends before its place; one that shows
+        // something else there predates it. Only a check not wholly in view is scrolled to.
+        val layout = snapshotFlow { restoreListState.layoutInfo }.first { layout ->
+            val visible = layout.visibleItemsInfo
+            visible.any { it.key == RESTORE_CHECK_KEY } ||
+                visible.isNotEmpty() && RESTORE_CHECK_INDEX !in visible.first().index..visible.last().index
+        }
+        val check = layout.visibleItemsInfo.firstOrNull { it.key == RESTORE_CHECK_KEY }
+        if (check == null || check.offset < layout.viewportStartOffset || check.offset + check.size > layout.viewportEndOffset) {
+            restoreListState.animateScrollToItem(RESTORE_CHECK_INDEX)
+        }
     }
 
     Scaffold(
         topBar = { scrollBehavior ->
-            ScreenTopBar(
-                title = stringResource(R.string.backup_title),
-                onBack = navigator::back,
-                scrollBehavior = scrollBehavior,
-            )
-        },
-        snackbarHost = { SaikouSnackbarHost(snackbarHostState) },
-    ) { padding ->
-        LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(padding)) {
-            // RESTORE_HEADING_INDEX counts the items above the restore heading: keep it in step.
-            item { InlineNotice(stringResource(R.string.backup_intro)) }
-
-            item { HeadingItem(R.string.backup_create) }
-            exportOptions(state.backupOptions, viewModel)
-            item {
-                Button(
-                    onClick = { createDocument.launch(BACKUP_FILE_NAME) },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                    enabled = !state.exporting && state.backupOptions.canCreate(),
-                ) {
-                    Text(
-                        stringResource(
-                            if (state.exporting) R.string.backup_creating else R.string.backup_create,
-                        ),
-                    )
-                }
-            }
-
-            item { HeadingItem(R.string.backup_restore) }
-            restoreOptions(state.restoreOptions, viewModel)
-            item {
-                // A backup file arrives with whatever type the provider guessed for it, which is
-                // not reliably the one it was written with, so the picker filters on nothing.
-                OutlinedButton(
-                    onClick = { openDocument.launch(arrayOf(ANY_MIME)) },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                    enabled = !state.restoring && !state.checking && state.restoreOptions.canRestore(),
-                ) {
-                    Text(
-                        stringResource(
-                            if (state.restoring) R.string.backup_restoring else R.string.backup_restore,
-                        ),
-                    )
-                }
-            }
-
-            // The check reads every entry of the file once, which takes seconds on a large one.
-            if (state.checking) {
-                item { LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) }
-            }
-            val pending = state.pendingRestore
-            if (pending != null) {
-                item {
-                    RestoreCheck(
-                        pending = pending,
-                        canRestore = !state.restoring && state.restoreOptions.canRestore(),
-                        onRestore = viewModel::restorePending,
-                        onCancel = viewModel::cancelPending,
-                    )
-                }
-            }
-
-            val progress = state.progress
-            if (progress != null) {
-                item { RestoreProgress(progress) }
-            }
-
-            if (state.restoring) {
-                item {
-                    TextButton(
-                        onClick = viewModel::cancelRestore,
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                    ) {
-                        Text(stringResource(R.string.action_cancel))
+            Column {
+                ScreenTopBar(
+                    title = stringResource(R.string.backup_title),
+                    onBack = navigator::back,
+                    scrollBehavior = scrollBehavior,
+                )
+                PrimaryTabRow(selectedTabIndex = tab.ordinal) {
+                    BackupTab.entries.forEach { entry ->
+                        Tab(
+                            selected = tab == entry,
+                            onClick = { tab = entry },
+                            unselectedContentColor = MaterialTheme.colorScheme.onSurface,
+                            text = { TabText(stringResource(entry.labelRes)) },
+                        )
                     }
                 }
             }
-
-            val message = state.message
-            if (message != null) {
-                item { InlineNotice(stringResource(message)) }
-            }
-
-            val lastReportAt = state.lastReportAt
-            if (lastReportAt != null) {
-                item {
-                    ListRow(
-                        title = stringResource(R.string.import_report_title),
-                        detail = stringResource(
-                            R.string.import_report_last_format,
-                            DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(lastReportAt)),
-                        ),
-                        onClick = { navigator.open(Route.ImportReport) },
-                    )
-                }
-            }
-
-            item { HeadingItem(R.string.backup_automatic_title) }
-            if (storageState.status != null && storageState.status != StorageLocation.Status.REACHABLE) {
-                item {
-                    NoStorageLocation(
-                        text = if (storageState.status == StorageLocation.Status.NOT_SET) {
-                            stringResource(R.string.backup_automatic_no_location)
-                        } else {
-                            storageLocationSummary(resources, storageState.status, storageState.name)
-                        },
-                        onChoose = chooseFolder,
-                    )
-                }
-            }
-            val automatic = state.automatic
-            when {
-                automatic == null -> Unit
-                automatic.isEmpty() -> item { InlineNotice(stringResource(R.string.backup_automatic_none)) }
-                else -> items(automatic, key = { it.id }) { backup ->
-                    ListRow(
-                        title = backupTime(backup),
-                        detail = backupDetail(backup),
-                        modifier = Modifier.testTag(AUTOMATIC_BACKUP_ROW_TAG),
-                        onClick = { selectedName = backup.id },
-                    )
-                }
-            }
+        },
+        snackbarHost = { SaikouSnackbarHost(snackbarHostState) },
+    ) { padding ->
+        when (tab) {
+            BackupTab.CREATE -> CreateTab(
+                state = state,
+                viewModel = viewModel,
+                listState = createListState,
+                padding = padding,
+                onCreate = { createDocument.launch(BACKUP_FILE_NAME) },
+            )
+            BackupTab.RESTORE -> RestoreTab(
+                state = state,
+                viewModel = viewModel,
+                listState = restoreListState,
+                padding = padding,
+                storageState = storageState,
+                // A backup file arrives with whatever type the provider guessed for it, which is
+                // not reliably the one it was written with, so the picker filters on nothing.
+                onPickFile = { openDocument.launch(arrayOf(ANY_MIME)) },
+                onChooseFolder = chooseFolder,
+                onOpenReport = { navigator.open(Route.ImportReport) },
+                onSelectAutomatic = { selectedName = it.id },
+            )
         }
     }
 
@@ -283,8 +227,161 @@ fun BackupScreen(restoreUri: String? = null) {
     }
 }
 
+private enum class BackupTab(@StringRes val labelRes: Int) {
+    CREATE(R.string.backup_tab_create),
+    RESTORE(R.string.backup_tab_restore),
+}
+
+/** What goes into the file, and Create backup, which asks where to save it. */
+@Composable
+private fun CreateTab(
+    state: BackupViewModel.State,
+    viewModel: BackupViewModel,
+    listState: LazyListState,
+    padding: PaddingValues,
+    onCreate: () -> Unit,
+) {
+    LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(padding)) {
+        item { InlineNotice(stringResource(R.string.backup_create_intro)) }
+        exportOptions(state.backupOptions, viewModel)
+        item {
+            Button(
+                onClick = onCreate,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                enabled = !state.exporting && state.backupOptions.canCreate(),
+            ) {
+                Text(stringResource(R.string.backup_create))
+            }
+        }
+        // From the tap to the end of the run, so the owner sees it working; the export counts
+        // nothing it could fill a bar with, as its notification does not either.
+        val message = state.exportMessage
+        if (state.exporting) {
+            item { WorkingStatus(stringResource(R.string.creating_backup)) }
+        } else if (message != null) {
+            item { InlineNotice(stringResource(message)) }
+        }
+    }
+}
+
 /**
- * Upstream's `RestoreBackupScreen` lists, as a section of this screen (phase 4 kept one Backup screen
+ * What to take from the file, Restore backup with the check and the run it starts, the last
+ * restore's report, and the kept automatic backups.
+ */
+@Composable
+private fun RestoreTab(
+    state: BackupViewModel.State,
+    viewModel: BackupViewModel,
+    listState: LazyListState,
+    padding: PaddingValues,
+    storageState: StorageLocationViewModel.State,
+    onPickFile: () -> Unit,
+    onChooseFolder: () -> Unit,
+    onOpenReport: () -> Unit,
+    onSelectAutomatic: (AutomaticBackup) -> Unit,
+) {
+    val resources = LocalResources.current
+    LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(padding)) {
+        // RESTORE_CHECK_INDEX counts the items above the check: keep it in step.
+        item { InlineNotice(stringResource(R.string.backup_restore_intro)) }
+        restoreOptions(state.restoreOptions, viewModel)
+        item {
+            Button(
+                onClick = onPickFile,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                enabled = !state.restoring && !state.checking && state.restoreOptions.canRestore(),
+            ) {
+                Text(stringResource(R.string.backup_restore))
+            }
+        }
+
+        // The check reads every entry of the file once, which takes seconds on a large one.
+        if (state.checking) {
+            item { WorkingStatus(stringResource(R.string.backup_reading)) }
+        }
+        val pending = state.pendingRestore
+        if (pending != null) {
+            item(key = RESTORE_CHECK_KEY) {
+                RestoreCheck(
+                    pending = pending,
+                    canRestore = !state.restoring && state.restoreOptions.canRestore(),
+                    onRestore = viewModel::restorePending,
+                    onCancel = viewModel::cancelPending,
+                )
+            }
+        }
+
+        // From the moment the run is queued: before its first phase it is waiting for WorkManager or
+        // copying the file in, which takes a while on a large one, and has nothing to count yet.
+        val progress = state.progress
+        if (state.restoring || progress != null) {
+            item {
+                if (progress != null) RestoreProgress(progress) else WorkingStatus(stringResource(R.string.restore_in_progress))
+            }
+        }
+
+        if (state.restoring) {
+            item {
+                TextButton(
+                    onClick = viewModel::cancelRestore,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                ) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            }
+        }
+
+        // The run's own status stands in for the line that says it was queued, until it ends.
+        val message = state.restoreMessage
+        if (message != null && !state.restoring) {
+            item { InlineNotice(stringResource(message)) }
+        }
+
+        val lastReportAt = state.lastReportAt
+        if (lastReportAt != null) {
+            item {
+                ListRow(
+                    title = stringResource(R.string.import_report_title),
+                    detail = stringResource(
+                        R.string.import_report_last_format,
+                        DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(lastReportAt)),
+                    ),
+                    onClick = onOpenReport,
+                )
+            }
+        }
+
+        item { HeadingItem(R.string.backup_automatic_title) }
+        if (storageState.status != null && storageState.status != StorageLocation.Status.REACHABLE) {
+            item {
+                NoStorageLocation(
+                    text = if (storageState.status == StorageLocation.Status.NOT_SET) {
+                        stringResource(R.string.backup_automatic_no_location)
+                    } else {
+                        storageLocationSummary(resources, storageState.status, storageState.name)
+                    },
+                    onChoose = onChooseFolder,
+                )
+            }
+        }
+        val automatic = state.automatic
+        when {
+            automatic == null -> Unit
+            automatic.isEmpty() -> item { InlineNotice(stringResource(R.string.backup_automatic_none)) }
+            else -> items(automatic, key = { it.id }) { backup ->
+                ListRow(
+                    title = backupTime(backup),
+                    detail = backupDetail(backup),
+                    modifier = Modifier.testTag(AUTOMATIC_BACKUP_ROW_TAG),
+                    onClick = { onSelectAutomatic(backup) },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Upstream's `RestoreBackupScreen` lists, on this screen's Restore tab (phase 4 kept one Backup screen
  * for both halves): the file, then, when it names something this device lacks, upstream's line and its
  * two lists, a line per tracker this build has no implementation of, and Restore and Cancel. Restore
  * takes the options above as they are when it is tapped.
@@ -396,14 +493,16 @@ private val AutomaticBackup.id: String get() = if (inApp) "app/$name" else "loca
 /** The tag on each kept backup's row, which a device test counts. */
 internal const val AUTOMATIC_BACKUP_ROW_TAG = "backup_automatic_row"
 
-/** How many items [exportOptions] adds: its ten options and the private settings hint. */
-private const val EXPORT_OPTION_ITEMS = 11
+/** How many items [restoreOptions] adds: its five options. */
+private const val RESTORE_OPTION_ITEMS = 5
 
 /**
- * The restore heading's place in the list: the intro, the create heading, [EXPORT_OPTION_ITEMS] and
- * the create button come before it.
+ * The check's place in the Restore tab's list: the intro, [RESTORE_OPTION_ITEMS] and the button come
+ * before it. The checking bar never shows beside it, since the check replaces the bar.
  */
-private const val RESTORE_HEADING_INDEX = 3 + EXPORT_OPTION_ITEMS
+private const val RESTORE_CHECK_INDEX = 2 + RESTORE_OPTION_ITEMS
+
+private const val RESTORE_CHECK_KEY = "restore_check"
 
 private fun LazyListScope.exportOptions(options: BackupOptions, viewModel: BackupViewModel) {
     optionItem(R.string.backup_option_library, options.libraryEntries, viewModel::setExportLibraryEntries)
@@ -451,32 +550,38 @@ private fun LazyListScope.optionItem(
 
 @Composable
 private fun RestoreProgress(progress: ImportProgress) {
+    WorkingStatus(
+        text = stringResource(
+            R.string.backup_restore_progress_format,
+            stringResource(phaseLabel(progress.phase)),
+            progress.done,
+            progress.total,
+        ),
+        detail = progress.currentTitle,
+        // A phase that counts nothing reports no total, and a bar drawn at zero would read as a
+        // stalled run rather than as work with no countable steps.
+        fraction = progress.done.toFloat().div(progress.total).takeIf { progress.total > 0 },
+    )
+}
+
+/**
+ * A run in flight: what it is doing, an optional second line, and a bar that fills with
+ * [fraction], or moves on its own while there is nothing to count.
+ */
+@Composable
+private fun WorkingStatus(text: String, detail: String? = null, fraction: Float? = null) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Text(
-            stringResource(
-                R.string.backup_restore_progress_format,
-                stringResource(phaseLabel(progress.phase)),
-                progress.done,
-                progress.total,
-            ),
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        val title = progress.currentTitle
-        if (title != null) {
+        Text(text, style = MaterialTheme.typography.bodyMedium)
+        if (detail != null) {
             Text(
-                title,
+                detail,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
             )
         }
-        // A phase that counts nothing reports no total, and a bar drawn at zero would read as a
-        // stalled run rather than as work with no countable steps.
-        if (progress.total > 0) {
-            LinearProgressIndicator(
-                progress = { progress.done.toFloat() / progress.total },
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-            )
+        if (fraction != null) {
+            LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
         } else {
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
         }

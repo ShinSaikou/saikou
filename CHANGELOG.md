@@ -7,6 +7,20 @@ release may change behaviour.
 
 ## Unreleased
 
+### Changed
+
+- The Backup screen has two tabs, **Create** and **Restore**, instead of one long list where
+  restoring sat below every export option. The automatic backups are listed on the Restore tab,
+  and a backup file opened from outside Saikou opens straight on it.
+- Picking a file with **Restore backup** starts the restore right away, with the options ticked
+  above it, instead of asking a second time. Extensions and tracker sign-ins the backup needs are
+  listed in the restore report afterwards. A backup file opened from outside Saikou still asks
+  first.
+- Creating or restoring a backup shows a moving bar for as long as it is waiting or working, under
+  the button that started it, and then says whether it finished, failed or was cancelled. Before,
+  a queued export or restore showed nothing, and a restore's bar only appeared once the file had
+  been copied and checked.
+
 ## 0.1.1 - 2026-11-02
 
 ### Added

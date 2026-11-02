@@ -8,9 +8,9 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
+import com.shinsaikou.backup.BackupRun
 import com.shinsaikou.domain.preferences.BackupPreferences
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
@@ -73,9 +73,10 @@ class BackupScheduler(
         workManager.enqueueUniqueWork(BackupExportWorker.WORK_NAME_MANUAL, ExistingWorkPolicy.KEEP, request)
     }
 
-    val isManualRunning: Flow<Boolean>
+    /** The newest manual export, queued, working or ended; null when WorkManager keeps none. */
+    val manualExportRun: Flow<BackupRun?>
         get() = workManager.getWorkInfosForUniqueWorkFlow(BackupExportWorker.WORK_NAME_MANUAL)
-            .map { infos -> infos.any { it.state == WorkInfo.State.RUNNING } }
+            .map(BackupRun::of)
 
     private companion object {
         const val FLEX_MINUTES = 10L

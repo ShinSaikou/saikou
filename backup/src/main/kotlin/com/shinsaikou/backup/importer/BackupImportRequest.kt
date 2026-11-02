@@ -7,6 +7,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
+import com.shinsaikou.backup.BackupRun
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
@@ -25,7 +26,13 @@ class BackupImportRequest(private val context: Context) {
     private val workManager: WorkManager
         get() = WorkManager.getInstance(context)
 
-    fun start(uri: Uri, options: RestoreOptions) {
+    /**
+     * Queues a restore of [uri] and says whether it was queued. False means a restore was already
+     * queued or working: [ExistingWorkPolicy.KEEP] keeps that one and drops this one without a word,
+     * so whether this request's id is the name's run afterwards is the only way to tell. Blocks, so
+     * call it off the main thread.
+     */
+    fun start(uri: Uri, options: RestoreOptions): Boolean {
         val request = OneTimeWorkRequestBuilder<BackupImportWorker>()
             .addTag(BackupImportWorker.WORK_NAME)
             .setInputData(
@@ -35,15 +42,17 @@ class BackupImportRequest(private val context: Context) {
                 ),
             )
             .build()
-        workManager.enqueueUniqueWork(BackupImportWorker.WORK_NAME, ExistingWorkPolicy.KEEP, request)
+        workManager.enqueueUniqueWork(BackupImportWorker.WORK_NAME, ExistingWorkPolicy.KEEP, request).result.get()
+        return workManager.getWorkInfosForUniqueWork(BackupImportWorker.WORK_NAME).get().any { it.id == request.id }
     }
 
     fun cancel() {
         workManager.cancelUniqueWork(BackupImportWorker.WORK_NAME)
     }
 
-    val isRunning: Flow<Boolean>
-        get() = infos.map { infos -> infos.any { it.state == WorkInfo.State.RUNNING } }
+    /** The newest restore, queued, working or ended; null when WorkManager keeps none. */
+    val run: Flow<BackupRun?>
+        get() = infos.map(BackupRun::of)
 
     val progress: Flow<ImportProgress?>
         get() = infos.map { infos ->

@@ -55,9 +55,10 @@ tab library
 # settings.
 tab more
 tap text=Backup
-# The screen shows "Restore backup" twice, the heading and the button under it.
-scroll-to text=Restore backup nth=2
-tap text=Restore backup nth=2
+# The Restore tab, then its one Restore backup button. Picking the file starts the restore.
+tap text=Restore
+scroll-to text=Restore backup
+tap text=Restore backup
 # The picker can reset to its Recent root after a drawer tap, so compare20k.py's picker-root repeats
 # the tap until the root's header shows.
 wait desc=Show roots timeout=30

@@ -4,9 +4,9 @@
 wait desc=More options timeout=60
 tap text=More
 tap text=Backup
-# The screen shows "Restore backup" twice, the heading and the button under it.
-scroll-to text=Restore backup nth=2
-tap text=Restore backup nth=2
+tap text=Restore
+scroll-to text=Restore backup
+tap text=Restore backup
 # The system picker, from its list of roots down to Download.
 tap desc=Show roots timeout=30
 tap text=sdk_gphone64_x86_64

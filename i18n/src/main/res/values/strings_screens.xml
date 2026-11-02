@@ -759,7 +759,11 @@
 
     <!-- Backup -->
     <string name="backup_title">Backup</string>
-    <string name="backup_intro">Create or restore a local backup file.</string>
+    <!-- The Backup screen's two tabs, each with the line at its top. -->
+    <string name="backup_tab_create">Create</string>
+    <string name="backup_tab_restore">Restore</string>
+    <string name="backup_create_intro">Save your library, reading progress and settings to a file. Keep it somewhere other than this phone.</string>
+    <string name="backup_restore_intro">Restore a backup file made by Saikou or by another reader that uses .tachibk files, or one of the automatic backups below.</string>
     <string name="backup_create">Create backup</string>
     <!-- The Data section's library list export, upstream's CSV of titles and credits. -->
     <string name="library_export">Export library list</string>
@@ -770,12 +774,14 @@
     <string name="library_export_action">Export</string>
     <string name="library_export_done">Library list exported</string>
     <string name="library_export_failed">The library list could not be exported</string>
-    <string name="backup_creating">Exporting</string>
     <string name="backup_restore">Restore backup</string>
-    <string name="backup_restoring">Restoring</string>
+    <!-- Over the moving bar while a picked or tapped file is read, before anything is queued. -->
+    <string name="backup_reading">Reading the backup file</string>
     <string name="backup_export_queued">Backup export queued.</string>
     <string name="backup_restore_queued">Backup restore queued.</string>
     <string name="backup_restore_failed">The backup could not be queued.</string>
+    <!-- A restore was already queued or working, and only one runs at a time. -->
+    <string name="backup_restore_busy">A restore is already running. Try again when it ends.</string>
     <!-- The kept automatic and sync safety backups (unit storage-location). -->
     <string name="backup_automatic_title">Automatic backups</string>
     <string name="backup_automatic_none">No automatic backup yet.</string>
