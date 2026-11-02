@@ -19,6 +19,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ChromeReaderMode
+import androidx.compose.material.icons.outlined.CloudSync
+import androidx.compose.material.icons.outlined.Code
+import androidx.compose.material.icons.outlined.CollectionsBookmark
+import androidx.compose.material.icons.outlined.Explore
+import androidx.compose.material.icons.outlined.GetApp
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Security
+import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -35,6 +46,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
@@ -325,6 +337,37 @@ internal val SettingsSection.labelRes: Int
         SettingsSection.SYNC -> R.string.settings_section_sync
         SettingsSection.SECURITY -> R.string.settings_section_security
         SettingsSection.ADVANCED -> R.string.settings_section_advanced
+    }
+
+/** The line under [labelRes] in the settings list: a few of the things the section holds. */
+@get:StringRes
+internal val SettingsSection.summaryRes: Int
+    get() = when (this) {
+        SettingsSection.APPEARANCE -> R.string.settings_section_appearance_summary
+        SettingsSection.LIBRARY -> R.string.settings_section_library_summary
+        SettingsSection.READER -> R.string.settings_section_reader_summary
+        SettingsSection.DOWNLOADS -> R.string.settings_section_downloads_summary
+        SettingsSection.TRACKING -> R.string.settings_section_tracking_summary
+        SettingsSection.BROWSE -> R.string.settings_section_browse_summary
+        SettingsSection.DATA -> R.string.settings_section_data_summary
+        SettingsSection.SYNC -> R.string.settings_section_sync_summary
+        SettingsSection.SECURITY -> R.string.settings_section_security_summary
+        SettingsSection.ADVANCED -> R.string.settings_section_advanced_summary
+    }
+
+/** The row's icon in the settings list, upstream's for each section it has; Sync is Saikou's own. */
+internal val SettingsSection.icon: ImageVector
+    get() = when (this) {
+        SettingsSection.APPEARANCE -> Icons.Outlined.Palette
+        SettingsSection.LIBRARY -> Icons.Outlined.CollectionsBookmark
+        SettingsSection.READER -> Icons.AutoMirrored.Outlined.ChromeReaderMode
+        SettingsSection.DOWNLOADS -> Icons.Outlined.GetApp
+        SettingsSection.TRACKING -> Icons.Outlined.Sync
+        SettingsSection.BROWSE -> Icons.Outlined.Explore
+        SettingsSection.DATA -> Icons.Outlined.Storage
+        SettingsSection.SYNC -> Icons.Outlined.CloudSync
+        SettingsSection.SECURITY -> Icons.Outlined.Security
+        SettingsSection.ADVANCED -> Icons.Outlined.Code
     }
 
 /**

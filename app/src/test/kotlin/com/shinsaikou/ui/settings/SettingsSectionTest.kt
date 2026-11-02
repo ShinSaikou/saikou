@@ -27,6 +27,12 @@ class SettingsSectionTest {
     }
 
     @Test
+    fun `every section has a summary and an icon no other section shares`() {
+        SettingsSection.entries.map { it.summaryRes }.toSet().size shouldBe SettingsSection.entries.size
+        SettingsSection.entries.map { it.icon }.toSet().size shouldBe SettingsSection.entries.size
+    }
+
+    @Test
     fun `tracking sits after downloads, sync after data, and security just before advanced`() {
         SettingsSection.entries.map { it.name } shouldContainExactly listOf(
             "APPEARANCE",

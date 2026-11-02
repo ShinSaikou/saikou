@@ -16,6 +16,11 @@ release may change behaviour.
 - A **Return to Saikou** button on the page the browser shows after you sign in to Google Drive,
   MyAnimeList or AniList, so you no longer have to switch back by hand.
 
+### Changed
+
+- The settings list gives each section an icon and a line saying what is in it, such as "Reading
+  mode, rotation, volume keys" under Reader, in a taller row that is easier to tap.
+
 ### Fixed
 
 - Swiping turns the page in the paged reading modes, left, right and vertical. A swipe was

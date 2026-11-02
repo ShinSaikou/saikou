@@ -376,6 +376,17 @@
     <string name="settings_section_data">Data</string>
     <string name="settings_section_sync">Sync</string>
     <string name="settings_section_advanced">Advanced</string>
+    <!-- The line under each section's name in the settings list, as upstream's settings screen has one. -->
+    <string name="settings_section_appearance_summary">Theme, pure black, date format</string>
+    <string name="settings_section_library_summary">Badges, categories, automatic updates</string>
+    <string name="settings_section_reader_summary">Reading mode, rotation, volume keys</string>
+    <string name="settings_section_downloads_summary">New chapters, deleting after reading, export</string>
+    <string name="settings_section_tracking_summary">Trackers, progress after reading</string>
+    <string name="settings_section_browse_summary">Languages, mature sources</string>
+    <string name="settings_section_data_summary">Backups, storage usage, chapter cache</string>
+    <string name="settings_section_sync_summary">Google Drive or WebDAV, last sync report</string>
+    <string name="settings_section_security_summary">App lock, secure screen, notification content</string>
+    <string name="settings_section_advanced_summary">Logs, network, database tools</string>
     <string name="settings_theme">Theme</string>
     <string name="settings_theme_mode">Light and dark</string>
     <string name="settings_tablet_ui">Two pane layout</string>
