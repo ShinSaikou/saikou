@@ -39,6 +39,14 @@ release may change behaviour.
 - On Android 8 and 9, turning pure black off in the dark theme gives the navigation bar back its
   usual shade at once, instead of leaving it see-through until the screen rotated or the app
   restarted.
+- The reader's vertical page slider shows for entries on the default reading mode, which is most
+  of them, when "Use vertical chapter navigator in" lists the mode in use.
+- Tapping the title in the reader's top bar opens the entry instead of closing the reader. The
+  arrow still closes it.
+- The previous and next chapter buttons show "Loading" while a chapter that is not ready yet loads.
+  Back closes it and the chapter opens when it arrives.
+- The crop button in the reader says whether cropping is now on or off.
+- The reader slides in and out when it opens and closes.
 - A failed download in the download queue shows the first line of the source's error, cut to 200
   characters, as the library update error list does, instead of the whole text (sometimes an
   entire error page).

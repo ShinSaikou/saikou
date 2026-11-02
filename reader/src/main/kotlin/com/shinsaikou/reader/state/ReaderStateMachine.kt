@@ -235,6 +235,7 @@ class ReaderStateMachine(
             totalPages = pages.pageCount(),
             bookmarked = event.chapter.chapter.bookmark,
             loadingAdjacent = false,
+            dialog = state.dialog.closingLoading(),
             preload = preloadWindow(),
         )
         return next to listOf(
@@ -252,7 +253,8 @@ class ReaderStateMachine(
         state.copy(phase = ReaderPhase.Failed(event.error)) to listOf(ReaderEffect.Finish(event.error))
     } else {
         // The transition holder keeps its own retry from the chapter's state flow.
-        state.copy(loadingAdjacent = false) to listOf(ReaderEffect.ShowMessage(R.string.reader_chapter_load_error))
+        state.copy(loadingAdjacent = false, dialog = state.dialog.closingLoading()) to
+            listOf(ReaderEffect.ShowMessage(R.string.reader_chapter_load_error))
     }
 
     private fun adjacentChapterLoaded(
@@ -409,9 +411,15 @@ class ReaderStateMachine(
     ): Pair<ReaderState, List<ReaderEffect>> {
         if (target == null) return state.noEffects()
         val current = state.currentChapter ?: return state.noEffects()
-        return state.copy(loadingAdjacent = true) to
+        // Upstream's Loading dialog while the chapter the button asked for loads; a chapter already
+        // loaded opens at once, and a dialog for it would only flash.
+        val dialog = if (target.state is ReaderChapter.State.Loaded) state.dialog else ReaderDialog.Loading
+        return state.copy(loadingAdjacent = true, dialog = dialog) to
             leaveChapterEffects(state, current) + ReaderEffect.LoadChapter(target)
     }
+
+    /** The dialog left once a chapter load ends: none in place of [ReaderDialog.Loading], any other kept. */
+    private fun ReaderDialog?.closingLoading(): ReaderDialog? = takeUnless { it == ReaderDialog.Loading }
 
     private fun toggleBookmark(state: ReaderState): Pair<ReaderState, List<ReaderEffect>> {
         val chapter = state.currentChapter ?: return state.noEffects()

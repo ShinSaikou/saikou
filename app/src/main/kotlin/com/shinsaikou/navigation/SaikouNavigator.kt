@@ -6,6 +6,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.core.net.toUri
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavHostController
 import androidx.navigation.toRoute
 import com.shinsaikou.reader.ReaderIntents
@@ -42,6 +43,22 @@ class SaikouNavigator(
             }
             else -> navController.navigate(route)
         }
+    }
+
+    /**
+     * [route] for an intent from outside this activity, which [open] serves except for one case: an
+     * entry whose screen is already on top stays as it is. The reader's title opens its entry, and
+     * the reader is most often opened from that entry's screen, which would otherwise be stacked a
+     * second time on itself; a new-chapters notification tapped on that screen is the same case.
+     */
+    fun arrive(route: Route) {
+        if (route is Route.MangaDetail && showsEntry(route.mangaId)) return
+        open(route)
+    }
+
+    private fun showsEntry(mangaId: Long): Boolean {
+        val top = navController.currentBackStackEntry ?: return false
+        return top.destination.hasRoute<Route.MangaDetail>() && top.toRoute<Route.MangaDetail>().mangaId == mangaId
     }
 
     /**

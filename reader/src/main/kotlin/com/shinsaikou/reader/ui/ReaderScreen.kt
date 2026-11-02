@@ -35,6 +35,7 @@ import com.shinsaikou.reader.ReaderViewModel
 import com.shinsaikou.reader.settings.ReaderBackground
 import com.shinsaikou.reader.settings.ReaderSettingsOptions
 import com.shinsaikou.reader.state.ChapterWebActions
+import com.shinsaikou.reader.state.EntryScreenIntent
 import com.shinsaikou.reader.state.ModeResolver
 import com.shinsaikou.reader.state.ReaderEffect
 import com.shinsaikou.reader.state.ReaderEvent
@@ -66,6 +67,7 @@ fun ReaderScreen(
     viewModel: ReaderViewModel,
     viewerHolder: ViewerHolder,
     webActions: ChapterWebActions,
+    entryScreenIntent: EntryScreenIntent,
     pageImageActions: PageImageActions,
     uiPreferences: UiPreferences,
     solveCoordinator: CloudflareSolveCoordinator,
@@ -208,6 +210,13 @@ fun ReaderScreen(
             chapterUrl = chapterUrl,
             onEvent = viewModel::send,
             onNavigateUp = { activity?.finish() },
+            onOpenEntry = {
+                val manga = state.manga ?: return@ReaderAppBarsHost
+                context.startActivitySafely(entryScreenIntent.create(context, manga.id), messages)
+                // finish() rather than leaving it to the intent's clear-top: only finish() sends
+                // Finishing, which deletes the chapters read under "delete after reading".
+                activity?.takeIf { !it.isFinishing }?.finish()
+            },
             onOpenInWebView = {
                 val url = chapterUrl ?: return@ReaderAppBarsHost
                 val manga = state.manga ?: return@ReaderAppBarsHost

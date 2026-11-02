@@ -49,6 +49,24 @@ class ReaderActivity : AppCompatActivity() {
     private var orientation = Configuration.ORIENTATION_UNDEFINED
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Upstream's shared axis slide in and out. From API 34 both are registered here, the close
+        // too, so a predictive back gesture, which starts before finish(), plays it; below 34
+        // finish() sets the close one, as upstream does.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            overrideActivityTransition(
+                OVERRIDE_TRANSITION_OPEN,
+                R.anim.shared_axis_x_push_enter,
+                R.anim.shared_axis_x_push_exit,
+            )
+            overrideActivityTransition(
+                OVERRIDE_TRANSITION_CLOSE,
+                R.anim.shared_axis_x_pop_enter,
+                R.anim.shared_axis_x_pop_exit,
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            overridePendingTransition(R.anim.shared_axis_x_push_enter, R.anim.shared_axis_x_push_exit)
+        }
         // Both lines run before super.onCreate. Together with the opaque black windowBackground in
         // the reader theme they are the fix for the grey band the platform's automatic nav-bar scrim
         // puts over a pure black page.
@@ -65,6 +83,7 @@ class ReaderActivity : AppCompatActivity() {
                     viewModel = viewModel,
                     viewerHolder = viewerHolder,
                     webActions = readerGraph.chapterWebActions,
+                    entryScreenIntent = readerGraph.entryScreenIntent,
                     pageImageActions = readerGraph.pageImageActions,
                     uiPreferences = readerGraph.uiPreferences,
                     solveCoordinator = readerGraph.cloudflareSolveCoordinator,
@@ -112,6 +131,10 @@ class ReaderActivity : AppCompatActivity() {
     override fun finish() {
         viewModel.send(ReaderEvent.Finishing)
         super.finish()
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            @Suppress("DEPRECATION")
+            overridePendingTransition(R.anim.shared_axis_x_pop_enter, R.anim.shared_axis_x_pop_exit)
+        }
     }
 
     override fun onProvideAssistContent(outContent: AssistContent) {

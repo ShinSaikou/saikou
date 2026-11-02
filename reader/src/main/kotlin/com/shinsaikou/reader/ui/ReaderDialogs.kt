@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.window.DialogProperties
 import com.shinsaikou.i18n.R
 import com.shinsaikou.reader.state.ReaderDialog
 import com.shinsaikou.reader.state.ReaderEvent
@@ -50,8 +51,11 @@ internal fun ReaderDialogs(
     when (val dialog = state.dialog) {
         null -> Unit
 
+        // Back closes it while the chapter goes on loading, so a slow source never traps the
+        // reader behind it; a tap outside does not, as upstream's cannot be dismissed at all.
         ReaderDialog.Loading -> AlertDialog(
-            onDismissRequest = {},
+            onDismissRequest = dismiss,
+            properties = DialogProperties(dismissOnClickOutside = false),
             confirmButton = {},
             text = { Text(stringResource(R.string.loading)) },
             icon = { CircularProgressIndicator() },

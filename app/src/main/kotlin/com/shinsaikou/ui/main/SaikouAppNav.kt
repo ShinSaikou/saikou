@@ -148,7 +148,7 @@ fun SaikouAppNav(
     LaunchedEffect(pendingTarget) {
         pendingTarget?.let { target ->
             val arrival = target.toArrival()
-            navigator.open(arrival.route)
+            navigator.arrive(arrival.route)
             pendingUpdateErrors = arrival.showUpdateErrors
             onTargetConsumed()
         }

@@ -465,6 +465,26 @@ class ReaderStateMachineTest {
     }
 
     @Test
+    fun `next or previous shows the loading dialog only for a chapter that still has to load`() {
+        val ready = readyState(session, current)
+        machine().reduce(ready, ReaderEvent.NextChapter).first.dialog shouldBe ReaderDialog.Loading
+        // The previous chapter is loaded already, so it opens at once with nothing to wait for.
+        machine().reduce(ready, ReaderEvent.PreviousChapter).first.dialog shouldBe null
+    }
+
+    @Test
+    fun `the loading dialog closes when the chapter loads or fails, and no other dialog does`() {
+        val loading = readyState(session, current).copy(loadingAdjacent = true, dialog = ReaderDialog.Loading)
+        machine().reduce(loading, ReaderEvent.ChapterLoaded(first, requestedPage = 0)).first.dialog shouldBe null
+        machine().reduce(loading, ReaderEvent.ChapterLoadFailed(nextWaiting, IllegalStateException("no pages")))
+            .first.dialog shouldBe null
+
+        val settings = readyState(session, current).copy(loadingAdjacent = true, dialog = ReaderDialog.Settings)
+        machine().reduce(settings, ReaderEvent.ChapterLoaded(first, requestedPage = 0)).first.dialog shouldBe
+            ReaderDialog.Settings
+    }
+
+    @Test
     fun `there is nothing past either end of the session`() {
         machine().reduce(readyState(session, first), ReaderEvent.PreviousChapter).second.shouldBeEmpty()
         machine().reduce(readyState(session, nextWaiting), ReaderEvent.NextChapter).second.shouldBeEmpty()

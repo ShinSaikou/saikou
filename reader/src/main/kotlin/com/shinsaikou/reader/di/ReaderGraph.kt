@@ -5,6 +5,7 @@ import com.shinsaikou.domain.preferences.ReaderPreferences
 import com.shinsaikou.domain.preferences.UiPreferences
 import com.shinsaikou.reader.ReaderViewModel
 import com.shinsaikou.reader.state.ChapterWebActions
+import com.shinsaikou.reader.state.EntryScreenIntent
 import com.shinsaikou.reader.viewer.PageImageActions
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesTo
@@ -29,6 +30,7 @@ interface ReaderGraph {
 
     val readerViewModelFactory: ReaderViewModel.Factory
     val chapterWebActions: ChapterWebActions
+    val entryScreenIntent: EntryScreenIntent
     val pageImageActions: PageImageActions
     val uiPreferences: UiPreferences
     val readerPreferences: ReaderPreferences
