@@ -113,7 +113,9 @@ internal fun SyncSection() {
             else -> SignedIn(state = state, viewModel = viewModel, onSignOut = { confirmingSignOut = true })
         }
 
-        SectionLabel(stringResource(R.string.sync_report_last))
+        SettingsSearchTarget(R.string.sync_report_last) {
+            SectionLabel(stringResource(R.string.sync_report_last))
+        }
         val latest = state.reports.firstOrNull()
         if (latest == null) {
             InlineNotice(stringResource(R.string.sync_report_none))
@@ -162,27 +164,29 @@ internal fun SyncSection() {
  */
 @Composable
 private fun SignedOut(state: SyncSettingsViewModel.State, viewModel: SyncSettingsViewModel) {
-    SettingsChipRow(R.string.sync_backend) {
-        FilterChip(
-            selected = state.chosen == Service.NONE,
-            onClick = { viewModel.choose(Service.NONE) },
-            label = { Text(stringResource(R.string.sync_backend_none)) },
-            enabled = !state.signingIn,
-        )
-        if (state.driveOffered) {
+    SettingsSearchTarget(R.string.sync_backend) {
+        SettingsChipRow(R.string.sync_backend) {
             FilterChip(
-                selected = state.chosen == Service.GOOGLE_DRIVE,
-                onClick = { viewModel.choose(Service.GOOGLE_DRIVE) },
-                label = { Text(stringResource(R.string.sync_backend_drive)) },
+                selected = state.chosen == Service.NONE,
+                onClick = { viewModel.choose(Service.NONE) },
+                label = { Text(stringResource(R.string.sync_backend_none)) },
                 enabled = !state.signingIn,
             )
+            if (state.driveOffered) {
+                FilterChip(
+                    selected = state.chosen == Service.GOOGLE_DRIVE,
+                    onClick = { viewModel.choose(Service.GOOGLE_DRIVE) },
+                    label = { Text(stringResource(R.string.sync_backend_drive)) },
+                    enabled = !state.signingIn,
+                )
+            }
+            FilterChip(
+                selected = state.chosen == Service.WEBDAV,
+                onClick = { viewModel.choose(Service.WEBDAV) },
+                label = { Text(stringResource(R.string.sync_backend_webdav)) },
+                enabled = !state.signingIn || state.chosen == Service.WEBDAV,
+            )
         }
-        FilterChip(
-            selected = state.chosen == Service.WEBDAV,
-            onClick = { viewModel.choose(Service.WEBDAV) },
-            label = { Text(stringResource(R.string.sync_backend_webdav)) },
-            enabled = !state.signingIn || state.chosen == Service.WEBDAV,
-        )
     }
     when (state.chosen) {
         Service.WEBDAV -> WebDavForm(state = state, viewModel = viewModel)
@@ -329,24 +333,32 @@ private fun WebDavForm(state: SyncSettingsViewModel.State, viewModel: SyncSettin
 
 @Composable
 private fun SignedIn(state: SyncSettingsViewModel.State, viewModel: SyncSettingsViewModel, onSignOut: () -> Unit) {
-    if (state.configuredService == Service.GOOGLE_DRIVE) {
-        ListRow(title = stringResource(R.string.sync_drive_account), detail = state.googleAccount.orEmpty())
-        // Google gave the grant an end (a project in testing): say when, and offer to sign in again first.
+    val drive = state.configuredService == Service.GOOGLE_DRIVE
+    // Signed in, the service is the account it signed in with, so a search for the service lands here.
+    SettingsSearchTarget(R.string.sync_backend) {
+        if (drive) {
+            ListRow(title = stringResource(R.string.sync_drive_account), detail = state.googleAccount.orEmpty())
+        } else {
+            ListRow(title = stringResource(R.string.sync_server), detail = state.account?.url.orEmpty())
+            ListRow(title = stringResource(R.string.sync_webdav_user), detail = state.account?.user.orEmpty())
+        }
+    }
+    // Google gave the grant an end (a project in testing): say when, and offer to sign in again first.
+    if (drive) {
         state.googleExpiresAt?.let { expiresAt ->
             InlineNotice(stringResource(R.string.sync_drive_expires_format, syncDateText(LocalContext.current, expiresAt)))
             GoogleSignInButton(state = state, viewModel = viewModel, again = true)
         }
-    } else {
-        ListRow(title = stringResource(R.string.sync_server), detail = state.account?.url.orEmpty())
-        ListRow(title = stringResource(R.string.sync_webdav_user), detail = state.account?.user.orEmpty())
     }
     LastSyncRow(state)
 
-    ListRow(
-        title = stringResource(if (state.running) R.string.sync_running else R.string.sync_now),
-        detail = stringResource(R.string.sync_now_detail),
-        onClick = if (state.running) null else viewModel::syncNow,
-    )
+    SettingsSearchTarget(R.string.sync_now) {
+        ListRow(
+            title = stringResource(if (state.running) R.string.sync_running else R.string.sync_now),
+            detail = stringResource(R.string.sync_now_detail),
+            onClick = if (state.running) null else viewModel::syncNow,
+        )
+    }
     if (state.running) LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp))
 
     IntervalRow(
@@ -355,18 +367,20 @@ private fun SignedIn(state: SyncSettingsViewModel.State, viewModel: SyncSettings
         selectedHours = state.intervalHours,
         onSelect = viewModel::setInterval,
     )
-    Column {
-        CheckboxItem(
-            label = stringResource(R.string.sync_wifi_only),
-            checked = state.wifiOnly,
-            onClick = { viewModel.setWifiOnly(!state.wifiOnly) },
-        )
-        Text(
-            text = stringResource(R.string.sync_wifi_only_detail),
-            modifier = Modifier.padding(horizontal = SettingsItemsPaddings.Horizontal),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+    SettingsSearchTarget(R.string.sync_wifi_only) {
+        Column {
+            CheckboxItem(
+                label = stringResource(R.string.sync_wifi_only),
+                checked = state.wifiOnly,
+                onClick = { viewModel.setWifiOnly(!state.wifiOnly) },
+            )
+            Text(
+                text = stringResource(R.string.sync_wifi_only_detail),
+                modifier = Modifier.padding(horizontal = SettingsItemsPaddings.Horizontal),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
     if (!state.batteryExempt) {
         val activity = LocalActivity.current
@@ -466,7 +480,9 @@ private fun LastSyncRow(state: SyncSettingsViewModel.State) {
             },
         ).joinToString("\n")
     }
-    ListRow(title = stringResource(R.string.sync_last_sync), detail = lastSync)
+    SettingsSearchTarget(R.string.sync_last_sync) {
+        ListRow(title = stringResource(R.string.sync_last_sync), detail = lastSync)
+    }
 }
 
 /**
@@ -519,21 +535,25 @@ private fun FingerprintRow(state: SyncSettingsViewModel.State, viewModel: SyncSe
         Fingerprint.SyncRanMeanwhile -> stringResource(R.string.sync_fingerprint_sync_ran)
         is Fingerprint.Failed -> ErrorText.of(resources, fingerprint.error)
     }
-    ListRow(
-        title = stringResource(R.string.sync_fingerprint),
-        detail = detail,
-        onClick = if (computing) null else viewModel::computeFingerprint,
-    )
+    SettingsSearchTarget(R.string.sync_fingerprint) {
+        ListRow(
+            title = stringResource(R.string.sync_fingerprint),
+            detail = detail,
+            onClick = if (computing) null else viewModel::computeFingerprint,
+        )
+    }
     if (computing) LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp))
 }
 
 @Composable
 private fun SignOutRow(state: SyncSettingsViewModel.State, onSignOut: () -> Unit) {
-    ListRow(
-        title = stringResource(if (state.signingOut) R.string.sync_signing_out else R.string.sync_sign_out),
-        detail = stringResource(R.string.sync_sign_out_detail),
-        onClick = if (state.signingOut) null else onSignOut,
-    )
+    SettingsSearchTarget(R.string.sync_sign_out) {
+        ListRow(
+            title = stringResource(if (state.signingOut) R.string.sync_signing_out else R.string.sync_sign_out),
+            detail = stringResource(R.string.sync_sign_out_detail),
+            onClick = if (state.signingOut) null else onSignOut,
+        )
+    }
 }
 
 /** One run: when, the counts before and after, the routine merges, the export, and the true conflicts. */

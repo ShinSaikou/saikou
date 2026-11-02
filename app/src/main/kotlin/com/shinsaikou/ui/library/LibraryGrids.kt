@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -40,6 +41,10 @@ import tachiyomi.presentation.core.components.ScrollbarLazyColumn
  * upstream writes on every step of a drag, a page writes once, when the drop settles, since one step
  * here rewrites positions across the library. It hands over the order it drew, and the view model
  * answers whether it wrote it. Null draws the cells exactly as before.
+ *
+ * A `header` is drawn above the first row, across every column: the library's "Search all sources"
+ * while a search is up. A page has no handles then (a search turns reordering off), so the drag's
+ * indices never count it.
  */
 
 @Composable
@@ -54,6 +59,7 @@ internal fun LibraryCompactGrid(
     onClick: (Long) -> Unit,
     onLongClick: (Long) -> Unit,
     onContinueReading: (Long) -> Unit,
+    header: (@Composable () -> Unit)? = null,
 ) {
     LibraryGrid(
         items = items,
@@ -61,6 +67,7 @@ internal fun LibraryCompactGrid(
         contentPadding = contentPadding,
         state = state,
         onReorder = onReorder,
+        header = header,
     ) { item, dragHandle ->
         MangaCompactGridItem(
             cover = item.item.manga,
@@ -87,6 +94,7 @@ internal fun LibraryComfortableGrid(
     onClick: (Long) -> Unit,
     onLongClick: (Long) -> Unit,
     onContinueReading: (Long) -> Unit,
+    header: (@Composable () -> Unit)? = null,
 ) {
     LibraryGrid(
         items = items,
@@ -94,6 +102,7 @@ internal fun LibraryComfortableGrid(
         contentPadding = contentPadding,
         state = state,
         onReorder = onReorder,
+        header = header,
     ) { item, dragHandle ->
         MangaComfortableGridItem(
             cover = item.item.manga,
@@ -118,6 +127,7 @@ internal fun LibraryList(
     onClick: (Long) -> Unit,
     onLongClick: (Long) -> Unit,
     onContinueReading: (Long) -> Unit,
+    header: (@Composable () -> Unit)? = null,
 ) {
     val drag = remember { DragRows() }
     val reorderState = rememberReorderableLazyListState(state, contentPadding) { from, to ->
@@ -129,6 +139,7 @@ internal fun LibraryList(
         state = state,
         contentPadding = contentPadding,
     ) {
+        if (header != null) item(key = HEADER_KEY, contentType = HEADER_KEY) { header() }
         items(drag.rows ?: items, key = LibraryViewModel.LibraryItemUi::id) { item ->
             val row = @Composable { dragHandle: Modifier? ->
                 MangaRowItem(
@@ -153,6 +164,9 @@ internal fun LibraryList(
     }
 }
 
+/** The header's key, which no entry id can be: those are Longs. */
+private const val HEADER_KEY = "library_header"
+
 /** Null is how an item says it has nothing left to read, which is what removes the button. */
 private fun continueReadingAction(
     item: LibraryViewModel.LibraryItemUi,
@@ -166,6 +180,7 @@ private fun LibraryGrid(
     contentPadding: PaddingValues,
     state: LazyGridState,
     onReorder: ((mangaId: Long, order: List<Long>) -> Boolean)?,
+    header: (@Composable () -> Unit)?,
     cell: @Composable (item: LibraryViewModel.LibraryItemUi, dragHandle: Modifier?) -> Unit,
 ) {
     val drag = remember { DragRows() }
@@ -181,6 +196,9 @@ private fun LibraryGrid(
         verticalArrangement = Arrangement.spacedBy(GRID_SPACING),
         horizontalArrangement = Arrangement.spacedBy(GRID_SPACING),
     ) {
+        if (header != null) {
+            item(key = HEADER_KEY, span = { GridItemSpan(maxLineSpan) }, contentType = HEADER_KEY) { header() }
+        }
         items(drag.rows ?: items, key = LibraryViewModel.LibraryItemUi::id) { item ->
             if (onReorder == null) {
                 cell(item, null)

@@ -14,6 +14,7 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.webkit.CookieManager
 import android.widget.Toast
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
@@ -60,6 +61,7 @@ import com.shinsaikou.domain.download.model.DownloadState
 import com.shinsaikou.domain.manga.model.ReadingMode
 import com.shinsaikou.domain.manga.model.withReadingMode
 import com.shinsaikou.domain.preferences.LibraryPreferences
+import com.shinsaikou.domain.preferences.TabletUiMode
 import com.shinsaikou.domain.preferences.UiPreferences
 import com.shinsaikou.i18n.R
 import com.shinsaikou.navigation.SettingsSection
@@ -75,6 +77,7 @@ import com.shinsaikou.ui.library.LIBRARY_TWO_PANE_TAG
 import com.shinsaikou.ui.main.MainActivity
 import com.shinsaikou.ui.main.MainDestination
 import com.shinsaikou.ui.main.MainIntents
+import com.shinsaikou.ui.manga.MANGA_COVER_TAG
 import com.shinsaikou.ui.manga.MANGA_OVERFLOW_TAG
 import com.shinsaikou.ui.manga.MANGA_TWO_PANE_TAG
 import com.shinsaikou.ui.settings.labelRes
@@ -458,6 +461,94 @@ class TwoPaneLayoutTest {
         // bar, so the bar is the search field, and its title is checked as well.
         composeRule.onAllNodes(librarySearchBar()).assertCountEquals(0)
         composeRule.onAllNodes(libraryTitle()).assertCountEquals(0)
+    }
+
+    /**
+     * The header of an entry opened in a narrow pane. With "Two pane layout" forced to Always on a
+     * phone, the library's entry pane is about 166 to 206 dp wide, and a 200 dp cover beside the
+     * title left the title a column one character wide. The cover has to move above the title, and
+     * the title has to have room for more than a letter or two. The preference is put back
+     * afterwards. A device that already composes two panes has no narrow pane, so it returns.
+     */
+    @Test
+    fun theEntryHeaderStacksTheCoverAboveTheTitleInANarrowPaneOnAPhone() {
+        if (composesTabletUi()) {
+            skip(
+                "theEntryHeaderStacksTheCoverAboveTheTitleInANarrowPaneOnAPhone: device is composing " +
+                    "tablet UI without the preference, the pane is not narrow, the assertion was not run.",
+            )
+            return
+        }
+        val preference = graph.uiPreferences.tabletUiMode
+        val oldMode = preference.get()
+        try {
+            preference.set(TabletUiMode.ALWAYS)
+            composeRule.waitUntil(timeoutMillis = PANE_TIMEOUT_MILLIS) {
+                composeRule.onAllNodesWithTag(LIBRARY_TWO_PANE_TAG).fetchSemanticsNodes().isNotEmpty()
+            }
+
+            openFixtureInPane()
+
+            val (cover, titleNode) = headerCoverAndTitle(inPane = true)
+            val density = composeRule.density.density
+            assertTrue(
+                "the title is ${titleNode.width / density} dp wide, a column too narrow to read",
+                titleNode.width / density >= MIN_HEADER_TITLE_WIDTH_DP,
+            )
+            assertTrue(
+                "the cover (bottom ${cover.bottom}) is not above the title (top ${titleNode.top})",
+                cover.bottom <= titleNode.top,
+            )
+        } finally {
+            preference.set(oldMode)
+        }
+    }
+
+    /**
+     * The other half of the header's decision: in the default mode a phone's entry screen is wide
+     * enough, so the cover stays beside the title and does not stack.
+     */
+    @Test
+    fun theEntryHeaderKeepsTheCoverBesideTheTitleOnAPhoneScreen() {
+        if (composesTabletUi()) {
+            skip(
+                "theEntryHeaderKeepsTheCoverBesideTheTitleOnAPhoneScreen: device is composing tablet " +
+                    "UI, the phone screen assertion was not run.",
+            )
+            return
+        }
+
+        findFixtureCover().performClick()
+        composeRule.waitUntil(timeoutMillis = PANE_TIMEOUT_MILLIS) {
+            composeRule.onAllNodesWithTag(MANGA_OVERFLOW_TAG).fetchSemanticsNodes().isNotEmpty()
+        }
+
+        val (cover, titleNode) = headerCoverAndTitle(inPane = false)
+        assertTrue(
+            "the cover (right ${cover.right}) is not beside the title (left ${titleNode.left})",
+            cover.right <= titleNode.left,
+        )
+    }
+
+    /**
+     * The bounds of the entry header's cover and of its title line. The library grid draws the same
+     * title on its own cover, so in the pane the title is looked for inside the pane only, and the
+     * search field, which holds the title as its text, is left out.
+     */
+    private fun headerCoverAndTitle(inPane: Boolean): Pair<Rect, Rect> {
+        val cover = composeRule.onNodeWithTag(MANGA_COVER_TAG).fetchSemanticsNode().boundsInRoot
+        var matcher = hasText(title) and hasSetTextAction().not()
+        if (inPane) matcher = matcher and hasAnyAncestor(hasTestTag(LIBRARY_DETAIL_PANE_TAG))
+        composeRule.waitUntil(timeoutMillis = PANE_TIMEOUT_MILLIS) {
+            composeRule.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty()
+        }
+        val titleNode = composeRule.onAllNodes(matcher).fetchSemanticsNodes()
+            .map { it.boundsInRoot }
+            .filter { it.top >= cover.top - 1f }
+            .minByOrNull { it.top }
+        // A title squeezed off the side of the pane has empty bounds, so it is not found at all.
+        assertNotNull("no title line at or below the cover's top, squeezed out of the header", titleNode)
+        return cover to titleNode!!
     }
 
     @Test
@@ -2432,6 +2523,9 @@ class TwoPaneLayoutTest {
 
         /** A view model built, a chapter list read and a pane composed. */
         const val PANE_TIMEOUT_MILLIS = 20_000L
+
+        /** The narrowest a title line may be, in dp, before it is a column of single letters. */
+        const val MIN_HEADER_TITLE_WIDTH_DP = 80f
 
         /**
          * The duplicate dialog test's two entries, on a source id and a folder name of its own, as

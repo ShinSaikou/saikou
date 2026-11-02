@@ -42,11 +42,13 @@ internal fun LibraryExportRow(showMessage: (String, SnackbarAction?) -> Unit) {
             }
         }
     }
-    ListRow(
-        title = stringResource(R.string.library_export),
-        detail = stringResource(R.string.library_export_detail),
-        onClick = { choosing = true },
-    )
+    SettingsSearchTarget(R.string.library_export) {
+        ListRow(
+            title = stringResource(R.string.library_export),
+            detail = stringResource(R.string.library_export_detail),
+            onClick = { choosing = true },
+        )
+    }
     if (choosing) {
         AlertDialog(
             onDismissRequest = { choosing = false },

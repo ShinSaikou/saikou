@@ -39,6 +39,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -124,7 +125,6 @@ import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.toggle
 import tachiyomi.domain.category.model.Category
 import tachiyomi.presentation.core.components.CheckboxItem
-import tachiyomi.presentation.core.components.HeadingItem
 import tachiyomi.presentation.core.components.SettingsChipRow
 import tachiyomi.presentation.core.components.SettingsItemsPaddings
 import tachiyomi.presentation.core.components.SliderItem
@@ -426,7 +426,8 @@ internal fun settingsSectionBodyTag(section: SettingsSection): String = "setting
 
 /**
  * [showMessage] puts a line on the Settings screen's snackbar (plan 3.1 item 12), for the feedback a
- * row gives where upstream toasts it.
+ * row gives where upstream toasts it. [highlight] is the row a settings search result asked for in
+ * this section, which its [SettingsSearchTarget] scrolls to and flashes.
  */
 @Composable
 internal fun SettingsSectionBody(
@@ -434,27 +435,39 @@ internal fun SettingsSectionBody(
     viewModel: SettingsViewModel,
     showMessage: (String, SnackbarAction?) -> Unit,
     modifier: Modifier = Modifier,
+    highlight: SettingsHighlight? = null,
 ) {
     Column(
         modifier = modifier
             .testTag(settingsSectionBodyTag(section))
             .verticalScroll(rememberScrollState()),
     ) {
-        when (section) {
-            SettingsSection.APPEARANCE -> AppearanceSection(viewModel)
-            SettingsSection.LIBRARY -> LibrarySection(viewModel)
-            SettingsSection.READER -> ReaderSection(viewModel)
-            SettingsSection.DOWNLOADS -> DownloadsSection(viewModel)
-            // Its own view model too, so this one takes on none of the trackers' sign-in.
-            SettingsSection.TRACKING -> TrackingSection()
-            SettingsSection.BROWSE -> BrowseSection(viewModel)
-            SettingsSection.DATA -> DataSection(viewModel, showMessage)
-            // Its own view model, so this one takes on none of sync's classes.
-            SettingsSection.SYNC -> SyncSection()
-            SettingsSection.SECURITY -> SecuritySection(viewModel)
-            SettingsSection.ADVANCED -> AdvancedSection(viewModel, showMessage)
-            SettingsSection.EXPERIMENTAL -> ExperimentalSection(viewModel)
+        CompositionLocalProvider(LocalSettingsHighlight provides highlight) {
+            SectionContent(section, viewModel, showMessage)
         }
+    }
+}
+
+@Composable
+private fun SectionContent(
+    section: SettingsSection,
+    viewModel: SettingsViewModel,
+    showMessage: (String, SnackbarAction?) -> Unit,
+) {
+    when (section) {
+        SettingsSection.APPEARANCE -> AppearanceSection(viewModel)
+        SettingsSection.LIBRARY -> LibrarySection(viewModel)
+        SettingsSection.READER -> ReaderSection(viewModel)
+        SettingsSection.DOWNLOADS -> DownloadsSection(viewModel)
+        // Its own view model too, so this one takes on none of the trackers' sign-in.
+        SettingsSection.TRACKING -> TrackingSection()
+        SettingsSection.BROWSE -> BrowseSection(viewModel)
+        SettingsSection.DATA -> DataSection(viewModel, showMessage)
+        // Its own view model, so this one takes on none of sync's classes.
+        SettingsSection.SYNC -> SyncSection()
+        SettingsSection.SECURITY -> SecuritySection(viewModel)
+        SettingsSection.ADVANCED -> AdvancedSection(viewModel, showMessage)
+        SettingsSection.EXPERIMENTAL -> ExperimentalSection(viewModel)
     }
 }
 
@@ -479,20 +492,22 @@ private fun AppearanceSection(viewModel: SettingsViewModel) {
     SettingsColumn {
         // Upstream's theme picker, a row of preview phones each drawn in its own theme. The app
         // takes the new theme from MainViewModel and recomposes, so upstream's recreate is not needed.
-        HeadingItem(R.string.settings_theme)
+        SettingsSearchHeading(R.string.settings_theme)
         AppThemePreferenceWidget(
             value = appTheme,
             amoled = amoled,
             isDark = isDark,
             onItemClick = preferences.appTheme::set,
         )
-        SettingsChipRow(R.string.settings_theme_mode) {
-            ThemeMode.entries.forEach { choice ->
-                FilterChip(
-                    selected = choice == themeMode,
-                    onClick = { preferences.themeMode.set(choice) },
-                    label = { Text(stringResource(choice.titleRes)) },
-                )
+        SettingsSearchTarget(R.string.settings_theme_mode) {
+            SettingsChipRow(R.string.settings_theme_mode) {
+                ThemeMode.entries.forEach { choice ->
+                    FilterChip(
+                        selected = choice == themeMode,
+                        onClick = { preferences.themeMode.set(choice) },
+                        label = { Text(stringResource(choice.titleRes)) },
+                    )
+                }
             }
         }
         CheckboxRow(
@@ -500,13 +515,15 @@ private fun AppearanceSection(viewModel: SettingsViewModel) {
             detailRes = R.string.pref_amoled_detail,
             pref = preferences.themeDarkAmoled,
         )
-        SettingsChipRow(R.string.settings_tablet_ui) {
-            TabletUiMode.entries.forEach { choice ->
-                FilterChip(
-                    selected = choice == tabletUiMode,
-                    onClick = { preferences.tabletUiMode.set(choice) },
-                    label = { Text(stringResource(choice.titleRes)) },
-                )
+        SettingsSearchTarget(R.string.settings_tablet_ui) {
+            SettingsChipRow(R.string.settings_tablet_ui) {
+                TabletUiMode.entries.forEach { choice ->
+                    FilterChip(
+                        selected = choice == tabletUiMode,
+                        onClick = { preferences.tabletUiMode.set(choice) },
+                        label = { Text(stringResource(choice.titleRes)) },
+                    )
+                }
             }
         }
         // Phase 4 unit SR: upstream's date format row, after the tablet layout row as in its display group.
@@ -582,11 +599,13 @@ private fun LibrarySection(viewModel: SettingsViewModel) {
             },
             onSelect = preferences.defaultCategory::set,
         )
-        CheckboxItem(
-            label = stringResource(R.string.categorized_display_settings),
-            checked = categorizedSort,
-            onClick = { viewModel.setCategorizedDisplaySettings(!categorizedSort) },
-        )
+        SettingsSearchTarget(R.string.categorized_display_settings) {
+            CheckboxItem(
+                label = stringResource(R.string.categorized_display_settings),
+                checked = categorizedSort,
+                onClick = { viewModel.setCategorizedDisplaySettings(!categorizedSort) },
+            )
+        }
         IntervalRow(
             labelRes = R.string.pref_library_update_interval,
             options = libraryUpdateIntervals,
@@ -603,11 +622,13 @@ private fun LibrarySection(viewModel: SettingsViewModel) {
             enabled = deviceRestrictionsEnabled(updateInterval),
             onChange = viewModel::setAutoUpdateDeviceRestrictions,
         )
-        ListRow(
-            title = stringResource(R.string.categories_title),
-            detail = categoryFilterLabel(state.categories, updateIncluded, updateExcluded),
-            onClick = { editingCategories = true },
-        )
+        SettingsSearchTarget(R.string.categories_title) {
+            ListRow(
+                title = stringResource(R.string.categories_title),
+                detail = categoryFilterLabel(state.categories, updateIncluded, updateExcluded),
+                onClick = { editingCategories = true },
+            )
+        }
         CheckboxRow(
             labelRes = R.string.pref_library_update_metadata,
             detailRes = R.string.pref_library_update_metadata_detail,
@@ -706,26 +727,28 @@ private fun ReaderSection(viewModel: SettingsViewModel) {
         ReaderDisplayRows(preferences)
         ReaderEInkRows(preferences)
 
-        HeadingItem(R.string.pref_category_reading)
-        CheckboxRow(labelRes = R.string.pref_skip_read_chapters, pref = preferences.skipRead)
-        CheckboxRow(labelRes = R.string.pref_skip_filtered_chapters, pref = preferences.skipFiltered)
-        CheckboxRow(labelRes = R.string.pref_skip_dupe_chapters, pref = preferences.skipDupe)
-        CheckboxRow(
-            labelRes = R.string.pref_always_show_chapter_transition,
-            pref = preferences.alwaysShowChapterTransition,
-        )
+        SettingsSearchGroup(R.string.pref_category_reading) {
+            CheckboxRow(labelRes = R.string.pref_skip_read_chapters, pref = preferences.skipRead)
+            CheckboxRow(labelRes = R.string.pref_skip_filtered_chapters, pref = preferences.skipFiltered)
+            CheckboxRow(labelRes = R.string.pref_skip_dupe_chapters, pref = preferences.skipDupe)
+            CheckboxRow(
+                labelRes = R.string.pref_always_show_chapter_transition,
+                pref = preferences.alwaysShowChapterTransition,
+            )
+        }
 
         ReaderPagedRows(preferences)
         ReaderLongStripRows(preferences)
         ReaderNavigationRows(preferences)
 
-        HeadingItem(R.string.pref_reader_actions)
-        CheckboxRow(labelRes = R.string.pref_read_with_long_tap, pref = preferences.readWithLongTap)
-        CheckboxRow(
-            labelRes = R.string.pref_create_folder_per_manga,
-            detailRes = R.string.pref_create_folder_per_manga_summary,
-            pref = preferences.folderPerManga,
-        )
+        SettingsSearchGroup(R.string.pref_reader_actions) {
+            CheckboxRow(labelRes = R.string.pref_read_with_long_tap, pref = preferences.readWithLongTap)
+            CheckboxRow(
+                labelRes = R.string.pref_create_folder_per_manga,
+                detailRes = R.string.pref_create_folder_per_manga_summary,
+                pref = preferences.folderPerManga,
+            )
+        }
     }
 }
 
@@ -734,40 +757,41 @@ private fun ReaderDisplayRows(preferences: ReaderPreferences) {
     val defaultRotation by preferences.defaultOrientationType.collectAsState()
     val readerTheme by preferences.readerTheme.collectAsState()
     val fullscreen by preferences.fullscreen.collectAsState()
-    HeadingItem(R.string.pref_category_display)
-    ChoiceRow(
-        labelRes = R.string.pref_rotation_type,
-        choices = defaultRotationChoices,
-        selected = { it.flagValue == defaultRotation },
-        label = { stringResource(it.stringRes) },
-        onSelect = { preferences.defaultOrientationType.set(it.flagValue) },
-    )
-    ChoiceRow(
-        labelRes = R.string.pref_reader_theme,
-        choices = readerBackgroundChoices,
-        selected = { (value, _) -> value == readerTheme },
-        label = { (_, label) -> stringResource(label) },
-        onSelect = { (value, _) -> preferences.readerTheme.set(value) },
-    )
-    CheckboxRow(
-        labelRes = R.string.pref_fullscreen,
-        detailRes = R.string.pref_fullscreen_detail,
-        pref = preferences.fullscreen,
-    )
-    // Upstream shows it only on a display with a cutout; only fullscreen draws under one.
-    if (LocalView.current.hasDisplayCutout()) {
-        CheckboxRow(labelRes = R.string.pref_cutout_short, pref = preferences.drawUnderCutout, enabled = fullscreen)
+    SettingsSearchGroup(R.string.pref_category_display) {
+        ChoiceRow(
+            labelRes = R.string.pref_rotation_type,
+            choices = defaultRotationChoices,
+            selected = { it.flagValue == defaultRotation },
+            label = { stringResource(it.stringRes) },
+            onSelect = { preferences.defaultOrientationType.set(it.flagValue) },
+        )
+        ChoiceRow(
+            labelRes = R.string.pref_reader_theme,
+            choices = readerBackgroundChoices,
+            selected = { (value, _) -> value == readerTheme },
+            label = { (_, label) -> stringResource(label) },
+            onSelect = { (value, _) -> preferences.readerTheme.set(value) },
+        )
+        CheckboxRow(
+            labelRes = R.string.pref_fullscreen,
+            detailRes = R.string.pref_fullscreen_detail,
+            pref = preferences.fullscreen,
+        )
+        // Upstream shows it only on a display with a cutout; only fullscreen draws under one.
+        if (LocalView.current.hasDisplayCutout()) {
+            CheckboxRow(labelRes = R.string.pref_cutout_short, pref = preferences.drawUnderCutout, enabled = fullscreen)
+        }
+        CheckboxRow(
+            labelRes = R.string.pref_keep_screen_on,
+            detailRes = R.string.pref_keep_screen_on_detail,
+            pref = preferences.keepScreenOn,
+        )
+        CheckboxRow(
+            labelRes = R.string.pref_show_page_number,
+            detailRes = R.string.pref_show_page_number_detail,
+            pref = preferences.showPageNumber,
+        )
     }
-    CheckboxRow(
-        labelRes = R.string.pref_keep_screen_on,
-        detailRes = R.string.pref_keep_screen_on_detail,
-        pref = preferences.keepScreenOn,
-    )
-    CheckboxRow(
-        labelRes = R.string.pref_show_page_number,
-        detailRes = R.string.pref_show_page_number_detail,
-        pref = preferences.showPageNumber,
-    )
 }
 
 @Composable
@@ -776,35 +800,36 @@ private fun ReaderEInkRows(preferences: ReaderPreferences) {
     val flashMillis by preferences.flashDurationMillis.collectAsState()
     val flashInterval by preferences.flashPageInterval.collectAsState()
     val flashColor by preferences.flashColor.collectAsState()
-    HeadingItem(R.string.pref_category_eink)
-    CheckboxRow(
-        labelRes = R.string.pref_flash_page,
-        detailRes = R.string.pref_flash_page_summ,
-        pref = preferences.flashOnPageChange,
-    )
-    ShownWhen(flash) {
-        Column {
-            SliderItem(
-                value = flashMillis / ReaderSettingsOptions.MILLI_CONVERSION,
-                valueRange = 1..15,
-                label = stringResource(R.string.pref_flash_duration),
-                valueString = stringResource(R.string.pref_flash_duration_summary, flashMillis),
-                onChange = { preferences.flashDurationMillis.set(it * ReaderSettingsOptions.MILLI_CONVERSION) },
-            )
-            SliderItem(
-                value = flashInterval,
-                valueRange = 1..10,
-                label = stringResource(R.string.pref_flash_page_interval),
-                valueString = pluralStringResource(R.plurals.pref_pages, flashInterval, flashInterval),
-                onChange = preferences.flashPageInterval::set,
-            )
-            ChoiceRow(
-                labelRes = R.string.pref_flash_with,
-                choices = FlashColor.entries,
-                selected = { it == flashColor },
-                label = { stringResource(it.titleRes) },
-                onSelect = preferences.flashColor::set,
-            )
+    SettingsSearchGroup(R.string.pref_category_eink) {
+        CheckboxRow(
+            labelRes = R.string.pref_flash_page,
+            detailRes = R.string.pref_flash_page_summ,
+            pref = preferences.flashOnPageChange,
+        )
+        ShownWhen(flash) {
+            Column {
+                SliderItem(
+                    value = flashMillis / ReaderSettingsOptions.MILLI_CONVERSION,
+                    valueRange = 1..15,
+                    label = stringResource(R.string.pref_flash_duration),
+                    valueString = stringResource(R.string.pref_flash_duration_summary, flashMillis),
+                    onChange = { preferences.flashDurationMillis.set(it * ReaderSettingsOptions.MILLI_CONVERSION) },
+                )
+                SliderItem(
+                    value = flashInterval,
+                    valueRange = 1..10,
+                    label = stringResource(R.string.pref_flash_page_interval),
+                    valueString = pluralStringResource(R.plurals.pref_pages, flashInterval, flashInterval),
+                    onChange = preferences.flashPageInterval::set,
+                )
+                ChoiceRow(
+                    labelRes = R.string.pref_flash_with,
+                    choices = FlashColor.entries,
+                    selected = { it == flashColor },
+                    label = { stringResource(it.titleRes) },
+                    onSelect = preferences.flashColor::set,
+                )
+            }
         }
     }
 }
@@ -817,44 +842,45 @@ private fun ReaderPagedRows(preferences: ReaderPreferences) {
     val zoomStart by preferences.zoomStart.collectAsState()
     val dualPageSplit by preferences.dualPageSplitPaged.collectAsState()
     val rotateToFit by preferences.dualPageRotateToFit.collectAsState()
-    HeadingItem(R.string.pager_viewer)
-    TapZoneRows(
-        selected = navigationMode,
-        onSelect = preferences.navigationModePager::set,
-        invertMode = navInverted,
-        onSelectInvertMode = preferences.pagerNavInverted::set,
-    )
-    ChoiceRow(
-        labelRes = R.string.pref_image_scale_type,
-        // The stored value is the index plus one (ReaderSettingsOptions).
-        choices = ReaderSettingsOptions.ImageScaleType.indices.toList(),
-        selected = { it + 1 == imageScaleType },
-        label = { stringResource(ReaderSettingsOptions.ImageScaleType[it]) },
-        onSelect = { preferences.imageScaleType.set(it + 1) },
-    )
-    ChoiceRow(
-        labelRes = R.string.pref_zoom_start,
-        choices = ReaderSettingsOptions.ZoomStart.indices.toList(),
-        selected = { it + 1 == zoomStart },
-        label = { stringResource(ReaderSettingsOptions.ZoomStart[it]) },
-        onSelect = { preferences.zoomStart.set(it + 1) },
-    )
-    CheckboxRow(labelRes = R.string.pref_crop_borders, pref = preferences.cropBorders)
-    CheckboxRow(labelRes = R.string.pref_landscape_zoom, pref = preferences.landscapeZoom)
-    CheckboxRow(labelRes = R.string.pref_navigate_pan, pref = preferences.navigateToPan)
-    CheckboxRow(labelRes = R.string.pref_dual_page_split, pref = preferences.dualPageSplitPaged)
-    CheckboxRow(
-        labelRes = R.string.pref_dual_page_invert,
-        detailRes = R.string.pref_dual_page_invert_summary,
-        pref = preferences.dualPageInvertPaged,
-        enabled = dualPageSplit,
-    )
-    CheckboxRow(labelRes = R.string.pref_page_rotate, pref = preferences.dualPageRotateToFit)
-    CheckboxRow(
-        labelRes = R.string.pref_page_rotate_invert,
-        pref = preferences.dualPageRotateToFitInvert,
-        enabled = rotateToFit,
-    )
+    SettingsSearchGroup(R.string.pager_viewer) {
+        TapZoneRows(
+            selected = navigationMode,
+            onSelect = preferences.navigationModePager::set,
+            invertMode = navInverted,
+            onSelectInvertMode = preferences.pagerNavInverted::set,
+        )
+        ChoiceRow(
+            labelRes = R.string.pref_image_scale_type,
+            // The stored value is the index plus one (ReaderSettingsOptions).
+            choices = ReaderSettingsOptions.ImageScaleType.indices.toList(),
+            selected = { it + 1 == imageScaleType },
+            label = { stringResource(ReaderSettingsOptions.ImageScaleType[it]) },
+            onSelect = { preferences.imageScaleType.set(it + 1) },
+        )
+        ChoiceRow(
+            labelRes = R.string.pref_zoom_start,
+            choices = ReaderSettingsOptions.ZoomStart.indices.toList(),
+            selected = { it + 1 == zoomStart },
+            label = { stringResource(ReaderSettingsOptions.ZoomStart[it]) },
+            onSelect = { preferences.zoomStart.set(it + 1) },
+        )
+        CheckboxRow(labelRes = R.string.pref_crop_borders, pref = preferences.cropBorders)
+        CheckboxRow(labelRes = R.string.pref_landscape_zoom, pref = preferences.landscapeZoom)
+        CheckboxRow(labelRes = R.string.pref_navigate_pan, pref = preferences.navigateToPan)
+        CheckboxRow(labelRes = R.string.pref_dual_page_split, pref = preferences.dualPageSplitPaged)
+        CheckboxRow(
+            labelRes = R.string.pref_dual_page_invert,
+            detailRes = R.string.pref_dual_page_invert_summary,
+            pref = preferences.dualPageInvertPaged,
+            enabled = dualPageSplit,
+        )
+        CheckboxRow(labelRes = R.string.pref_page_rotate, pref = preferences.dualPageRotateToFit)
+        CheckboxRow(
+            labelRes = R.string.pref_page_rotate_invert,
+            pref = preferences.dualPageRotateToFitInvert,
+            enabled = rotateToFit,
+        )
+    }
 }
 
 @Composable
@@ -866,43 +892,46 @@ private fun ReaderLongStripRows(preferences: ReaderPreferences) {
     val dualPageSplit by preferences.dualPageSplitWebtoon.collectAsState()
     val rotateToFit by preferences.dualPageRotateToFitWebtoon.collectAsState()
     val percent = remember { NumberFormat.getPercentInstance() }
-    HeadingItem(R.string.webtoon_viewer)
-    TapZoneRows(
-        selected = navigationMode,
-        onSelect = preferences.navigationModeWebtoon::set,
-        invertMode = navInverted,
-        onSelectInvertMode = preferences.webtoonNavInverted::set,
-    )
-    SliderItem(
-        value = sidePadding,
-        valueRange = ReaderSettingsOptions.WEBTOON_PADDING_MIN..ReaderSettingsOptions.WEBTOON_PADDING_MAX,
-        label = stringResource(R.string.pref_webtoon_side_padding),
-        valueString = percent.format(sidePadding / 100f),
-        onChange = preferences.webtoonSidePadding::set,
-    )
-    ChoiceRow(
-        labelRes = R.string.pref_hide_threshold,
-        choices = readerHideThresholdChoices,
-        selected = { it == hideThreshold },
-        label = { stringResource(it.titleRes) },
-        onSelect = preferences.readerHideThreshold::set,
-    )
-    CheckboxRow(labelRes = R.string.pref_crop_borders, pref = preferences.cropBordersWebtoon)
-    CheckboxRow(labelRes = R.string.pref_dual_page_split, pref = preferences.dualPageSplitWebtoon)
-    CheckboxRow(
-        labelRes = R.string.pref_dual_page_invert,
-        detailRes = R.string.pref_dual_page_invert_summary,
-        pref = preferences.dualPageInvertWebtoon,
-        enabled = dualPageSplit,
-    )
-    CheckboxRow(labelRes = R.string.pref_page_rotate, pref = preferences.dualPageRotateToFitWebtoon)
-    CheckboxRow(
-        labelRes = R.string.pref_page_rotate_invert,
-        pref = preferences.dualPageRotateToFitInvertWebtoon,
-        enabled = rotateToFit,
-    )
-    CheckboxRow(labelRes = R.string.pref_double_tap_zoom, pref = preferences.webtoonDoubleTapZoomEnabled)
-    CheckboxRow(labelRes = R.string.pref_webtoon_disable_zoom_out, pref = preferences.webtoonDisableZoomOut)
+    SettingsSearchGroup(R.string.webtoon_viewer) {
+        TapZoneRows(
+            selected = navigationMode,
+            onSelect = preferences.navigationModeWebtoon::set,
+            invertMode = navInverted,
+            onSelectInvertMode = preferences.webtoonNavInverted::set,
+        )
+        SettingsSearchTarget(R.string.pref_webtoon_side_padding) {
+            SliderItem(
+                value = sidePadding,
+                valueRange = ReaderSettingsOptions.WEBTOON_PADDING_MIN..ReaderSettingsOptions.WEBTOON_PADDING_MAX,
+                label = stringResource(R.string.pref_webtoon_side_padding),
+                valueString = percent.format(sidePadding / 100f),
+                onChange = preferences.webtoonSidePadding::set,
+            )
+        }
+        ChoiceRow(
+            labelRes = R.string.pref_hide_threshold,
+            choices = readerHideThresholdChoices,
+            selected = { it == hideThreshold },
+            label = { stringResource(it.titleRes) },
+            onSelect = preferences.readerHideThreshold::set,
+        )
+        CheckboxRow(labelRes = R.string.pref_crop_borders, pref = preferences.cropBordersWebtoon)
+        CheckboxRow(labelRes = R.string.pref_dual_page_split, pref = preferences.dualPageSplitWebtoon)
+        CheckboxRow(
+            labelRes = R.string.pref_dual_page_invert,
+            detailRes = R.string.pref_dual_page_invert_summary,
+            pref = preferences.dualPageInvertWebtoon,
+            enabled = dualPageSplit,
+        )
+        CheckboxRow(labelRes = R.string.pref_page_rotate, pref = preferences.dualPageRotateToFitWebtoon)
+        CheckboxRow(
+            labelRes = R.string.pref_page_rotate_invert,
+            pref = preferences.dualPageRotateToFitInvertWebtoon,
+            enabled = rotateToFit,
+        )
+        CheckboxRow(labelRes = R.string.pref_double_tap_zoom, pref = preferences.webtoonDoubleTapZoomEnabled)
+        CheckboxRow(labelRes = R.string.pref_webtoon_disable_zoom_out, pref = preferences.webtoonDisableZoomOut)
+    }
 }
 
 @Composable
@@ -910,33 +939,34 @@ private fun ReaderNavigationRows(preferences: ReaderPreferences) {
     val volumeKeys by preferences.readWithVolumeKeys.collectAsState()
     val verticalModes by preferences.verticalNavigator.collectAsState()
     val navigatorHeight by preferences.verticalNavigatorHeight.collectAsState()
-    HeadingItem(R.string.pref_reader_navigation)
-    CheckboxRow(labelRes = R.string.pref_read_with_volume_keys, pref = preferences.readWithVolumeKeys)
-    CheckboxRow(
-        labelRes = R.string.pref_read_with_volume_keys_inverted,
-        pref = preferences.readWithVolumeKeysInverted,
-        enabled = volumeKeys,
-    )
-    // By name, as the reader reads the set (ReaderChrome.chapterNavigatorType).
-    ChoiceSetRow(
-        labelRes = R.string.pref_vertical_navigator,
-        choices = defaultReadingModeChoices.map { it.name to it.stringRes },
-        selected = verticalModes,
-        onChange = preferences.verticalNavigator::set,
-    )
-    CheckboxRow(
-        labelRes = R.string.pref_webtoon_vertical_navigator_on_left,
-        pref = preferences.verticalNavigatorOnLeft,
-        enabled = verticalModes.isNotEmpty(),
-    )
-    ShownWhen(verticalModes.isNotEmpty()) {
-        SliderItem(
-            value = navigatorHeight,
-            valueRange = 65..100,
-            steps = 6,
-            label = stringResource(R.string.pref_vertical_navigator_height),
-            onChange = preferences.verticalNavigatorHeight::set,
+    SettingsSearchGroup(R.string.pref_reader_navigation) {
+        CheckboxRow(labelRes = R.string.pref_read_with_volume_keys, pref = preferences.readWithVolumeKeys)
+        CheckboxRow(
+            labelRes = R.string.pref_read_with_volume_keys_inverted,
+            pref = preferences.readWithVolumeKeysInverted,
+            enabled = volumeKeys,
         )
+        // By name, as the reader reads the set (ReaderChrome.chapterNavigatorType).
+        ChoiceSetRow(
+            labelRes = R.string.pref_vertical_navigator,
+            choices = defaultReadingModeChoices.map { it.name to it.stringRes },
+            selected = verticalModes,
+            onChange = preferences.verticalNavigator::set,
+        )
+        CheckboxRow(
+            labelRes = R.string.pref_webtoon_vertical_navigator_on_left,
+            pref = preferences.verticalNavigatorOnLeft,
+            enabled = verticalModes.isNotEmpty(),
+        )
+        ShownWhen(verticalModes.isNotEmpty()) {
+            SliderItem(
+                value = navigatorHeight,
+                valueRange = 65..100,
+                steps = 6,
+                label = stringResource(R.string.pref_vertical_navigator_height),
+                onChange = preferences.verticalNavigatorHeight::set,
+            )
+        }
     }
 }
 
@@ -976,15 +1006,17 @@ private fun BrowseSection(viewModel: SettingsViewModel) {
     var editingLanguages by remember { mutableStateOf(false) }
 
     SettingsColumn {
-        ListRow(
-            title = stringResource(R.string.pref_enabled_languages),
-            // The candidates' order, so the summary reads the way the dialog lists them.
-            detail = state.languageCandidates.filter { it in enabledLanguages }
-                .map { enabledLanguageLabel(it) }
-                .ifEmpty { listOf(stringResource(R.string.pref_enabled_languages_none)) }
-                .joinToString(),
-            onClick = { editingLanguages = true },
-        )
+        SettingsSearchTarget(R.string.pref_enabled_languages) {
+            ListRow(
+                title = stringResource(R.string.pref_enabled_languages),
+                // The candidates' order, so the summary reads the way the dialog lists them.
+                detail = state.languageCandidates.filter { it in enabledLanguages }
+                    .map { enabledLanguageLabel(it) }
+                    .ifEmpty { listOf(stringResource(R.string.pref_enabled_languages_none)) }
+                    .joinToString(),
+                onClick = { editingLanguages = true },
+            )
+        }
         // Phase 4 unit AL: upstream's prompt before the row flips, titled as upstream's is.
         CheckboxRow(
             labelRes = R.string.pref_show_nsfw,
@@ -1055,12 +1087,14 @@ private fun DownloadsSection(viewModel: SettingsViewModel) {
             detailRes = R.string.pref_download_only_over_wifi_detail,
             pref = viewModel.downloadPreferences.downloadOnlyOverWifi,
         )
-        SliderItem(
-            value = parallelPageLimit,
-            valueRange = parallelPageLimits,
-            label = stringResource(R.string.pref_download_parallel_pages),
-            onChange = viewModel.downloadPreferences.parallelPageLimit::set,
-        )
+        SettingsSearchTarget(R.string.pref_download_parallel_pages) {
+            SliderItem(
+                value = parallelPageLimit,
+                valueRange = parallelPageLimits,
+                label = stringResource(R.string.pref_download_parallel_pages),
+                onChange = viewModel.downloadPreferences.parallelPageLimit::set,
+            )
+        }
         DeleteChaptersGroup(
             viewModel = viewModel,
             removeAfterRead = removeAfterRead,
@@ -1078,63 +1112,73 @@ private fun DownloadsSection(viewModel: SettingsViewModel) {
             pref = viewModel.downloadPreferences.downloadNewUnreadChaptersOnly,
             enabled = downloadNew,
         )
-        ListRow(
-            title = stringResource(R.string.categories_title),
-            detail = categoryFilterLabel(state.categories, newIncluded, newExcluded),
-            modifier = Modifier.alpha(if (downloadNew) 1f else DISABLED_ALPHA),
-            onClick = if (downloadNew) { { editingNewCategories = true } } else null,
-        )
-        SettingsChipRow(R.string.auto_download_while_reading) {
-            autoDownloadWhileReadingChoices.forEach { amount ->
-                FilterChip(
-                    selected = amount == downloadAhead,
-                    onClick = { viewModel.downloadPreferences.autoDownloadWhileReading.set(amount) },
-                    label = {
-                        Text(
-                            if (amount == 0) {
-                                stringResource(R.string.disabled)
-                            } else {
-                                pluralStringResource(R.plurals.next_unread_chapters, amount, amount)
-                            },
-                        )
-                    },
-                )
+        SettingsSearchTarget(R.string.categories_title) {
+            ListRow(
+                title = stringResource(R.string.categories_title),
+                detail = categoryFilterLabel(state.categories, newIncluded, newExcluded),
+                modifier = Modifier.alpha(if (downloadNew) 1f else DISABLED_ALPHA),
+                onClick = if (downloadNew) { { editingNewCategories = true } } else null,
+            )
+        }
+        SettingsSearchTarget(R.string.auto_download_while_reading) {
+            SettingsChipRow(R.string.auto_download_while_reading) {
+                autoDownloadWhileReadingChoices.forEach { amount ->
+                    FilterChip(
+                        selected = amount == downloadAhead,
+                        onClick = { viewModel.downloadPreferences.autoDownloadWhileReading.set(amount) },
+                        label = {
+                            Text(
+                                if (amount == 0) {
+                                    stringResource(R.string.disabled)
+                                } else {
+                                    pluralStringResource(R.plurals.next_unread_chapters, amount, amount)
+                                },
+                            )
+                        },
+                    )
+                }
             }
         }
         val orphans = state.orphanDownloads?.size
-        ListRow(
-            title = stringResource(R.string.pref_download_orphans),
-            detail = when {
-                orphans == null -> stringResource(R.string.pref_download_orphans_pending)
-                orphans == 0 -> stringResource(R.string.pref_download_orphans_none)
-                else -> pluralStringResource(R.plurals.pref_download_orphans_format, orphans, orphans)
-            },
-            trailing = if (orphans != null && orphans > 0) stringResource(R.string.action_delete) else null,
-            onTrailing = { confirmingDelete = true },
-        )
+        SettingsSearchTarget(R.string.pref_download_orphans) {
+            ListRow(
+                title = stringResource(R.string.pref_download_orphans),
+                detail = when {
+                    orphans == null -> stringResource(R.string.pref_download_orphans_pending)
+                    orphans == 0 -> stringResource(R.string.pref_download_orphans_none)
+                    else -> pluralStringResource(R.plurals.pref_download_orphans_format, orphans, orphans)
+                },
+                trailing = if (orphans != null && orphans > 0) stringResource(R.string.action_delete) else null,
+                onTrailing = { confirmingDelete = true },
+            )
+        }
         val exportState = state.export
-        ListRow(
-            title = stringResource(R.string.pref_export_downloads),
-            detail = exportDetail(exportState, storageState.status),
-            modifier = Modifier.testTag(EXPORT_DOWNLOADS_ROW_TAG),
-            onClick = when {
-                exportState.running -> null
-                storageState.status == StorageLocation.Status.REACHABLE -> viewModel::exportDownloads
-                else -> pickThenExport
-            },
-        )
+        SettingsSearchTarget(R.string.pref_export_downloads) {
+            ListRow(
+                title = stringResource(R.string.pref_export_downloads),
+                detail = exportDetail(exportState, storageState.status),
+                modifier = Modifier.testTag(EXPORT_DOWNLOADS_ROW_TAG),
+                onClick = when {
+                    exportState.running -> null
+                    storageState.status == StorageLocation.Status.REACHABLE -> viewModel::exportDownloads
+                    else -> pickThenExport
+                },
+            )
+        }
         val adoption = state.adoption
-        ListRow(
-            title = stringResource(R.string.pref_adopt_downloads),
-            detail = when {
-                adoption.running && adoption.total == 0 -> stringResource(R.string.pref_adopt_downloads_walking)
-                adoption.running -> stringResource(R.string.pref_adopt_downloads_progress_format, adoption.done, adoption.total)
-                pendingTree.isNotEmpty() -> stringResource(R.string.pref_adopt_downloads_interrupted)
-                else -> stringResource(R.string.pref_adopt_downloads_detail)
-            },
-            modifier = Modifier.testTag(ADOPT_DOWNLOADS_ROW_TAG),
-            onClick = if (adoption.running) null else { { pickTree.launch(STORAGE_ROOT_HINT.toUri()) } },
-        )
+        SettingsSearchTarget(R.string.pref_adopt_downloads) {
+            ListRow(
+                title = stringResource(R.string.pref_adopt_downloads),
+                detail = when {
+                    adoption.running && adoption.total == 0 -> stringResource(R.string.pref_adopt_downloads_walking)
+                    adoption.running -> stringResource(R.string.pref_adopt_downloads_progress_format, adoption.done, adoption.total)
+                    pendingTree.isNotEmpty() -> stringResource(R.string.pref_adopt_downloads_interrupted)
+                    else -> stringResource(R.string.pref_adopt_downloads_detail)
+                },
+                modifier = Modifier.testTag(ADOPT_DOWNLOADS_ROW_TAG),
+                onClick = if (adoption.running) null else { { pickTree.launch(STORAGE_ROOT_HINT.toUri()) } },
+            )
+        }
         state.adoptionSummary?.let { summary ->
             val navigator = LocalNavigator.current
             ListRow(
@@ -1238,30 +1282,39 @@ private fun DeleteChaptersGroup(
     onEditExcluded: () -> Unit,
 ) {
     HorizontalDivider()
-    HeadingItem(R.string.pref_category_delete_chapters)
-    CheckboxItem(
-        label = stringResource(R.string.pref_remove_after_marked_as_read),
-        pref = viewModel.downloadPreferences.removeAfterMarkedAsRead,
-    )
-    SettingsChipRow(R.string.pref_remove_after_read) {
-        removeAfterReadChoices.forEach { (slot, label) ->
-            FilterChip(
-                selected = slot == removeAfterRead,
-                onClick = { viewModel.downloadPreferences.removeAfterReadSlots.set(slot) },
-                label = { Text(stringResource(label)) },
+    SettingsSearchGroup(R.string.pref_category_delete_chapters) {
+        SettingsSearchTarget(R.string.pref_remove_after_marked_as_read) {
+            CheckboxItem(
+                label = stringResource(R.string.pref_remove_after_marked_as_read),
+                pref = viewModel.downloadPreferences.removeAfterMarkedAsRead,
+            )
+        }
+        SettingsSearchTarget(R.string.pref_remove_after_read) {
+            SettingsChipRow(R.string.pref_remove_after_read) {
+                removeAfterReadChoices.forEach { (slot, label) ->
+                    FilterChip(
+                        selected = slot == removeAfterRead,
+                        onClick = { viewModel.downloadPreferences.removeAfterReadSlots.set(slot) },
+                        label = { Text(stringResource(label)) },
+                    )
+                }
+            }
+        }
+        SettingsSearchTarget(R.string.pref_remove_bookmarked_chapters) {
+            CheckboxItem(
+                label = stringResource(R.string.pref_remove_bookmarked_chapters),
+                pref = viewModel.downloadPreferences.removeBookmarkedChapters,
+            )
+        }
+        SettingsSearchTarget(R.string.pref_remove_exclude_categories) {
+            ListRow(
+                title = stringResource(R.string.pref_remove_exclude_categories),
+                detail = excluded.map { it.visualName }.joinToString()
+                    .ifEmpty { stringResource(R.string.pref_remove_exclude_categories_none) },
+                onClick = onEditExcluded,
             )
         }
     }
-    CheckboxItem(
-        label = stringResource(R.string.pref_remove_bookmarked_chapters),
-        pref = viewModel.downloadPreferences.removeBookmarkedChapters,
-    )
-    ListRow(
-        title = stringResource(R.string.pref_remove_exclude_categories),
-        detail = excluded.map { it.visualName }.joinToString()
-            .ifEmpty { stringResource(R.string.pref_remove_exclude_categories_none) },
-        onClick = onEditExcluded,
-    )
     HorizontalDivider()
 }
 
@@ -1333,17 +1386,21 @@ private fun DataSection(viewModel: SettingsViewModel, showMessage: (String, Snac
         )
         val keptBackups by viewModel.backupPreferences.keptBackups.collectAsState()
         // Read when the next automatic backup is written, which deletes any beyond the count.
-        SliderItem(
-            value = keptBackups,
-            valueRange = BackupPreferences.KEPT_BACKUPS_RANGE,
-            label = stringResource(R.string.pref_backup_slots),
-            onChange = viewModel.backupPreferences.keptBackups::set,
-        )
-        ListRow(
-            title = stringResource(R.string.backup_create),
-            detail = stringResource(R.string.more_backup_detail),
-            onClick = { navigator.open(Route.BackupCreate) },
-        )
+        SettingsSearchTarget(R.string.pref_backup_slots) {
+            SliderItem(
+                value = keptBackups,
+                valueRange = BackupPreferences.KEPT_BACKUPS_RANGE,
+                label = stringResource(R.string.pref_backup_slots),
+                onChange = viewModel.backupPreferences.keptBackups::set,
+            )
+        }
+        SettingsSearchTarget(R.string.backup_create) {
+            ListRow(
+                title = stringResource(R.string.backup_create),
+                detail = stringResource(R.string.more_backup_detail),
+                onClick = { navigator.open(Route.BackupCreate) },
+            )
+        }
         // Upstream's library list export, beside the backup it complements.
         LibraryExportRow(showMessage)
         // Phase 4 unit ST: upstream's line under its backup rows, the time BackupExportWorker last
@@ -1351,40 +1408,44 @@ private fun DataSection(viewModel: SettingsViewModel, showMessage: (String, Snac
         InlineNotice(stringResource(R.string.last_auto_backup_info, relativeTimeSpanString(lastAutoBackup)))
         val downloadsSize = state.downloadsSize
         val chapterCacheSize = state.chapterCacheSize
-        ListRow(
-            title = stringResource(R.string.pref_storage_usage),
-            detail = if (downloadsSize == null || chapterCacheSize == null) {
-                stringResource(R.string.pref_storage_usage_pending)
-            } else {
-                stringResource(
-                    R.string.pref_storage_usage_format,
-                    Formatter.formatFileSize(context, downloadsSize),
-                    chapterCacheSize,
-                ) + "\n" + stringResource(
-                    R.string.available_disk_space_info,
-                    Formatter.formatFileSize(context, availableSpace),
-                    Formatter.formatFileSize(context, totalSpace),
-                )
-            },
-            modifier = Modifier.testTag(STORAGE_USAGE_ROW_TAG),
-        )
+        SettingsSearchTarget(R.string.pref_storage_usage) {
+            ListRow(
+                title = stringResource(R.string.pref_storage_usage),
+                detail = if (downloadsSize == null || chapterCacheSize == null) {
+                    stringResource(R.string.pref_storage_usage_pending)
+                } else {
+                    stringResource(
+                        R.string.pref_storage_usage_format,
+                        Formatter.formatFileSize(context, downloadsSize),
+                        chapterCacheSize,
+                    ) + "\n" + stringResource(
+                        R.string.available_disk_space_info,
+                        Formatter.formatFileSize(context, availableSpace),
+                        Formatter.formatFileSize(context, totalSpace),
+                    )
+                },
+                modifier = Modifier.testTag(STORAGE_USAGE_ROW_TAG),
+            )
+        }
         // Upstream issue #565: the downloads a removal from the library left behind.
         val orphanTitles = state.orphanTitles
-        ListRow(
-            title = stringResource(R.string.storage_downloads_title),
-            detail = when {
-                orphanTitles == null -> stringResource(R.string.storage_downloads_pending)
-                orphanTitles.isEmpty() -> stringResource(R.string.storage_downloads_none)
-                else -> pluralStringResource(
-                    R.plurals.storage_downloads_summary_format,
-                    orphanTitles.size,
-                    orphanTitles.size,
-                    Formatter.formatFileSize(context, orphanTitles.sumOf { it.sizeBytes }),
-                )
-            },
-            modifier = Modifier.testTag(STORAGE_DOWNLOADS_ROW_TAG),
-            onClick = { navigator.open(Route.StorageDownloads) },
-        )
+        SettingsSearchTarget(R.string.storage_downloads_title) {
+            ListRow(
+                title = stringResource(R.string.storage_downloads_title),
+                detail = when {
+                    orphanTitles == null -> stringResource(R.string.storage_downloads_pending)
+                    orphanTitles.isEmpty() -> stringResource(R.string.storage_downloads_none)
+                    else -> pluralStringResource(
+                        R.plurals.storage_downloads_summary_format,
+                        orphanTitles.size,
+                        orphanTitles.size,
+                        Formatter.formatFileSize(context, orphanTitles.sumOf { it.sizeBytes }),
+                    )
+                },
+                modifier = Modifier.testTag(STORAGE_DOWNLOADS_ROW_TAG),
+                onClick = { navigator.open(Route.StorageDownloads) },
+            )
+        }
         // Upstream's key, carried by a restored backup (ruling R56). `MainActivity` reads it on a
         // fresh launch; nothing clears the cache when a reading session ends.
         CheckboxRow(
@@ -1392,13 +1453,15 @@ private fun DataSection(viewModel: SettingsViewModel, showMessage: (String, Snac
             detailRes = R.string.pref_auto_clear_chapter_cache_detail,
             pref = viewModel.libraryPreferences.autoClearChapterCache,
         )
-        ListRow(
-            title = stringResource(R.string.pref_clear_chapter_cache),
-            detail = state.chapterCacheSize
-                ?.let { stringResource(R.string.pref_chapter_cache_size_format, it) }
-                ?: stringResource(R.string.pref_chapter_cache_size_pending),
-            onClick = viewModel::clearChapterCache,
-        )
+        SettingsSearchTarget(R.string.pref_clear_chapter_cache) {
+            ListRow(
+                title = stringResource(R.string.pref_clear_chapter_cache),
+                detail = state.chapterCacheSize
+                    ?.let { stringResource(R.string.pref_chapter_cache_size_format, it) }
+                    ?: stringResource(R.string.pref_chapter_cache_size_pending),
+                onClick = viewModel::clearChapterCache,
+            )
+        }
         InlineNotice(stringResource(R.string.settings_data_local_note))
     }
 }
@@ -1557,11 +1620,13 @@ private fun AdvancedSection(viewModel: SettingsViewModel, showMessage: (String, 
 
     SettingsColumn {
         // The build a report is about, first in the section, and a tap copies it (phase 3 unit AD).
-        ListRow(
-            title = stringResource(R.string.settings_version),
-            detail = version,
-            onClick = { context.copyToClipboard(version, copied) },
-        )
+        SettingsSearchTarget(R.string.settings_version) {
+            ListRow(
+                title = stringResource(R.string.settings_version),
+                detail = version,
+                onClick = { context.copyToClipboard(version, copied) },
+            )
+        }
         // The in-app updater, under the version it compares against.
         AppUpdateRows(appName = appInfo.name, showMessage = showMessage)
         CheckboxRow(
@@ -1569,21 +1634,27 @@ private fun AdvancedSection(viewModel: SettingsViewModel, showMessage: (String, 
             detailRes = R.string.pref_auto_check_extensions_detail,
             pref = viewModel.extensionsPreferences.autoCheckUpdates,
         )
-        ListRow(
-            title = stringResource(R.string.pref_extension_lib_override),
-            detail = libVersionOverride.ifBlank { stringResource(R.string.state_off) },
-            onClick = { editingLibVersions = true },
-        )
-        ListRow(
-            title = stringResource(R.string.pref_battery_exemption),
-            detail = stringResource(R.string.pref_battery_exemption_detail),
-            onClick = { activity?.let(viewModel::requestBatteryExemption) },
-        )
-        ListRow(
-            title = stringResource(R.string.crash_title),
-            detail = stringResource(R.string.more_crash_detail),
-            onClick = { navigator.open(Route.CrashLog) },
-        )
+        SettingsSearchTarget(R.string.pref_extension_lib_override) {
+            ListRow(
+                title = stringResource(R.string.pref_extension_lib_override),
+                detail = libVersionOverride.ifBlank { stringResource(R.string.state_off) },
+                onClick = { editingLibVersions = true },
+            )
+        }
+        SettingsSearchTarget(R.string.pref_battery_exemption) {
+            ListRow(
+                title = stringResource(R.string.pref_battery_exemption),
+                detail = stringResource(R.string.pref_battery_exemption_detail),
+                onClick = { activity?.let(viewModel::requestBatteryExemption) },
+            )
+        }
+        SettingsSearchTarget(R.string.crash_title) {
+            ListRow(
+                title = stringResource(R.string.crash_title),
+                detail = stringResource(R.string.more_crash_detail),
+                onClick = { navigator.open(Route.CrashLog) },
+            )
+        }
         // Phase 4 unit SR: upstream's verbose logging row, which follows its crash log row, then its
         // networking, library and reader rows in its order.
         CheckboxRow(
@@ -1594,25 +1665,31 @@ private fun AdvancedSection(viewModel: SettingsViewModel, showMessage: (String, 
         )
         // Phase 4 unit ST: upstream's data group (clear database), then the head of its networking
         // group (clear WebView data), before the networking rows unit SR placed.
-        ListRow(
-            title = stringResource(R.string.pref_clear_database),
-            detail = stringResource(R.string.pref_clear_database_summary),
-            onClick = { navigator.open(Route.ClearDatabase) },
-        )
+        SettingsSearchTarget(R.string.pref_clear_database) {
+            ListRow(
+                title = stringResource(R.string.pref_clear_database),
+                detail = stringResource(R.string.pref_clear_database_summary),
+                onClick = { navigator.open(Route.ClearDatabase) },
+            )
+        }
         // Phase 5 unit SC4: the repair of the library's chapter counts, beside upstream's other
         // database row. Saikou's own; upstream has no counts table to rebuild.
-        ListRow(
-            title = stringResource(R.string.pref_rebuild_library_counts),
-            detail = stringResource(R.string.pref_rebuild_library_counts_summary),
-            onClick = {
-                viewModel.rebuildLibraryCounts { success -> showMessage(if (success) rebuildDone else rebuildFailed, null) }
-            },
-        )
-        ListRow(
-            title = stringResource(R.string.pref_clear_webview_data),
-            detail = "",
-            onClick = { showMessage(if (context.clearWebViewData()) webViewCleared else webViewFailed, null) },
-        )
+        SettingsSearchTarget(R.string.pref_rebuild_library_counts) {
+            ListRow(
+                title = stringResource(R.string.pref_rebuild_library_counts),
+                detail = stringResource(R.string.pref_rebuild_library_counts_summary),
+                onClick = {
+                    viewModel.rebuildLibraryCounts { success -> showMessage(if (success) rebuildDone else rebuildFailed, null) }
+                },
+            )
+        }
+        SettingsSearchTarget(R.string.pref_clear_webview_data) {
+            ListRow(
+                title = stringResource(R.string.pref_clear_webview_data),
+                detail = "",
+                onClick = { showMessage(if (context.clearWebViewData()) webViewCleared else webViewFailed, null) },
+            )
+        }
         ChoiceRow(
             labelRes = R.string.pref_dns_over_https,
             choices = dohProviderChoices,
@@ -1643,40 +1720,48 @@ private fun AdvancedSection(viewModel: SettingsViewModel, showMessage: (String, 
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        ListRow(
-            title = stringResource(R.string.pref_user_agent_string),
-            detail = userAgent,
-            onClick = { editingUserAgent = true },
-        )
+        SettingsSearchTarget(R.string.pref_user_agent_string) {
+            ListRow(
+                title = stringResource(R.string.pref_user_agent_string),
+                detail = userAgent,
+                onClick = { editingUserAgent = true },
+            )
+        }
         val userAgentChanged = userAgent != network.defaultUserAgent.defaultValue()
-        ListRow(
-            title = stringResource(R.string.pref_reset_user_agent_string),
-            detail = "",
-            modifier = Modifier.alpha(if (userAgentChanged) 1f else DISABLED_ALPHA),
-            onClick = if (userAgentChanged) {
-                {
-                    viewModel.resetDefaultUserAgent()
-                    offerRestart()
-                }
-            } else {
-                null
-            },
-        )
+        SettingsSearchTarget(R.string.pref_reset_user_agent_string) {
+            ListRow(
+                title = stringResource(R.string.pref_reset_user_agent_string),
+                detail = "",
+                modifier = Modifier.alpha(if (userAgentChanged) 1f else DISABLED_ALPHA),
+                onClick = if (userAgentChanged) {
+                    {
+                        viewModel.resetDefaultUserAgent()
+                        offerRestart()
+                    }
+                } else {
+                    null
+                },
+            )
+        }
         // Phase 4 unit ST: the head of upstream's library group.
-        ListRow(
-            title = stringResource(R.string.pref_refresh_library_covers),
-            detail = stringResource(R.string.pref_refresh_library_covers_summary),
-            onClick = {
-                viewModel.refreshLibraryCovers { message -> showMessage(resources.getString(message), null) }
-            },
-        )
-        ListRow(
-            title = stringResource(R.string.pref_reset_viewer_flags),
-            detail = stringResource(R.string.pref_reset_viewer_flags_summary_synced),
-            onClick = {
-                viewModel.resetViewerFlags { success -> showMessage(if (success) resetDone else resetFailed, null) }
-            },
-        )
+        SettingsSearchTarget(R.string.pref_refresh_library_covers) {
+            ListRow(
+                title = stringResource(R.string.pref_refresh_library_covers),
+                detail = stringResource(R.string.pref_refresh_library_covers_summary),
+                onClick = {
+                    viewModel.refreshLibraryCovers { message -> showMessage(resources.getString(message), null) }
+                },
+            )
+        }
+        SettingsSearchTarget(R.string.pref_reset_viewer_flags) {
+            ListRow(
+                title = stringResource(R.string.pref_reset_viewer_flags),
+                detail = stringResource(R.string.pref_reset_viewer_flags_summary_synced),
+                onClick = {
+                    viewModel.resetViewerFlags { success -> showMessage(if (success) resetDone else resetFailed, null) }
+                },
+            )
+        }
         CheckboxRow(
             labelRes = R.string.pref_update_library_manga_titles,
             detailRes = R.string.pref_update_library_manga_titles_summary,
@@ -1705,14 +1790,16 @@ private fun AdvancedSection(viewModel: SettingsViewModel, showMessage: (String, 
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         // Phase 4 unit ST: the last row of upstream's extensions group, the last group of its screen.
-        ListRow(
-            title = stringResource(R.string.ext_revoke_trust),
-            detail = "",
-            onClick = {
-                viewModel.revokeTrustedExtensions()
-                offerRestart()
-            },
-        )
+        SettingsSearchTarget(R.string.ext_revoke_trust) {
+            ListRow(
+                title = stringResource(R.string.ext_revoke_trust),
+                detail = "",
+                onClick = {
+                    viewModel.revokeTrustedExtensions()
+                    offerRestart()
+                },
+            )
+        }
         InlineNotice(stringResource(R.string.settings_advanced_abi_note))
     }
 
@@ -1920,23 +2007,25 @@ private fun AppUpdateRows(appName: String, showMessage: (String, SnackbarAction?
     val resources = LocalResources.current
     val upToDate = stringResource(R.string.app_update_up_to_date)
     val failed = stringResource(R.string.app_update_check_failed)
-    ListRow(
-        title = stringResource(R.string.pref_app_update_check),
-        detail = stringResource(if (state.checking) R.string.pref_app_update_checking else R.string.pref_app_update_check_detail),
-        onClick = {
-            if (!state.checking) {
-                viewModel.checkNow { result ->
-                    val message = when (result) {
-                        is AppUpdateChecker.Result.Available -> null
-                        AppUpdateChecker.Result.UpToDate -> upToDate
-                        AppUpdateChecker.Result.Failed -> failed
-                        is AppUpdateChecker.Result.NoApk -> resources.getString(R.string.app_update_no_apk, appName, result.version)
+    SettingsSearchTarget(R.string.pref_app_update_check) {
+        ListRow(
+            title = stringResource(R.string.pref_app_update_check),
+            detail = stringResource(if (state.checking) R.string.pref_app_update_checking else R.string.pref_app_update_check_detail),
+            onClick = {
+                if (!state.checking) {
+                    viewModel.checkNow { result ->
+                        val message = when (result) {
+                            is AppUpdateChecker.Result.Available -> null
+                            AppUpdateChecker.Result.UpToDate -> upToDate
+                            AppUpdateChecker.Result.Failed -> failed
+                            is AppUpdateChecker.Result.NoApk -> resources.getString(R.string.app_update_no_apk, appName, result.version)
+                        }
+                        if (message != null) showMessage(message, null)
                     }
-                    if (message != null) showMessage(message, null)
                 }
-            }
-        },
-    )
+            },
+        )
+    }
     CheckboxRow(
         labelRes = R.string.pref_app_update_auto_check,
         detailRes = if (viewModel.build.automaticChecks) {
@@ -1971,6 +2060,20 @@ private fun CheckboxRow(
     confirm: (suspend () -> Boolean)? = null,
 ) {
     val detailText = detail ?: detailRes?.let { stringResource(it) }
+    SettingsSearchTarget(labelRes) {
+        CheckboxRowContent(labelRes, pref, detailText, enabled, onToggled, confirm)
+    }
+}
+
+@Composable
+private fun CheckboxRowContent(
+    @StringRes labelRes: Int,
+    pref: Preference<Boolean>,
+    detailText: String?,
+    enabled: Boolean,
+    onToggled: (() -> Unit)?,
+    confirm: (suspend () -> Boolean)?,
+) {
     Column(modifier = Modifier.alpha(if (enabled) 1f else DISABLED_ALPHA)) {
         when {
             !enabled -> {
@@ -2043,14 +2146,16 @@ private fun <T> ChoiceRow(
     enabled: Boolean = true,
     onSelect: (T) -> Unit,
 ) {
-    SettingsChipRow(labelRes) {
-        choices.forEach { choice ->
-            FilterChip(
-                selected = selected(choice),
-                onClick = { onSelect(choice) },
-                label = { Text(label(choice)) },
-                enabled = enabled,
-            )
+    SettingsSearchTarget(labelRes) {
+        SettingsChipRow(labelRes) {
+            choices.forEach { choice ->
+                FilterChip(
+                    selected = selected(choice),
+                    onClick = { onSelect(choice) },
+                    label = { Text(label(choice)) },
+                    enabled = enabled,
+                )
+            }
         }
     }
 }
@@ -2067,14 +2172,16 @@ private fun ChoiceSetRow(
     enabled: Boolean = true,
     onChange: (Set<String>) -> Unit,
 ) {
-    SettingsChipRow(labelRes) {
-        choices.forEach { (key, label) ->
-            FilterChip(
-                selected = key in selected,
-                onClick = { onChange(selected.toggled(key)) },
-                label = { Text(stringResource(label)) },
-                enabled = enabled,
-            )
+    SettingsSearchTarget(labelRes) {
+        SettingsChipRow(labelRes) {
+            choices.forEach { (key, label) ->
+                FilterChip(
+                    selected = key in selected,
+                    onClick = { onChange(selected.toggled(key)) },
+                    label = { Text(stringResource(label)) },
+                    enabled = enabled,
+                )
+            }
         }
     }
 }
@@ -2091,21 +2198,23 @@ internal fun IntervalRow(
     selectedHours: Int,
     onSelect: (Int) -> Unit,
 ) {
-    SettingsChipRow(labelRes) {
-        options.forEach { hours ->
-            FilterChip(
-                selected = hours == selectedHours,
-                onClick = { onSelect(hours) },
-                label = {
-                    Text(
-                        when (hours) {
-                            0 -> stringResource(R.string.interval_off)
-                            WEEK_HOURS -> stringResource(R.string.interval_weekly)
-                            else -> stringResource(R.string.interval_hours_format, hours)
-                        },
-                    )
-                },
-            )
+    SettingsSearchTarget(labelRes) {
+        SettingsChipRow(labelRes) {
+            options.forEach { hours ->
+                FilterChip(
+                    selected = hours == selectedHours,
+                    onClick = { onSelect(hours) },
+                    label = {
+                        Text(
+                            when (hours) {
+                                0 -> stringResource(R.string.interval_off)
+                                WEEK_HOURS -> stringResource(R.string.interval_weekly)
+                                else -> stringResource(R.string.interval_hours_format, hours)
+                            },
+                        )
+                    },
+                )
+            }
         }
     }
 }

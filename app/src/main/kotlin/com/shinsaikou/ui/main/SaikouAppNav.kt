@@ -81,6 +81,7 @@ import com.shinsaikou.ui.migration.picker.MigratePickerScreen
 import com.shinsaikou.ui.more.MoreScreen
 import com.shinsaikou.ui.settings.AdoptionSummaryScreen
 import com.shinsaikou.ui.settings.SettingsScreen
+import com.shinsaikou.ui.settings.highlightKey
 import com.shinsaikou.ui.stats.StatsScreen
 import com.shinsaikou.ui.storage.ClearDatabaseScreen
 import com.shinsaikou.ui.storage.StorageDownloadsScreen
@@ -341,7 +342,8 @@ private fun AppScaffold(
                 composable<Route.Categories> { CategoriesScreen() }
                 composable<Route.Statistics> { StatsScreen() }
                 composable<Route.Settings> { backStackEntry ->
-                    SettingsScreen(requestedSection = backStackEntry.toRoute<Route.Settings>().section)
+                    val route = backStackEntry.toRoute<Route.Settings>()
+                    SettingsScreen(requestedSection = route.section, requestedHighlight = route.highlightKey)
                 }
                 composable<Route.StorageDownloads> { StorageDownloadsScreen() }
                 composable<Route.ClearDatabase> { ClearDatabaseScreen() }

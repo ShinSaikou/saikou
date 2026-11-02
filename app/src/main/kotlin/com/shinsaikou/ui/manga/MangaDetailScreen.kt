@@ -10,6 +10,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -76,8 +77,10 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.min
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.shinsaikou.domain.library.search.genreSearchQuery
 import com.shinsaikou.domain.manga.model.ReaderOrientation
@@ -243,6 +246,7 @@ fun MangaDetailScreen(
     val success = state as? MangaDetailViewModel.State.Success
     val selectionMode = success?.selectionMode == true
     val onGenreSearch: (String) -> Unit = { genre -> navigator.searchLibrary(genreSearchQuery(genre)) }
+    val onGlobalSearch: (String) -> Unit = { query -> navigator.open(Route.GlobalSearch(query = query)) }
     // Back leaves the selection before it leaves the screen, which is the only way out of selection
     // mode that does not need the owner to find a specific control first.
     BackHandler(enabled = selectionMode) { viewModel.clearSelection() }
@@ -361,6 +365,7 @@ fun MangaDetailScreen(
                                     viewModel::showCover,
                                     viewModel::showNotes,
                                     onGenreSearch,
+                                    onGlobalSearch,
                                 )
                             }
                         },
@@ -389,6 +394,7 @@ fun MangaDetailScreen(
                                 viewModel::showCover,
                                 viewModel::showNotes,
                                 onGenreSearch,
+                                onGlobalSearch,
                             )
                         },
                     )
@@ -901,7 +907,8 @@ private fun ChapterRow(
  * The entry's header: the cover, the title, the author, the status and the source, then add to
  * library and tracking. The description folds to three lines with an expand control while it runs
  * longer, and every genre follows as a chip. A tap on a genre searches the library for it
- * (`genre:"X"`), and a long press on a genre, the title or the author copies it.
+ * (`genre:"X"`), a tap on the title or the author searches every source for it, as upstream's
+ * header does, and a long press on a genre, the title or the author copies it.
  *
  * The title and the description are the owner's edit over the source's (phase 5 unit ED), whose
  * dialog the overflow's Edit details opens; a tap on the cover opens upstream's cover viewer. The
@@ -917,49 +924,13 @@ private fun MangaHeader(
     onCoverClick: () -> Unit,
     onNotesClick: () -> Unit,
     onGenreSearch: (String) -> Unit,
+    onGlobalSearch: (String) -> Unit,
 ) {
     val manga = state.manga
     val context = LocalContext.current
     val copied = stringResource(R.string.copied_to_clipboard)
-    val copyLabel = stringResource(R.string.action_copy_to_clipboard)
     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(verticalAlignment = Alignment.Top) {
-            MangaCover(
-                data = manga,
-                modifier = Modifier
-                    .width(if (isTabletUi()) 200.dp else 100.dp)
-                    .testTag(MANGA_COVER_TAG)
-                    .clickable(onClick = onCoverClick),
-                contentDescription = manga.displayTitle,
-            )
-            Spacer(Modifier.width(16.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    manga.displayTitle,
-                    modifier = Modifier.copyOnLongClick(copyLabel) {
-                        context.copyToClipboard(manga.displayTitle, copied)
-                    },
-                    style = MaterialTheme.typography.titleLarge,
-                )
-                manga.author?.takeIf { it.isNotBlank() }?.let { author ->
-                    Text(
-                        stringResource(R.string.manga_author_format, author),
-                        modifier = Modifier.copyOnLongClick(copyLabel) { context.copyToClipboard(author, copied) },
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
-                Text(statusLabel(manga), style = MaterialTheme.typography.bodySmall)
-                Text(
-                    if (state.sourceInstalled && state.sourceName != null) {
-                        stringResource(R.string.manga_source_format, state.sourceName)
-                    } else {
-                        stringResource(R.string.manga_source_not_installed)
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
+        MangaHeaderTop(state = state, onCoverClick = onCoverClick, onGlobalSearch = onGlobalSearch)
         // Flowing, so a narrow pane (the tablet library's) puts the tracking button on its own line
         // rather than breaking its label.
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), itemVerticalAlignment = Alignment.CenterVertically) {
@@ -998,6 +969,107 @@ private fun MangaHeader(
 }
 
 /**
+ * The cover and the lines beside it: side by side while the lines keep [HEADER_TEXT_MIN_WIDTH]
+ * next to the cover, else upstream's tablet header, the cover centred above them at 65% of the
+ * width. The width is the space the header was handed, not the window's: two panes forced on a
+ * phone give it half the screen, about 200 dp, where a 200 dp cover left the title one character
+ * wide. A tablet's pane and the library's entry pane keep the row.
+ */
+@Composable
+private fun MangaHeaderTop(
+    state: MangaDetailViewModel.State.Success,
+    onCoverClick: () -> Unit,
+    onGlobalSearch: (String) -> Unit,
+) {
+    val coverWidth = if (isTabletUi()) 200.dp else 100.dp
+    val cover = @Composable { modifier: Modifier ->
+        MangaCover(
+            data = state.manga,
+            modifier = modifier
+                .testTag(MANGA_COVER_TAG)
+                .clickable(onClick = onCoverClick),
+            contentDescription = state.manga.displayTitle,
+        )
+    }
+    BoxWithConstraints {
+        val width = maxWidth
+        if (width >= coverWidth + HEADER_COVER_GAP + HEADER_TEXT_MIN_WIDTH) {
+            Row(verticalAlignment = Alignment.Top) {
+                cover(Modifier.width(coverWidth))
+                Spacer(Modifier.width(HEADER_COVER_GAP))
+                MangaHeaderLines(state, onGlobalSearch, Alignment.Start, TextAlign.Start)
+            }
+        } else {
+            Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                cover(Modifier.width(min(width * STACKED_COVER_FRACTION, coverWidth)))
+                Spacer(Modifier.height(HEADER_COVER_GAP))
+                MangaHeaderLines(state, onGlobalSearch, Alignment.CenterHorizontally, TextAlign.Center)
+            }
+        }
+    }
+}
+
+/** The title, the author, the status and the source, aligned as [MangaHeaderTop] lays them out. */
+@Composable
+private fun MangaHeaderLines(
+    state: MangaDetailViewModel.State.Success,
+    onGlobalSearch: (String) -> Unit,
+    alignment: Alignment.Horizontal,
+    textAlign: TextAlign,
+) {
+    val manga = state.manga
+    val context = LocalContext.current
+    val copied = stringResource(R.string.copied_to_clipboard)
+    val copyLabel = stringResource(R.string.action_copy_to_clipboard)
+    val searchLabel = stringResource(R.string.action_global_search)
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp), horizontalAlignment = alignment) {
+        Text(
+            manga.displayTitle,
+            modifier = Modifier.searchOrCopy(
+                searchLabel = searchLabel,
+                onSearch = { onGlobalSearch(manga.displayTitle) },
+                copyLabel = copyLabel,
+                onCopy = { context.copyToClipboard(manga.displayTitle, copied) },
+            ),
+            style = MaterialTheme.typography.titleLarge,
+            textAlign = textAlign,
+        )
+        manga.author?.takeIf { it.isNotBlank() }?.let { author ->
+            Text(
+                stringResource(R.string.manga_author_format, author),
+                modifier = Modifier.searchOrCopy(
+                    searchLabel = searchLabel,
+                    onSearch = { onGlobalSearch(author) },
+                    copyLabel = copyLabel,
+                    onCopy = { context.copyToClipboard(author, copied) },
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = textAlign,
+            )
+        }
+        Text(statusLabel(manga), style = MaterialTheme.typography.bodySmall, textAlign = textAlign)
+        Text(
+            if (state.sourceInstalled && state.sourceName != null) {
+                stringResource(R.string.manga_source_format, state.sourceName)
+            } else {
+                stringResource(R.string.manga_source_not_installed)
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = textAlign,
+        )
+    }
+}
+
+/** The narrowest the header's lines may be beside the cover before the cover moves above them. */
+private val HEADER_TEXT_MIN_WIDTH = 160.dp
+
+private val HEADER_COVER_GAP = 16.dp
+
+/** Upstream's tablet header draws its cover at this share of the width. */
+private const val STACKED_COVER_FRACTION = 0.65f
+
+/**
  * The description, upstream's expandable summary: three lines while folded, the
  * whole text open, and an expand control ("More", "Less", upstream's words) under it while the folded
  * text runs past its three lines or the text is open. A tap on the text toggles it too, as before.
@@ -1029,15 +1101,21 @@ private fun MangaDescription(description: String?, expanded: Boolean, onToggle: 
 }
 
 /**
- * A long press that copies, on text a tap leaves alone. No ripple, as upstream's header text has
- * none; [label] is what a screen reader offers for the long press.
+ * Upstream's header text: a tap searches, a long press copies. No ripple, as upstream's has none;
+ * [searchLabel] and [copyLabel] are what a screen reader offers for the two.
  */
-private fun Modifier.copyOnLongClick(label: String, onCopy: () -> Unit): Modifier = combinedClickable(
+private fun Modifier.searchOrCopy(
+    searchLabel: String,
+    onSearch: () -> Unit,
+    copyLabel: String,
+    onCopy: () -> Unit,
+): Modifier = combinedClickable(
     interactionSource = null,
     indication = null,
-    onLongClickLabel = label,
+    onClickLabel = searchLabel,
+    onClick = onSearch,
+    onLongClickLabel = copyLabel,
     onLongClick = onCopy,
-    onClick = {},
 )
 
 /**

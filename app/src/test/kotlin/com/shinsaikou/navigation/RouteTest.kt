@@ -214,6 +214,15 @@ class RouteTest {
     }
 
     @Test
+    fun `settings route round trips with the row a search result asks for`() {
+        val original = Route.Settings(section = SettingsSection.READER, highlightTitle = 17, highlightGroup = 23)
+
+        val decoded = roundTrip(Route.Settings.serializer(), original)
+
+        decoded shouldBe original
+    }
+
+    @Test
     fun `backup restore route round trips`() {
         val original = Route.BackupRestore(uri = "content://fixture/backup.saikou")
 

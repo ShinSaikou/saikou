@@ -4,6 +4,7 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
@@ -14,6 +15,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
@@ -23,6 +25,9 @@ import androidx.compose.ui.unit.dp
 import com.shinsaikou.i18n.R
 import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.library.model.LibraryDisplayMode
+import tachiyomi.domain.library.model.search.AndNode
+import tachiyomi.domain.library.model.search.GeneralQueryNode
+import tachiyomi.domain.library.model.search.QueryNode
 import tachiyomi.presentation.core.components.material.TabText
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.EmptyScreen
@@ -108,7 +113,13 @@ internal fun LibraryPager(
     onLongClick: (categoryId: Long, mangaId: Long) -> Unit,
     onContinueReading: (Long) -> Unit,
     onReorder: (categoryId: Long, mangaId: Long, order: List<Long>) -> Boolean,
+    onGlobalSearch: (String) -> Unit,
 ) {
+    // Upstream's "Search for X globally" over every page while a search is up, so an entry the
+    // library does not have is one tap from the sources (upstream's `GlobalSearchItem`).
+    val globalSearch: (@Composable () -> Unit)? = globalSearchQuery(state.query)?.let { query ->
+        { GlobalSearchButton(query = query, onClick = { onGlobalSearch(query) }) }
+    }
     HorizontalPager(
         state = pagerState,
         modifier = Modifier.fillMaxSize(),
@@ -117,7 +128,10 @@ internal fun LibraryPager(
         val category = state.categories.getOrNull(page) ?: return@HorizontalPager
         val items = state.items(category.id)
         if (items.isEmpty()) {
-            EmptyScreen(stringRes = state.emptyPageMessage, modifier = Modifier.fillMaxSize())
+            Column(modifier = Modifier.fillMaxSize()) {
+                globalSearch?.invoke()
+                EmptyScreen(stringRes = state.emptyPageMessage, modifier = Modifier.weight(1f))
+            }
             return@HorizontalPager
         }
         // A handle only while the drag can write the whole tab in the order it shows (phase 4 unit MS).
@@ -133,6 +147,7 @@ internal fun LibraryPager(
         key(category.id) {
             when (state.displayMode) {
                 LibraryDisplayMode.List -> LibraryList(
+                    header = globalSearch,
                     items = items,
                     selection = state.selection,
                     contentPadding = contentPadding,
@@ -143,6 +158,7 @@ internal fun LibraryPager(
                     onContinueReading = onContinueReading,
                 )
                 LibraryDisplayMode.ComfortableGrid -> LibraryComfortableGrid(
+                    header = globalSearch,
                     items = items,
                     columns = state.columns,
                     selection = state.selection,
@@ -154,6 +170,7 @@ internal fun LibraryPager(
                     onContinueReading = onContinueReading,
                 )
                 LibraryDisplayMode.CompactGrid, LibraryDisplayMode.CoverOnlyGrid -> LibraryCompactGrid(
+                    header = globalSearch,
                     items = items,
                     columns = state.columns,
                     selection = state.selection,
@@ -184,6 +201,32 @@ private val LibraryViewModel.State.emptyPageMessage: Int
         hasActiveFilters -> R.string.library_empty_filtered
         else -> R.string.library_category_empty
     }
+
+/**
+ * The library search to offer as a search of every source: its words while it is only words, null
+ * while it is blank or uses the library's own syntax (a field such as `genre:"X"`, a comparison, a
+ * negation, an OR), which no source would read the same way. A genre tapped on an entry's screen
+ * searches the library as `genre:"X"`, and offering that to the sources would search for the syntax.
+ */
+internal fun globalSearchQuery(query: String): String? {
+    if (query.isBlank()) return null
+    val words = mutableListOf<String>()
+    fun plain(node: QueryNode): Boolean = when (node) {
+        is GeneralQueryNode -> !node.negated && words.add(node.value)
+        is AndNode -> node.children.all(::plain)
+        else -> false
+    }
+    if (!plain(QueryNode.from(query))) return null
+    return words.joinToString(" ").takeIf { it.isNotBlank() }
+}
+
+/** Upstream's `GlobalSearchItem`: a full width text button above a page's entries. */
+@Composable
+internal fun GlobalSearchButton(query: String, onClick: () -> Unit) {
+    TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Text(stringResource(R.string.library_search_globally_format, query))
+    }
+}
 
 /** The system category has no name of its own; it is whatever the owner is shown for "no category". */
 internal val Category.visualName: String

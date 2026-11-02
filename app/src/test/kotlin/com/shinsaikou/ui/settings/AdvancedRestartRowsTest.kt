@@ -100,6 +100,8 @@ class AdvancedRestartRowsTest {
 
     private companion object {
         val ROW_STARTS = listOf(
+            // A row the settings search finds, its ListRow inside.
+            "\n        SettingsSearchTarget(",
             "\n        ListRow(",
             "\n        CheckboxRow(",
             "\n        ChoiceRow(",

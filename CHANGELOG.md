@@ -7,6 +7,16 @@ release may change behaviour.
 
 ## Unreleased
 
+### Added
+
+- A search in Settings: tap the search button above the section list and type, and every matching
+  setting is listed with the section it is in. Picking one opens that section scrolled to the
+  setting, which flashes for a moment so it is easy to spot.
+- While you search the library, a **Search all sources** button above the results runs the same
+  words in every source, so an entry you do not have yet is one tap away, even while the library is
+  empty. It is offered for plain words only, not for a search by genre, author or another field.
+- Tap an entry's title or author to search every source for it. A long press still copies it.
+
 ### Changed
 
 - The Backup screen has two tabs, **Create** and **Restore**, instead of one long list where
@@ -20,6 +30,14 @@ release may change behaviour.
   the button that started it, and then says whether it finished, failed or was cancelled. Before,
   a queued export or restore showed nothing, and a restore's bar only appeared once the file had
   been copied and checked.
+- Each row of the More tab has an icon, so Downloaded only, Download queue, Categories, Backup,
+  Settings and the rest can be told apart at a glance.
+
+### Fixed
+
+- With Two pane layout set to Always on a phone, an entry's title is readable again. The cover
+  took the narrow pane's whole width and left the title one letter per line; the cover now sits
+  above the title there, and the bar over the pane no longer shows a stray dot for the title.
 
 ## 0.1.1 - 2026-11-02
 

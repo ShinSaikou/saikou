@@ -65,7 +65,11 @@ internal fun TrackingSection() {
 
     SettingsColumn {
         InlineNotice(stringResource(R.string.tracking_note))
-        if (state.trackers.isNotEmpty()) SectionLabel(stringResource(R.string.tracking_trackers))
+        if (state.trackers.isNotEmpty()) {
+            SettingsSearchTarget(R.string.tracking_trackers) {
+                SectionLabel(stringResource(R.string.tracking_trackers))
+            }
+        }
         state.trackers.forEach { row ->
             TrackerRowItem(row = row, viewModel = viewModel, onSignOut = { confirmingSignOut = row })
         }
@@ -87,27 +91,33 @@ internal fun TrackingSection() {
             )
         }
 
-        SectionLabel(stringResource(R.string.tracking_behaviour))
-        Column {
-            CheckboxItem(
-                label = stringResource(R.string.pref_auto_update_track),
-                checked = state.autoUpdateTrack,
-                onClick = { viewModel.setAutoUpdateTrack(!state.autoUpdateTrack) },
-            )
-            Text(
-                text = stringResource(R.string.pref_auto_update_track_detail),
-                modifier = Modifier.padding(horizontal = SettingsItemsPaddings.Horizontal),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        SettingsSearchTarget(R.string.tracking_behaviour) {
+            SectionLabel(stringResource(R.string.tracking_behaviour))
         }
-        SettingsChipRow(R.string.pref_auto_update_track_on_mark_read) {
-            AutoTrackState.entries.forEach { value ->
-                FilterChip(
-                    selected = state.autoUpdateTrackOnMarkRead == value,
-                    onClick = { viewModel.setAutoUpdateTrackOnMarkRead(value) },
-                    label = { Text(stringResource(value.labelRes)) },
+        SettingsSearchTarget(R.string.pref_auto_update_track) {
+            Column {
+                CheckboxItem(
+                    label = stringResource(R.string.pref_auto_update_track),
+                    checked = state.autoUpdateTrack,
+                    onClick = { viewModel.setAutoUpdateTrack(!state.autoUpdateTrack) },
                 )
+                Text(
+                    text = stringResource(R.string.pref_auto_update_track_detail),
+                    modifier = Modifier.padding(horizontal = SettingsItemsPaddings.Horizontal),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        SettingsSearchTarget(R.string.pref_auto_update_track_on_mark_read) {
+            SettingsChipRow(R.string.pref_auto_update_track_on_mark_read) {
+                AutoTrackState.entries.forEach { value ->
+                    FilterChip(
+                        selected = state.autoUpdateTrackOnMarkRead == value,
+                        onClick = { viewModel.setAutoUpdateTrackOnMarkRead(value) },
+                        label = { Text(stringResource(value.labelRes)) },
+                    )
+                }
             }
         }
     }

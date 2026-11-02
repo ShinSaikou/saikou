@@ -22,6 +22,7 @@ import com.shinsaikou.i18n.R
 import com.shinsaikou.storage.StorageMove
 import com.shinsaikou.ui.components.InlineNotice
 import com.shinsaikou.ui.components.ListRow
+import com.shinsaikou.ui.settings.SettingsSearchTarget
 import tachiyomi.presentation.core.i18n.stringResource
 
 /**
@@ -144,12 +145,14 @@ fun StorageLocationRows(viewModel: StorageLocationViewModel) {
     val resources = LocalResources.current
     val context = LocalContext.current
     val pick = rememberStorageLocationPicker(viewModel)
-    ListRow(
-        title = stringResource(R.string.pref_storage_location),
-        detail = storageLocationSummary(resources, state.status, state.name),
-        modifier = Modifier.testTag(STORAGE_LOCATION_ROW_TAG),
-        onClick = if (state.move.running) null else pick,
-    )
+    SettingsSearchTarget(R.string.pref_storage_location) {
+        ListRow(
+            title = stringResource(R.string.pref_storage_location),
+            detail = storageLocationSummary(resources, state.status, state.name),
+            modifier = Modifier.testTag(STORAGE_LOCATION_ROW_TAG),
+            onClick = if (state.move.running) null else pick,
+        )
+    }
     val moving = state.move
     val left = state.left
     when {

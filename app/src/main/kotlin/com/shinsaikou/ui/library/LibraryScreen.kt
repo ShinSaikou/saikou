@@ -165,6 +165,8 @@ fun LibraryScreen(searchRequest: String? = null, onSearchRequestConsumed: () -> 
         }
     }
 
+    val globalSearch: (String) -> Unit = { query -> navigator.open(Route.GlobalSearch(query = query)) }
+
     Scaffold(
         topBar = { scrollBehavior ->
             if (state.selectionMode) {
@@ -232,17 +234,24 @@ fun LibraryScreen(searchRequest: String? = null, onSearchRequestConsumed: () -> 
     ) { padding ->
         when {
             state.loading -> LoadingScreen(Modifier.padding(padding))
-            state.total == 0 -> EmptyScreen(
-                stringRes = R.string.library_empty,
-                modifier = Modifier.padding(padding),
-                actions = listOf(
-                    EmptyScreenAction(
-                        stringRes = R.string.library_empty_action_browse,
-                        icon = Icons.Outlined.Explore,
-                        onClick = { navigator.open(Route.Browse()) },
+            // A search of an empty library still offers the sources, as upstream's does; the pager
+            // that offers it otherwise is not drawn here.
+            state.total == 0 -> Column(modifier = Modifier.padding(padding).fillMaxSize()) {
+                globalSearchQuery(state.query)?.let { query ->
+                    GlobalSearchButton(query = query, onClick = { globalSearch(query) })
+                }
+                EmptyScreen(
+                    stringRes = R.string.library_empty,
+                    modifier = Modifier.weight(1f),
+                    actions = listOf(
+                        EmptyScreenAction(
+                            stringRes = R.string.library_empty_action_browse,
+                            icon = Icons.Outlined.Explore,
+                            onClick = { navigator.open(Route.Browse()) },
+                        ),
                     ),
-                ),
-            )
+                )
+            }
             else -> {
                 // The pager is remembered once the first projection has arrived, so its initial
                 // page is the restored category rather than zero.
@@ -273,6 +282,7 @@ fun LibraryScreen(searchRequest: String? = null, onSearchRequestConsumed: () -> 
                                 onLongClick = viewModel::longPressEntry,
                                 onContinueReading = viewModel::continueReading,
                                 onReorder = viewModel::reorder,
+                                onGlobalSearch = globalSearch,
                             )
                         },
                         endContent = {
@@ -290,6 +300,7 @@ fun LibraryScreen(searchRequest: String? = null, onSearchRequestConsumed: () -> 
                         onLongClick = viewModel::longPressEntry,
                         onContinueReading = viewModel::continueReading,
                         onReorder = viewModel::reorder,
+                        onGlobalSearch = globalSearch,
                     )
                 }
             }
@@ -343,6 +354,7 @@ private fun LibraryGrid(
     onLongClick: (categoryId: Long, mangaId: Long) -> Unit,
     onContinueReading: (Long) -> Unit,
     onReorder: (categoryId: Long, mangaId: Long, order: List<Long>) -> Boolean,
+    onGlobalSearch: (String) -> Unit,
 ) {
     // The spinner acknowledges the pull for a second and then goes, as upstream's does. A run takes
     // minutes and its progress is in the notification; a spinner held over the covers for all of
@@ -387,6 +399,7 @@ private fun LibraryGrid(
                 onLongClick = onLongClick,
                 onContinueReading = onContinueReading,
                 onReorder = onReorder,
+                onGlobalSearch = onGlobalSearch,
             )
         }
     }

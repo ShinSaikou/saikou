@@ -12,9 +12,12 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasProgressBarRangeInfo
 import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.isSelectable
@@ -25,6 +28,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
@@ -271,6 +275,39 @@ class MainActivitySmokeTest {
         } finally {
             preferences.readWithVolumeKeysInverted.set(oldDependent)
             preferences.readWithVolumeKeys.set(oldMaster)
+        }
+    }
+
+    /**
+     * The settings search, upstream's `SettingsSearchScreen` opened in the list's bar: a few words
+     * find a row under where it is, and the result opens its section scrolled to it. Volume keys
+     * sits in Reader's Navigation group, below the first screen of the section on any device, so it
+     * is on screen only if the result scrolled there. On a phone the section is pushed over the
+     * list; on a tablet it opens in the end pane beside the results.
+     */
+    @Test
+    fun settingsSearchFindsARowAndOpensItsSectionScrolledToIt() {
+        openSettings()
+        composeRule.onNodeWithContentDescription(string(R.string.action_search)).performClick()
+        composeRule.onNode(hasSetTextAction()).performTextInput("volume keys")
+
+        val title = string(R.string.pref_read_with_volume_keys)
+        val breadcrumb = context.getString(
+            R.string.settings_search_breadcrumb_format,
+            string(SettingsSection.READER.labelRes),
+            string(R.string.pref_reader_navigation),
+        )
+        val result = hasText(title) and hasText(breadcrumb) and hasClickAction()
+        composeRule.waitUntil(timeoutMillis = LAUNCH_TIMEOUT_MILLIS) {
+            composeRule.onAllNodes(result).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNode(result).performClick()
+
+        val readerBody = settingsSectionBodyTag(SettingsSection.READER)
+        composeRule.onNodeWithTag(readerBody).assertIsDisplayed()
+        val row = composeRule.onNode(hasText(title) and hasAnyAncestor(hasTestTag(readerBody)))
+        composeRule.waitUntil(timeoutMillis = LAUNCH_TIMEOUT_MILLIS) {
+            runCatching { row.assertIsDisplayed() }.isSuccess
         }
     }
 

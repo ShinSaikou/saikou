@@ -5,6 +5,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -26,6 +27,8 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHostState
@@ -43,7 +46,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.contentDescription
@@ -74,7 +79,9 @@ import tachiyomi.presentation.core.util.showSoftKeyboard
 /**
  * A back arrow, not a text button: the top bar is the one place every screen is navigated from. A
  * title too long for one line ends in an ellipsis, as upstream's `AppBar` title does, so a cut title
- * reads as cut ("Compare with MyAnimeList" on a phone was "Compare with").
+ * reads as cut ("Compare with MyAnimeList" on a phone was "Compare with"). A bar so narrow that its
+ * actions leave the title less than [MIN_TITLE_WIDTH] draws no title, rather than a lone ellipsis:
+ * an entry in the library's pane with two panes forced on a phone had a "." for its title.
  *
  * [colors] are upstream's `AppBar` colours; a selection bar passes [selectionTopBarColors], upstream's
  * action mode.
@@ -89,7 +96,11 @@ fun ScreenTopBar(
     actions: @Composable () -> Unit = {},
 ) {
     TopAppBar(
-        title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        title = {
+            BoxWithConstraints {
+                if (maxWidth >= MIN_TITLE_WIDTH) Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        },
         navigationIcon = {
             if (onBack != null) {
                 IconButton(onClick = onBack) {
@@ -102,6 +113,9 @@ fun ScreenTopBar(
         colors = colors,
     )
 }
+
+/** Room for a couple of a title's characters and its ellipsis, a touch target's width. */
+private val MIN_TITLE_WIDTH = 48.dp
 
 /** Upstream's `AppBar` colours: the surface at no elevation, Material's scrolled colour under a list. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -124,6 +138,9 @@ fun selectionTopBarColors(): TopAppBarColors =
  *
  * [searchQuery] has the same rule as [SearchField]'s value: the screen's own state, current by the
  * next frame, or the field loses keys.
+ *
+ * [onBack] is the back arrow of a pushed screen while no search is open, as [ScreenTopBar] draws it;
+ * a tab's bar passes none.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -133,6 +150,7 @@ fun SearchTopBar(
     onSearchQueryChange: (String?) -> Unit,
     placeholder: String,
     scrollBehavior: TopAppBarScrollBehavior? = null,
+    onBack: (() -> Unit)? = null,
     actions: @Composable () -> Unit = {},
 ) {
     val focusRequester = remember { FocusRequester() }
@@ -194,9 +212,12 @@ fun SearchTopBar(
             }
         },
         navigationIcon = {
-            if (searchQuery != null) {
-                IconButton(onClick = { onSearchQueryChange(null) }) {
+            when {
+                searchQuery != null -> IconButton(onClick = { onSearchQueryChange(null) }) {
                     Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(R.string.action_close))
+                }
+                onBack != null -> IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(R.string.action_back))
                 }
             }
         },
@@ -241,6 +262,38 @@ fun LabelledExtendedFloatingActionButton(
         onClick = onClick,
         modifier = modifier.semantics { contentDescription = text },
         expanded = expanded,
+    )
+}
+
+/**
+ * A row led by an icon, as upstream draws the rows of its More tab and its settings list: Material's
+ * list item with the icon in the primary colour, the title, and [detail] under it when there is one.
+ * No divider, as upstream's rows have none. [selected] tints the row, as the tablet's settings list
+ * marks the open section; [trailing] is a control drawn last, such as the switch of a row whose tap
+ * flips it.
+ */
+@Composable
+fun IconListRow(
+    title: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    detail: String? = null,
+    selected: Boolean = false,
+    trailing: @Composable (() -> Unit)? = null,
+) {
+    ListItem(
+        headlineContent = { Text(title) },
+        supportingContent = detail?.takeIf { it.isNotBlank() }?.let { { Text(it) } },
+        leadingContent = {
+            Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        },
+        trailingContent = trailing,
+        modifier = modifier
+            .selectedBackground(selected)
+            .clickable(onClick = onClick),
+        // Transparent, so a selected row's tint shows through.
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
     )
 }
 

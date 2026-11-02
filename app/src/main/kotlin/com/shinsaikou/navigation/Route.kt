@@ -96,8 +96,17 @@ sealed interface Route {
     @Serializable
     data object Statistics : Route
 
+    /**
+     * [highlightTitle] and [highlightGroup] name the row a settings search result leads to, by the
+     * string resources of its title and of its group's heading, the search's own key for it; 0 is
+     * none, an id no resource has. They mean something only with a [section].
+     */
     @Serializable
-    data class Settings(val section: SettingsSection? = null) : Route
+    data class Settings(
+        val section: SettingsSection? = null,
+        val highlightTitle: Int = 0,
+        val highlightGroup: Int = 0,
+    ) : Route
 
     /** Downloads of titles no longer in the library, from the Data section (phase 4 unit ST). */
     @Serializable
