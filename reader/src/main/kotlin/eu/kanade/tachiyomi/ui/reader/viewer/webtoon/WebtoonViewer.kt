@@ -37,7 +37,7 @@ import kotlin.math.min
  *
  * Modified (H) (I) throughout: `activity` is a [ViewerHost], every View is built with
  * `host.context`, and upstream's dead `downloadManager by injectLazy()` is dropped along with the
- * Injekt read of `readerHideThreshold`. Six behavioural changes:
+ * Injekt read of `readerHideThreshold`. Eight behavioural changes:
  *
  *  - The hard-coded five-page chapter preload trigger becomes `host.preloadWindow().chapterPreloadAt`
  *    (section 3.5).
@@ -52,6 +52,9 @@ import kotlin.math.min
  *  - [setChapters] keeps a transition only while "always show chapter transition" is on, not also
  *    while one is the item last selected, so one-page chapters read without a transition between
  *    pages. The adapter's `DiffUtil` update puts the chapter that loaded where its transition was.
+ *  - The tap and volume key scroll distance is read from the display on each use rather than once,
+ *    because a rotation keeps this viewer.
+ *  - [onSplitInserted] keeps the "always show chapter transition" setting, which it passed as off.
  *
  * The first layout and the chapter preload trigger count pages, not tall-strip parts, which sit in
  * the page list after their page with its index. The recycler is told the side padding, as in
@@ -73,9 +76,11 @@ class WebtoonViewer(val host: ViewerHost, val isContinuous: Boolean = true) : Vi
     private val frame = WebtoonFrame(host.context)
 
     /**
-     * Distance to scroll when the user taps on one side of the recycler view.
+     * Distance to scroll when the user taps on one side of the recycler view. Read on each use:
+     * upstream's activity is recreated on a rotation and its viewer with it, this one is kept.
      */
-    private val scrollDistance = host.context.resources.displayMetrics.heightPixels * 3 / 4
+    private val scrollDistance: Int
+        get() = host.context.resources.displayMetrics.heightPixels * 3 / 4
 
     /**
      * Layout manager of the recycler view.
@@ -331,7 +336,7 @@ class WebtoonViewer(val host: ViewerHost, val isContinuous: Boolean = true) : Vi
      */
     override fun onSplitInserted(page: ReaderPage) {
         val chapters = adapter.lastChapters ?: return
-        adapter.setChapters(chapters, forceTransition = false)
+        adapter.setChapters(chapters, config.alwaysShowChapterTransition)
     }
 
     fun onScrolled(pos: Int? = null) {

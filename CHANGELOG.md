@@ -18,6 +18,19 @@ release may change behaviour.
 
 ### Fixed
 
+- Swiping turns the page in the paged reading modes, left, right and vertical. A swipe was
+  cancelled as soon as it started, so only a tap on the side of the page or the volume keys
+  turned it.
+- The tap zones no longer cover the page each time the reader opens while "Show tap zones
+  overlay" is off.
+- With "Show actions on long tap" off, a long press still opens the page actions while the menu
+  is showing.
+- In the long strip, taps work after a sideways fling on a zoomed page. Before, every tap was
+  ignored, the menu's included, until the strip was scrolled.
+- In the long strip, a tap or a volume key scrolls three quarters of the screen after a rotation
+  too, instead of the distance for the orientation the reader opened in.
+- After a tall page is split, "Always show chapter transition" still holds, so the reader no
+  longer goes straight from a chapter's last page into the next one.
 - On Android 8 and 9, turning pure black off in the dark theme gives the navigation bar back its
   usual shade at once, instead of leaving it see-through until the screen rotated or the app
   restarted.

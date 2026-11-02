@@ -28,7 +28,10 @@ import kotlin.math.abs
  * is added for the keyboard's page step. With double-tap zoom off, a tap goes out when the finger
  * lifts instead of after the double-tap timeout, since there is no second tap to wait for. A tap
  * confirmed after that timeout is dropped once the strip has left its window, as upstream v0.21.2
- * ee454f3a8 does.
+ * ee454f3a8 does. A touch down on a strip that is not scrolling clears the manual scroll flag: a
+ * fling that never moved the list, such as a sideways one on a zoomed page, set it and no idle
+ * state came to clear it, so every later tap, the menu's included, was taken for one that stops a
+ * scroll and dropped (upstream has the same flag and the same gap).
  */
 class WebtoonRecyclerView @JvmOverloads constructor(
     context: Context,
@@ -108,6 +111,8 @@ class WebtoonRecyclerView @JvmOverloads constructor(
 
     override fun onTouchEvent(e: MotionEvent): Boolean {
         if (e.actionMasked == MotionEvent.ACTION_DOWN) {
+            // A down on a moving strip has already turned it to dragging, so only a still one is idle
+            if (scrollState == SCROLL_STATE_IDLE) isManuallyScrolling = false
             tapDuringManualScroll = isManuallyScrolling
         }
 

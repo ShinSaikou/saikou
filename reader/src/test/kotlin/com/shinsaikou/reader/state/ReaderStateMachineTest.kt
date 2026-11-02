@@ -661,6 +661,14 @@ class ReaderStateMachineTest {
         machine(longTapEnabled = false).reduce(ready, ReaderEvent.PageLongTapped(page)).first.dialog shouldBe null
     }
 
+    @Test
+    fun `with the menu showing a long tap opens the page actions even with the preference off`() {
+        val ready = readyState(session, current).copy(menuVisible = true)
+        val page = readyPage(current, 0)
+        machine(longTapEnabled = false).reduce(ready, ReaderEvent.PageLongTapped(page)).first.dialog shouldBe
+            ReaderDialog.PageActions(page)
+    }
+
     /**
      * Phase 4 unit BN. The sheet's Note button sends only the note event, so the reducer is what
      * closes the sheet. A dismiss sent by the sheet after it was reduced behind the note dialog's

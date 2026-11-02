@@ -67,7 +67,9 @@ class ReaderStateMachine(
             } else {
                 state.noEffects()
             }
-        is ReaderEvent.PageLongTapped -> if (longTapEnabled()) {
+        // While the menu shows, a long press opens the sheet whatever the preference says, as the
+        // viewers' own check (and upstream's) has it; the viewers already buzzed for it.
+        is ReaderEvent.PageLongTapped -> if (state.menuVisible || longTapEnabled()) {
             state.copy(dialog = ReaderDialog.PageActions(event.page)).noEffects()
         } else {
             state.noEffects()

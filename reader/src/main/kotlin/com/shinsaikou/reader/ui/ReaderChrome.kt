@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.isVisible
 import androidx.compose.foundation.layout.fillMaxSize
 import com.shinsaikou.domain.manga.model.ReadingMode
 import com.shinsaikou.domain.preferences.ReaderPreferences
@@ -96,6 +97,10 @@ internal fun ReaderAppBarsHost(
 /**
  * The second and last `AndroidView`. It renders nothing until a viewer config raises
  * `setNavigationOverlay`, so it is always in the tree and always cheap.
+ *
+ * The view starts hidden, as upstream's layout declares it `gone`. A view built in code starts
+ * visible, and `setNavigation` returns early for a visible view, so the tap regions were drawn on
+ * every open until the first touch, whatever "Show tap zones overlay" said.
  */
 @Composable
 internal fun ReaderNavigationOverlay(
@@ -104,7 +109,7 @@ internal fun ReaderNavigationOverlay(
 ) {
     AndroidView(
         modifier = modifier.fillMaxSize(),
-        factory = { ReaderNavigationOverlayView(it, null) },
+        factory = { ReaderNavigationOverlayView(it, null).apply { isVisible = false } },
         update = { view ->
             request?.let { view.setNavigation(it.navigation, it.showOnStart) }
         },

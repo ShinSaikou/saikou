@@ -2,17 +2,23 @@ package com.shinsaikou.reader
 
 import android.app.UiAutomation
 import android.content.res.Configuration
+import android.graphics.Rect
 import android.hardware.display.DisplayManager
 import android.os.Build
 import android.os.SystemClock
 import android.provider.Settings
 import android.view.Display
+import android.view.MotionEvent
 import android.view.Surface
+import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
+import androidx.core.view.children
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
 import com.shinsaikou.SaikouApp
 import com.shinsaikou.core.common.preferences.SecurityPreferences.SecureScreenMode
 import com.shinsaikou.di.AppGraph
@@ -23,7 +29,9 @@ import com.shinsaikou.reader.state.ReaderEvent
 import com.shinsaikou.reader.state.ReaderPhase
 import com.shinsaikou.reader.state.ReaderState
 import com.shinsaikou.util.Args
+import eu.kanade.tachiyomi.ui.reader.ReaderNavigationOverlayView
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
+import eu.kanade.tachiyomi.ui.reader.viewer.webtoon.WebtoonRecyclerView
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -39,6 +47,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import tachiyomi.core.common.preference.Preference
 
 /**
  * The reader opened on a real chapter, in both viewer families. Contract 01 section 8.3.
@@ -123,6 +132,82 @@ class ReaderSmokeTest {
     @Test
     fun theWebtoonViewerKeepsItsSessionThroughARotationIntoLandscape() {
         openAndTurnAPage(ReadingMode.WEBTOON, rotateIntoLandscape = true)
+    }
+
+    /**
+     * A swipe turns the page, in each of the three paged modes, sent to the window as a finger's
+     * would arrive. The turns above send [ReaderEvent.PageSelected], the event the pager raises once
+     * it has turned, so they stayed green while no swipe could turn a page: the page view's touch
+     * down request and its release on the first move had Compose cancel the pager's gesture, and
+     * only taps turned pages (`ViewerTouchFrame`).
+     */
+    @Test
+    fun aSwipeToTheLeftTurnsALeftToRightPage() {
+        swipeAndTurnAPage(ReadingMode.LEFT_TO_RIGHT, Swipe(0.8f, 0.5f, 0.2f, 0.5f))
+    }
+
+    @Test
+    fun aSwipeToTheRightTurnsARightToLeftPage() {
+        swipeAndTurnAPage(ReadingMode.RIGHT_TO_LEFT, Swipe(0.2f, 0.5f, 0.8f, 0.5f))
+    }
+
+    @Test
+    fun aSwipeUpTurnsAVerticalPage() {
+        swipeAndTurnAPage(ReadingMode.VERTICAL, Swipe(0.5f, 0.75f, 0.5f, 0.25f))
+    }
+
+    /**
+     * With "Show tap zones overlay" off and the first use overlay already seen, the tap regions stay
+     * off the page when the reader opens. The overlay view was built visible, and its first
+     * navigation returns early for a visible view, so the regions were drawn on every open until
+     * the first touch. The tap zones are pinned to the default, which has regions to draw.
+     */
+    @Test
+    fun theTapZonesOverlayStaysHiddenOnOpenWhileItsSettingIsOff() {
+        val reader = graph.readerPreferences
+        pinned(reader.showNavigationOverlayOnStart to false, reader.showNavigationOverlayNewUser to false) {
+            pinned(reader.navigationModePager to 0) {
+                fixture.writeReadingMode(ReadingMode.LEFT_TO_RIGHT)
+                openReady { scenario ->
+                    awaitTrue(PAGE_TIMEOUT_MILLIS, "page 1's image view never became ready") {
+                        pageImageReady(scenario)
+                    }
+                    var shown = true
+                    scenario.onActivity { activity ->
+                        shown = viewsUnder<ReaderNavigationOverlayView>(activity.window.decorView).any { it.isShown }
+                    }
+                    assertFalse("the tap zones overlay showed on open with its setting off", shown)
+                }
+            }
+        }
+    }
+
+    /**
+     * A tap opens the menu after a sideways fling on a zoomed long strip. The fling marked the strip
+     * as scrolling by hand, which drops the next tap as one that stops a scroll, but a sideways
+     * fling never scrolls the list, so nothing cleared the mark and every later tap was dropped.
+     */
+    @Test
+    fun aTapOpensTheMenuAfterASidewaysFlingOnAZoomedLongStrip() {
+        fixture.writeReadingMode(ReadingMode.WEBTOON)
+        openReady { scenario ->
+            val viewModel = viewModelOf(scenario)
+            awaitTrue(PAGE_TIMEOUT_MILLIS, "page 1's image view never became ready") { pageImageReady(scenario) }
+
+            tap(0.5f, 0.5f)
+            SystemClock.sleep(DOUBLE_TAP_GAP_MILLIS)
+            tap(0.5f, 0.5f)
+            awaitTrue(TURN_TIMEOUT_MILLIS, "a double tap did not zoom the long strip") { stripScale(scenario) > 1f }
+
+            send(Swipe(0.3f, 0.5f, 0.8f, 0.5f))
+            SystemClock.sleep(SETTLE_MILLIS)
+            assertFalse("the menu was already open before the tap", viewModel.state.value.menuVisible)
+
+            tap(0.5f, 0.5f)
+            awaitTrue(TURN_TIMEOUT_MILLIS, "a tap after a sideways fling did not open the menu") {
+                viewModel.state.value.menuVisible
+            }
+        }
     }
 
     /**
@@ -247,6 +332,130 @@ class ReaderSmokeTest {
             scenario.close()
         }
     }
+
+    /**
+     * Opens page one in [mode], waits for its image view to be ready, sends [swipe] and waits for
+     * page two. The wait is on the image view rather than the page list because the view's request
+     * on touch down is what cancelled the swipe, and it makes it only once its image is ready: a
+     * swipe sent before then would turn the page with or without the fix.
+     */
+    private fun swipeAndTurnAPage(mode: ReadingMode, swipe: Swipe) {
+        fixture.writeReadingMode(mode)
+        val scenario = ActivityScenario.launch<ReaderActivity>(
+            ReaderIntents.newIntent(context, mangaId, chapterId, page = 0),
+        )
+        try {
+            val viewModel = viewModelOf(scenario)
+            val ready = await(OPEN_TIMEOUT_MILLIS, "the session never became ready") {
+                viewModel.state.first { it.phase is ReaderPhase.Ready && it.totalPages > 0 }
+            }
+            assertReady(mode, ready)
+            awaitTrue(PAGE_TIMEOUT_MILLIS, "page 1's image view never became ready") { pageImageReady(scenario) }
+
+            send(swipe)
+            val turned = await(TURN_TIMEOUT_MILLIS, "a swipe left the ${mode.name} reader on page 1") {
+                viewModel.state.first { it.currentPage == 1 }
+            }
+            assertEquals("the swipe moved the reader somewhere else", 1, turned.currentPage)
+        } finally {
+            scenario.close()
+        }
+    }
+
+    /**
+     * Whether an image view on screen holds a decoded image, read on the main thread. The pager keeps
+     * the next page laid out beside the screen, and that one has no visible rectangle.
+     */
+    private fun pageImageReady(scenario: ActivityScenario<ReaderActivity>): Boolean {
+        var ready = false
+        scenario.onActivity { activity ->
+            ready = imageViewsUnder(activity.window.decorView).any { it.isReady && it.getGlobalVisibleRect(Rect()) }
+        }
+        return ready
+    }
+
+    private fun imageViewsUnder(view: View): Sequence<SubsamplingScaleImageView> = viewsUnder(view)
+
+    private inline fun <reified T : View> viewsUnder(view: View): Sequence<T> = sequence {
+        val pending = ArrayDeque(listOf(view))
+        while (pending.isNotEmpty()) {
+            val next = pending.removeFirst()
+            if (next is T) yield(next)
+            if (next is ViewGroup) pending.addAll(next.children)
+        }
+    }
+
+    /** The long strip's zoom, which it applies to the list as a scale; 1 when there is no strip. */
+    private fun stripScale(scenario: ActivityScenario<ReaderActivity>): Float {
+        var scale = 1f
+        scenario.onActivity { activity ->
+            scale = viewsUnder<WebtoonRecyclerView>(activity.window.decorView).firstOrNull()?.scaleX ?: 1f
+        }
+        return scale
+    }
+
+    /** A tap at a point in fractions of the display, sent to the window as [send]'s swipe is. */
+    private fun tap(x: Float, y: Float) {
+        val metrics = context.resources.displayMetrics
+        val px = x * metrics.widthPixels
+        val py = y * metrics.heightPixels
+        val down = SystemClock.uptimeMillis()
+        val press = MotionEvent.obtain(down, down, MotionEvent.ACTION_DOWN, px, py, 0)
+        val release = MotionEvent.obtain(down, down + TAP_MILLIS, MotionEvent.ACTION_UP, px, py, 0)
+        try {
+            instrumentation.sendPointerSync(press)
+            instrumentation.sendPointerSync(release)
+        } finally {
+            press.recycle()
+            release.recycle()
+        }
+    }
+
+    /** Sets each preference for [block] and puts it back as it was, set or unset, afterwards. */
+    private fun pinned(vararg pins: Pair<Preference<*>, Any>, block: () -> Unit) {
+        @Suppress("UNCHECKED_CAST")
+        val restores = pins.map { (preference, value) ->
+            val typed = preference as Preference<Any>
+            val was = typed.takeIf { it.isSet() }?.get()
+            typed.set(value)
+            ({ if (was != null) typed.set(was) else typed.delete() })
+        }
+        try {
+            block()
+        } finally {
+            restores.forEach { it() }
+        }
+    }
+
+    /**
+     * A drag from one point to another in fractions of the display, as ten moves over 150 ms: far
+     * and fast enough that the pager turns on either of its rules, distance or fling.
+     */
+    private fun send(swipe: Swipe) {
+        val metrics = context.resources.displayMetrics
+        val width = metrics.widthPixels.toFloat()
+        val height = metrics.heightPixels.toFloat()
+        val down = SystemClock.uptimeMillis()
+        fun event(action: Int, step: Int): MotionEvent {
+            val fraction = step / SWIPE_STEPS.toFloat()
+            val x = (swipe.fromX + (swipe.toX - swipe.fromX) * fraction) * width
+            val y = (swipe.fromY + (swipe.toY - swipe.fromY) * fraction) * height
+            return MotionEvent.obtain(down, down + step * SWIPE_STEP_MILLIS, action, x, y, 0)
+        }
+        val events = buildList {
+            add(event(MotionEvent.ACTION_DOWN, 0))
+            for (step in 1..SWIPE_STEPS) add(event(MotionEvent.ACTION_MOVE, step))
+            add(event(MotionEvent.ACTION_UP, SWIPE_STEPS))
+        }
+        try {
+            events.forEach(instrumentation::sendPointerSync)
+        } finally {
+            events.forEach(MotionEvent::recycle)
+        }
+    }
+
+    /** A swipe's start and end, each a fraction of the display's width and height. */
+    private class Swipe(val fromX: Float, val fromY: Float, val toX: Float, val toY: Float)
 
     /**
      * The reader rotated, and the only assertion anywhere that it lays out in landscape.
@@ -513,6 +722,18 @@ class ReaderSmokeTest {
 
         /** One trip through the reducer. */
         const val TURN_TIMEOUT_MILLIS = 10_000L
+
+        const val SWIPE_STEPS = 10
+
+        const val TAP_MILLIS = 50L
+
+        /** Inside the platform's double tap window and past its minimum. */
+        const val DOUBLE_TAP_GAP_MILLIS = 80L
+
+        /** The zoomed strip's fling animation, which runs no longer than this. */
+        const val SETTLE_MILLIS = 1_500L
+
+        const val SWIPE_STEP_MILLIS = 15L
 
         /** A write to the entry, the flow coming back, and the platform turning the window. */
         const val ROTATE_TIMEOUT_MILLIS = 20_000L

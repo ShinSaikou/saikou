@@ -507,14 +507,17 @@ abstract class PagerViewer(val host: ViewerHost) : Viewer {
      * Fresh (V). Tall-strip parts were inserted into [page]'s chapter. Re-setting the chapters is
      * what makes the adapter see them, and it may only happen while the pager is idle: doing it
      * mid-settle is the jump `awaitingIdleViewerChapters` exists to avoid.
+     *
+     * It goes through [setChapters] like any other update, so the "always show chapter transition"
+     * setting holds and the pager stays on the item it showed. A window already waiting for idle
+     * is the newer one and is kept: the parts are on the chapter itself, so it carries them too.
+     * The idle path used to set the adapter directly with the transitions off, and a split that
+     * finished while the pager settled into the next chapter replaced that chapter's window with
+     * the one before it, so the viewer stayed a chapter behind the reader.
      */
     override fun onSplitInserted(page: ReaderPage) {
-        val chapters = adapter.lastChapters ?: return
-        if (isIdle) {
-            adapter.setChapters(chapters, forceTransition = false)
-        } else {
-            awaitingIdleViewerChapters = chapters
-        }
+        val chapters = awaitingIdleViewerChapters ?: adapter.lastChapters ?: return
+        setChapters(chapters)
     }
 
     private fun cleanupPageSplit() {
