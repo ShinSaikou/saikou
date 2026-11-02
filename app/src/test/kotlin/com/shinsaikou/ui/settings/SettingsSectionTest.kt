@@ -33,7 +33,7 @@ class SettingsSectionTest {
     }
 
     @Test
-    fun `tracking sits after downloads, sync after data, and security just before advanced`() {
+    fun `tracking sits after downloads, sync after data, security just before advanced, experimental last`() {
         SettingsSection.entries.map { it.name } shouldContainExactly listOf(
             "APPEARANCE",
             "LIBRARY",
@@ -45,6 +45,7 @@ class SettingsSectionTest {
             "SYNC",
             "SECURITY",
             "ADVANCED",
+            "EXPERIMENTAL",
         )
     }
 
@@ -60,6 +61,7 @@ class SettingsSectionTest {
             "SYNC",
             "SECURITY",
             "ADVANCED",
+            "EXPERIMENTAL",
         )
     }
 

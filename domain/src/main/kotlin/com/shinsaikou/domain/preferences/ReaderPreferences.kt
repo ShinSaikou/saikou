@@ -189,4 +189,10 @@ class ReaderPreferences(preferenceStore: PreferenceStore) {
 
     /** Fresh: split a tall page while reading online, not only while downloading. */
     val tallImageSplitEnabled: Preference<Boolean> = preferenceStore.getBoolean("reader_split_tall_images_online", true)
+
+    /**
+     * Fresh, Experimental: an online chapter fetches several pages at once rather than one at a
+     * time. Off by default, because a source may refuse requests that come together.
+     */
+    val parallelPageLoading: Preference<Boolean> = preferenceStore.getBoolean("reader_parallel_page_loading", false)
 }

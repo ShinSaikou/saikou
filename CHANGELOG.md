@@ -9,6 +9,9 @@ release may change behaviour.
 
 ### Added
 
+- An Experimental section at the end of Settings, for behaviour that may not suit every source or
+  device, each switch off until turned on. Its first switch, **Load pages in parallel**, has an
+  online chapter fetch up to three pages at a time instead of one.
 - Start without extensions, on the crash screen, for when an extension makes Saikou close at every
   start. Until Saikou restarts no extension runs, library updates and downloads wait, and a banner
   says so with a Restart button. The Extensions tab still lists each extension, so the one at

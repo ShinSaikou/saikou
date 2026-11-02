@@ -22,6 +22,8 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.EOFException
 import java.io.InterruptedIOException
@@ -36,8 +38,13 @@ import kotlin.math.min
  *
  * Upstream's `HttpPageLoader` shape, with the probe and the tall-strip split inserted between the
  * cache write and Ready, so a viewer never sees an unclassified page and never sees a 20000 px
- * strip. One worker coroutine, as upstream: sources are rate limited by their own interceptors, and
- * parallel fetching buys jank rather than speed.
+ * strip. One worker coroutine by default, as upstream: sources are rate limited by their own
+ * interceptors, and parallel fetching buys jank rather than speed.
+ *
+ * With the Experimental "Load pages in parallel" on when the loader is made,
+ * [PARALLEL_WORKERS] workers take from the same queue. A page is claimed before its state is read,
+ * so two workers never fetch it at once ([PageClaims]), and splits run one at a time, so no more than
+ * one band bitmap is decoded per loader however many workers there are.
  *
  * Unlike upstream, a download that fails for a reason a moment's wait can fix
  * ([isTransientPageFailure]) is tried once more after [retryDelayMs].
@@ -61,17 +68,28 @@ class SourcePageLoader(
 
     private val scope = CoroutineScope(SupervisorJob() + dispatchers.io)
     private val queue = PriorityBlockingQueue<PriorityPage>()
+    private val claims = PageClaims()
+    private val splitLock = Mutex()
     private val _splits = MutableSharedFlow<PageSplit>(extraBufferCapacity = SPLIT_BUFFER)
     override val splits: Flow<PageSplit> = _splits.asSharedFlow()
 
     init {
-        scope.launch {
-            while (true) {
-                val entry = runInterruptible { queue.take() }
-                // A page that finished or was dropped while queued is skipped, unless the user
-                // asked for it again.
-                if (entry.page.status !is PageState.Queue && entry.priority != PriorityPage.RETRY) continue
-                fetch(entry.page, force = entry.priority == PriorityPage.RETRY)
+        val workers = if (readerPreferences.parallelPageLoading.get()) PARALLEL_WORKERS else 1
+        repeat(workers) {
+            scope.launch {
+                while (true) {
+                    val entry = runInterruptible { queue.take() }
+                    // Another worker has this page: the entry waits for that fetch to end (PageClaims).
+                    if (!claims.claim(entry)) continue
+                    try {
+                        // A page that finished or was dropped while queued is skipped, unless the user
+                        // asked for it again. Read after the claim, so a fetch that finished just now counts.
+                        if (entry.page.status !is PageState.Queue && entry.priority != PriorityPage.RETRY) continue
+                        fetch(entry.page, force = entry.priority == PriorityPage.RETRY)
+                    } finally {
+                        claims.release(entry.page)?.let(queue::offer)
+                    }
+                }
             }
         }
     }
@@ -179,8 +197,8 @@ class SourcePageLoader(
 
     /**
      * One automatic retry, for a timeout, a dropped connection or a busy server. The worker waits
-     * out the pause, so the pages queued behind this one wait too, which is why it is short and
-     * happens once.
+     * out the pause, so with one worker the pages queued behind this one wait too, which is why it
+     * is short and happens once.
      */
     @Suppress("TooGenericExceptionCaught")
     private suspend fun download(page: ReaderPage, key: String) {
@@ -220,7 +238,7 @@ class SourcePageLoader(
             return
         }
 
-        val parts = splitter.split({ cache.getImageFile(key).inputStream() }, key)
+        val parts = splitLock.withLock { splitter.split({ cache.getImageFile(key).inputStream() }, key) }
         if (parts <= 1) {
             // The split failed or the plan collapsed; the parent entry is untouched.
             serveWhole(page, key)
@@ -243,6 +261,9 @@ class SourcePageLoader(
 
     companion object {
         private const val SPLIT_BUFFER = 64
+
+        /** Enough to keep ahead of a reader on a slow source, few enough not to read as a flood. */
+        const val PARALLEL_WORKERS = 3
 
         /** Long enough for a dropped connection to come back, short enough not to stall the queue. */
         const val RETRY_DELAY_MS = 1_500L
@@ -269,6 +290,34 @@ internal fun isTransientPageFailure(error: Throwable): Boolean {
 
 private const val HTTP_REQUEST_TIMEOUT = 408
 private val HTTP_SERVER_ERRORS = 500..599
+
+/**
+ * The pages a worker is fetching. An entry for a page another worker holds is kept, the one of
+ * highest priority, and handed back when that worker lets go, to be queued again. A fetch sets
+ * Error as its last step before the release, and in that gap the holder's retry button can queue a
+ * retry, or a load can turn the failed page back to Queue and queue it; dropped, either would leave
+ * the page queued with nothing left to fetch it. An entry handed back for a page that came through
+ * is skipped by the worker's state check, as any other is.
+ */
+internal class PageClaims {
+    private val claimed = HashSet<ReaderPage>()
+    private val waiting = HashMap<ReaderPage, PriorityPage>()
+
+    /** Whether [entry]'s page was free and is now held; if not, [entry] waits for the release. */
+    @Synchronized
+    fun claim(entry: PriorityPage): Boolean {
+        if (claimed.add(entry.page)) return true
+        waiting.merge(entry.page, entry) { held, new -> if (new.priority > held.priority) new else held }
+        return false
+    }
+
+    /** Lets [page] go, and returns the entry that arrived for it meanwhile, to be queued again. */
+    @Synchronized
+    fun release(page: ReaderPage): PriorityPage? {
+        claimed -= page
+        return waiting.remove(page)
+    }
+}
 
 /**
  * Queue ordering: priority first, then arrival, so two pages of the same priority keep reading

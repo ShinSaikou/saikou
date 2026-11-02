@@ -27,6 +27,7 @@ import androidx.compose.material.icons.outlined.CollectionsBookmark
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.GetApp
 import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Science
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.Sync
@@ -355,6 +356,7 @@ internal val SettingsSection.labelRes: Int
         SettingsSection.SYNC -> R.string.settings_section_sync
         SettingsSection.SECURITY -> R.string.settings_section_security
         SettingsSection.ADVANCED -> R.string.settings_section_advanced
+        SettingsSection.EXPERIMENTAL -> R.string.settings_section_experimental
     }
 
 /** The line under [labelRes] in the settings list: a few of the things the section holds. */
@@ -371,9 +373,10 @@ internal val SettingsSection.summaryRes: Int
         SettingsSection.SYNC -> R.string.settings_section_sync_summary
         SettingsSection.SECURITY -> R.string.settings_section_security_summary
         SettingsSection.ADVANCED -> R.string.settings_section_advanced_summary
+        SettingsSection.EXPERIMENTAL -> R.string.settings_section_experimental_summary
     }
 
-/** The row's icon in the settings list, upstream's for each section it has; Sync is Saikou's own. */
+/** The row's icon in the settings list, upstream's for each section it has; Sync and Experimental are Saikou's own. */
 internal val SettingsSection.icon: ImageVector
     get() = when (this) {
         SettingsSection.APPEARANCE -> Icons.Outlined.Palette
@@ -386,6 +389,7 @@ internal val SettingsSection.icon: ImageVector
         SettingsSection.SYNC -> Icons.Outlined.CloudSync
         SettingsSection.SECURITY -> Icons.Outlined.Security
         SettingsSection.ADVANCED -> Icons.Outlined.Code
+        SettingsSection.EXPERIMENTAL -> Icons.Outlined.Science
     }
 
 /**
@@ -408,6 +412,7 @@ internal fun shownSettingsSections(trackingOffered: Boolean): List<SettingsSecti
             SettingsSection.SYNC,
             SettingsSection.SECURITY,
             SettingsSection.ADVANCED,
+            SettingsSection.EXPERIMENTAL,
             -> true
         }
     }
@@ -448,6 +453,7 @@ internal fun SettingsSectionBody(
             SettingsSection.SYNC -> SyncSection()
             SettingsSection.SECURITY -> SecuritySection(viewModel)
             SettingsSection.ADVANCED -> AdvancedSection(viewModel, showMessage)
+            SettingsSection.EXPERIMENTAL -> ExperimentalSection(viewModel)
         }
     }
 }
@@ -1754,6 +1760,20 @@ private fun AdvancedSection(viewModel: SettingsViewModel, showMessage: (String, 
             onDismiss = { editingLibVersions = false },
         )
     }
+}
+
+/**
+ * Behaviour that could make the app worse for some owners, each switch off by default (R162 item
+ * 2), so the default app stays as it was. Every row says what it changes and what it can cost.
+ */
+@Composable
+private fun ExperimentalSection(viewModel: SettingsViewModel) {
+    InlineNotice(stringResource(R.string.settings_experimental_note))
+    CheckboxRow(
+        labelRes = R.string.settings_experimental_parallel_pages,
+        pref = viewModel.readerPreferences.parallelPageLoading,
+        detailRes = R.string.settings_experimental_parallel_pages_summary,
+    )
 }
 
 /**

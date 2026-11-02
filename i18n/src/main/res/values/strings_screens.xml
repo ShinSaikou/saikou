@@ -376,6 +376,7 @@
     <string name="settings_section_data">Data</string>
     <string name="settings_section_sync">Sync</string>
     <string name="settings_section_advanced">Advanced</string>
+    <string name="settings_section_experimental">Experimental</string>
     <!-- The line under each section's name in the settings list, as upstream's settings screen has one. -->
     <string name="settings_section_appearance_summary">Theme, pure black, date format</string>
     <string name="settings_section_library_summary">Badges, categories, automatic updates</string>
@@ -387,6 +388,10 @@
     <string name="settings_section_sync_summary">Google Drive or WebDAV, last sync report</string>
     <string name="settings_section_security_summary">App lock, secure screen, notification content</string>
     <string name="settings_section_advanced_summary">Logs, network, database tools</string>
+    <string name="settings_section_experimental_summary">Features still being tried, off until turned on</string>
+    <string name="settings_experimental_note">These change how the app works in ways that may not suit every source or device. Each one is off until you turn it on, and turning it off again puts things back as they were.</string>
+    <string name="settings_experimental_parallel_pages">Load pages in parallel</string>
+    <string name="settings_experimental_parallel_pages_summary">An online chapter fetches up to three pages at a time instead of one, so the pages ahead are ready sooner. A source that limits how often it may be asked can answer more slowly or refuse a page, which then shows its retry button. It applies to chapters opened after the change.</string>
     <string name="settings_theme">Theme</string>
     <string name="settings_theme_mode">Light and dark</string>
     <string name="settings_tablet_ui">Two pane layout</string>

@@ -188,6 +188,8 @@ enum class SourceBrowseMode {
  * The settings sections in their list order. Tracking sits after Downloads, where upstream puts it, and
  * is listed only while a configured tracker is in the graph (`shownSettingsSections`). Security sits
  * just before Advanced, where upstream puts its "Security and privacy" (phase 4 unit SR).
+ * Experimental, Saikou's own, is last: behaviour that could hurt the experience, each switch off by
+ * default (R162 item 2).
  */
 @Serializable
 enum class SettingsSection {
@@ -201,4 +203,5 @@ enum class SettingsSection {
     SYNC,
     SECURITY,
     ADVANCED,
+    EXPERIMENTAL,
 }

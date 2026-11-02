@@ -38,6 +38,9 @@ import java.net.ConnectException
 import java.net.SocketException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.Dispatchers as CoroutineDispatchers
 
 /**
@@ -58,6 +61,7 @@ class SourcePageLoaderTest {
 
     @AfterEach
     fun tearDown() {
+        source.gate?.countDown()
         holder.cancel()
         loaders.forEach { it.recycle() }
     }
@@ -250,6 +254,119 @@ class SourcePageLoaderTest {
         error.format shouldBe ImageFormat.AVIF
     }
 
+    // ---- Parallel loading (Experimental) ----
+
+    @Test
+    fun `with parallel loading off one page is fetched at a time`() = runBlocking<Unit> {
+        cacheMiss()
+        readyProbe()
+        val gate = CountDownLatch(1).also { source.gate = it }
+        val loader = loader(fetchAhead = 2)
+        val pages = loader.pagesOfChapter()
+
+        loader.loadInBackground(pages[0])
+        await { source.inFlight() == 1 }
+        Thread.sleep(QUIET_MS)
+        source.calls() shouldContainExactly listOf("/i0")
+
+        gate.countDown()
+        pages.forEach { awaitReady(it) }
+        source.mostInFlight() shouldBe 1
+    }
+
+    @Test
+    fun `with parallel loading on three pages are fetched at once`() = runBlocking<Unit> {
+        cacheMiss()
+        readyProbe()
+        val gate = CountDownLatch(1).also { source.gate = it }
+        val loader = loader(fetchAhead = 2, parallel = true)
+        val pages = loader.pagesOfChapter()
+
+        loader.loadInBackground(pages[0])
+        await { source.inFlight() == SourcePageLoader.PARALLEL_WORKERS }
+
+        gate.countDown()
+        pages.forEach { awaitReady(it) }
+        source.calls().sorted() shouldContainExactly listOf("/i0", "/i1", "/i2")
+    }
+
+    @Test
+    fun `with parallel loading on a retry for a page being fetched waits for that fetch`() = runBlocking<Unit> {
+        cacheMiss()
+        readyProbe()
+        val gate = CountDownLatch(1).also { source.gate = it }
+        val loader = loader(fetchAhead = 0, parallel = true)
+        val pages = loader.pagesOfChapter()
+
+        loader.loadInBackground(pages[0])
+        await { source.inFlight() == 1 }
+        // A retry is queued even for a page in flight, and two workers are free to take it.
+        loader.retryPage(pages[0])
+        Thread.sleep(QUIET_MS)
+        source.calls() shouldContainExactly listOf("/i0")
+
+        gate.countDown()
+        // Then the retry runs, as it would behind the fetch with one worker.
+        await { source.calls().size == 2 }
+        awaitReady(pages[0])
+        source.mostInFlight() shouldBe 1
+    }
+
+    @Test
+    fun `an entry that arrives while its page is held is handed back when the page is let go`() {
+        val claims = PageClaims()
+        val page = ReaderPage(0)
+
+        claims.claim(PriorityPage(page, PriorityPage.DEFAULT)) shouldBe true
+        // The fetch has set Error, and before the release a load turned the page back to Queue and
+        // queued it, then the holder's retry button queued a retry: the retry, the higher, comes back.
+        val load = PriorityPage(page, PriorityPage.DEFAULT)
+        val retry = PriorityPage(page, PriorityPage.RETRY)
+        claims.claim(load) shouldBe false
+        claims.claim(retry) shouldBe false
+        claims.claim(PriorityPage(page, PriorityPage.ADJACENT)) shouldBe false
+
+        claims.release(page) shouldBe retry
+        claims.claim(retry) shouldBe true
+        claims.release(page) shouldBe null
+    }
+
+    @Test
+    fun `a load that arrives while its page is held is handed back on its own`() {
+        val claims = PageClaims()
+        val page = ReaderPage(0)
+        val load = PriorityPage(page, PriorityPage.DEFAULT)
+
+        claims.claim(PriorityPage(page, PriorityPage.ADJACENT)) shouldBe true
+        claims.claim(load) shouldBe false
+
+        claims.release(page) shouldBe load
+    }
+
+    @Test
+    fun `with parallel loading on tall pages are still split one at a time`() = runBlocking<Unit> {
+        cacheMiss()
+        every { probe.probe(any(), any()) } returns PageRoute.Region(ImageFormat.JPEG, 800, 20_000)
+        every { splitter.plan(any(), any()) } returns SplitPlan(3, emptyList())
+        every { cache.getPartFile(any(), any()) } answers { File("part-${secondArg<Int>()}") }
+        val splitting = AtomicInteger()
+        val mostSplitting = AtomicInteger()
+        every { splitter.split(any(), any()) } answers {
+            mostSplitting.accumulateAndGet(splitting.incrementAndGet(), ::maxOf)
+            Thread.sleep(SPLIT_MS)
+            splitting.decrementAndGet()
+            3
+        }
+        val loader = loader(fetchAhead = 2, parallel = true)
+        val pages = loader.pagesOfChapter()
+
+        loader.loadInBackground(pages[0])
+        pages.forEach { awaitReady(it) }
+
+        pages.map { it.partCount } shouldContainExactly listOf(3, 3, 3)
+        mostSplitting.get() shouldBe 1
+    }
+
     // ---- The tall-strip split ----
 
     @Test
@@ -354,13 +471,17 @@ class SourcePageLoaderTest {
 
     // ---- Harness ----
 
-    private fun loader(fetchAhead: Int = 2, splitEnabled: Boolean = true): SourcePageLoader = SourcePageLoader(
+    private fun loader(
+        fetchAhead: Int = 2,
+        splitEnabled: Boolean = true,
+        parallel: Boolean = false,
+    ): SourcePageLoader = SourcePageLoader(
         chapter = chapter,
         source = source,
         cache = cache,
         probe = probe,
         splitter = splitter,
-        readerPreferences = ReaderPreferences(store(splitEnabled)),
+        readerPreferences = ReaderPreferences(store(splitEnabled, parallel)),
         dispatchers = Dispatchers(
             io = CoroutineDispatchers.IO,
             default = CoroutineDispatchers.IO,
@@ -374,8 +495,11 @@ class SourcePageLoaderTest {
      * `InMemoryPreferenceStore` hands out a fresh `Preference` per call, so a value has to be seeded
      * rather than written.
      */
-    private fun store(splitEnabled: Boolean) = InMemoryPreferenceStore(
-        sequenceOf(InMemoryPreferenceStore.InMemoryPreference(SPLIT_KEY, splitEnabled, true)),
+    private fun store(splitEnabled: Boolean, parallel: Boolean) = InMemoryPreferenceStore(
+        sequenceOf(
+            InMemoryPreferenceStore.InMemoryPreference(SPLIT_KEY, splitEnabled, true),
+            InMemoryPreferenceStore.InMemoryPreference(PARALLEL_KEY, parallel, false),
+        ),
     )
 
     private suspend fun SourcePageLoader.pagesOfChapter(): List<ReaderPage> {
@@ -420,9 +544,18 @@ class SourcePageLoaderTest {
         /** How many calls [failWith] fails before the source answers; every call by default. */
         var failures = Int.MAX_VALUE
 
+        /** When set, every image call waits for it, so a test can count the calls in flight together. */
+        @Volatile var gate: CountDownLatch? = null
+
         private val imageCalls = mutableListOf<String>()
+        private val inFlight = AtomicInteger()
+        private val mostInFlight = AtomicInteger()
 
         fun calls(): List<String> = synchronized(imageCalls) { imageCalls.toList() }
+
+        fun inFlight(): Int = inFlight.get()
+
+        fun mostInFlight(): Int = mostInFlight.get()
 
         override suspend fun getMangaDetails(manga: MangaInfo) = manga
         override suspend fun getChapterList(manga: MangaInfo) = emptyList<ChapterInfo>()
@@ -437,8 +570,14 @@ class SourcePageLoaderTest {
                 imageCalls += page.imageUrl.orEmpty()
                 imageCalls.size
             }
-            failWith?.takeIf { call <= failures }?.let { throw it }
-            return ImageResult.ofBytes(byteArrayOf(1, 2, 3), "image/jpeg", page.imageUrl)
+            mostInFlight.accumulateAndGet(inFlight.incrementAndGet(), ::maxOf)
+            try {
+                gate?.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                failWith?.takeIf { call <= failures }?.let { throw it }
+                return ImageResult.ofBytes(byteArrayOf(1, 2, 3), "image/jpeg", page.imageUrl)
+            } finally {
+                inFlight.decrementAndGet()
+            }
         }
     }
 
@@ -450,6 +589,10 @@ class SourcePageLoaderTest {
         const val QUIET_MS = 250L
 
         const val SPLIT_KEY = "reader_split_tall_images_online"
+        const val PARALLEL_KEY = "reader_parallel_page_loading"
+
+        /** Long enough that splits running together would overlap. */
+        const val SPLIT_MS = 100L
 
         /** Short, so a retry lands well inside [QUIET_MS]. */
         const val RETRY_DELAY_MS = 20L
