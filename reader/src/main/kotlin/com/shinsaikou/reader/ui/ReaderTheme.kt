@@ -1,7 +1,10 @@
 package com.shinsaikou.reader.ui
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import com.shinsaikou.domain.preferences.AppTheme
@@ -18,6 +21,11 @@ import tachiyomi.presentation.core.util.collectAsState
  * reader `ReaderSystemBars` owns them, and two writers fight (decision D21). `SaikouPreviewTheme`,
  * which part 2 names, is for `@Preview` only. `BaseSaikouTheme` is the palette alone, and is public
  * in `:presentation-core` for exactly this.
+ *
+ * The content colour is the theme's `onBackground`, which upstream's `setComposeContent` provides
+ * around the reader's overlay. The reader's bars draw their colour as a background rather than
+ * sitting on a `Surface`, so without it the bottom bar's icons, the chapter buttons and the page
+ * numbers took Compose's default, black, even on the dark theme's grey bar.
  */
 @Composable
 fun ReaderTheme(uiPreferences: UiPreferences, content: @Composable () -> Unit) {
@@ -26,8 +34,9 @@ fun ReaderTheme(uiPreferences: UiPreferences, content: @Composable () -> Unit) {
         appTheme = values.appTheme,
         isDark = values.isDark,
         isAmoled = values.isAmoled,
-        content = content,
-    )
+    ) {
+        CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onBackground, content = content)
+    }
 }
 
 /**

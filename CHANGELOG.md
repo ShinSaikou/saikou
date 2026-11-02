@@ -85,6 +85,10 @@ release may change behaviour.
   zoom limits and the automatic zoom into wide images, instead of keeping the old orientation's zoom.
 - The crash screen's buttons keep the same distance from the right edge as its text keeps from the
   left one.
+- In the dark theme the reader's bottom bar icons, the previous and next chapter buttons and the
+  page numbers beside the slider are light, as the top bar is, instead of black on the dark bar.
+- In the light theme the system's status bar and navigation bar icons in the reader are dark on the
+  reader's light bars, instead of white. With the menu closed they follow the page's background.
 
 ## 0.1.0 - 2026-11-01
 
