@@ -64,8 +64,8 @@ android {
         // app stays on 0.x until the owner says otherwise. versionCode is a plain counter: it must be
         // above the code in tools/gate/last-release.json for install_release.py to accept the build,
         // and it goes up by one per release. The earlier major-times-10000 formula no longer applies.
-        versionCode = 3
-        versionName = "0.1.0"
+        versionCode = 4
+        versionName = "0.1.1"
         // AndroidJUnitRunner, plus a commit of the preferences the tests put back (SaikouTestRunner).
         testInstrumentationRunner = "com.shinsaikou.util.SaikouTestRunner"
         buildConfigField("String", "COMMIT_SHA", "\"${gitShortSha()}\"")

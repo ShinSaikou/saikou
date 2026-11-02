@@ -7,6 +7,8 @@ release may change behaviour.
 
 ## Unreleased
 
+## 0.1.1 - 2026-11-02
+
 ### Added
 
 - An Experimental section at the end of Settings, for behaviour that may not suit every source or
