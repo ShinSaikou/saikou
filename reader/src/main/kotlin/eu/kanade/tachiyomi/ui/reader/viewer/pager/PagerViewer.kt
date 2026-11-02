@@ -485,7 +485,8 @@ abstract class PagerViewer(val host: ViewerHost) : Viewer {
         // Still has to run on the main thread or the inserted images go blank; `host.scope` is the
         // composition's scope, which is main-dispatched.
         scope.launch {
-            adapter.onPageSplit(currentPage, newPage)
+            // A split that finished after split was turned off would put a half back.
+            if (config.dualPageSplit) adapter.onPageSplit(currentPage, newPage)
         }
     }
 

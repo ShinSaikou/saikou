@@ -2,6 +2,7 @@ package com.shinsaikou.libraryupdate
 
 import android.app.Notification
 import android.content.Context
+import android.service.notification.StatusBarNotification
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.shinsaikou.core.common.preferences.SecurityPreferences
@@ -13,6 +14,7 @@ import io.mockk.mockk
 import io.mockk.mockkConstructor
 import io.mockk.mockkStatic
 import io.mockk.unmockkAll
+import io.mockk.verify
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -79,5 +81,56 @@ class LibraryUpdateNotifierTest {
         }
     }
 
+    /** The reader opening an entry clears its notification, and the summary when it was the last. */
+    @Test
+    fun `dismissing an entry leaves the summary while another entry is still shown`() {
+        val cancelled = mutableListOf<Int>()
+        every { manager.cancel(any<Int>()) } answers { cancelled += firstArg<Int>() }
+        every { manager.activeNotifications } returns listOf(
+            shown(LibraryUpdateNotifier.ID_LIBRARY_COMPLETE),
+            shown(LibraryUpdateNotifier.newChaptersId(1L)),
+            shown(LibraryUpdateNotifier.newChaptersId(2L)),
+        )
+
+        notifier.dismissNewChapters(1L)
+
+        cancelled shouldContainExactly listOf(LibraryUpdateNotifier.newChaptersId(1L))
+    }
+
+    @Test
+    fun `dismissing the last entry takes the summary with it`() {
+        val cancelled = mutableListOf<Int>()
+        every { manager.cancel(any<Int>()) } answers { cancelled += firstArg<Int>() }
+        every { manager.activeNotifications } returns listOf(
+            shown(LibraryUpdateNotifier.ID_LIBRARY_COMPLETE),
+            shown(LibraryUpdateNotifier.newChaptersId(1L)),
+        )
+
+        notifier.dismissNewChapters(1L)
+
+        cancelled shouldContainExactly listOf(
+            LibraryUpdateNotifier.ID_LIBRARY_COMPLETE,
+            LibraryUpdateNotifier.newChaptersId(1L),
+        )
+    }
+
+    @Test
+    fun `an entry with no notification cancels nothing`() {
+        every { manager.activeNotifications } returns listOf(shown(LibraryUpdateNotifier.ID_LIBRARY_COMPLETE))
+
+        notifier.dismissNewChapters(1L)
+
+        verify(exactly = 0) { manager.cancel(any<Int>()) }
+    }
+
+    private fun shown(id: Int) = mockk<StatusBarNotification> {
+        every { this@mockk.id } returns id
+        every { groupKey } returns GROUP_KEY
+    }
+
     private fun manga(id: Long) = Manga.create().copy(id = id, title = "Fixture $id", favorite = true)
+
+    private companion object {
+        const val GROUP_KEY = "0|com.shinsaikou|g:com.shinsaikou.NEW_CHAPTERS"
+    }
 }

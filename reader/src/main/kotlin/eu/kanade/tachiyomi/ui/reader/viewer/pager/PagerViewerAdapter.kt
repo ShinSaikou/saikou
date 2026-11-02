@@ -26,6 +26,13 @@ import tachiyomi.core.common.util.system.logcat
  *
  * Also modified: [lastChapters] is remembered so `PagerViewer.onSplitInserted` can re-run
  * `setChapters` with the same window when tall-strip parts are inserted.
+ *
+ * Also: upstream v0.21.1's fix for wide pages split in a chapter next to the current one
+ * (3156b4a1c, "Insert split pages only into the chapter they belong to"). [preprocessed] held
+ * those halves by page index alone, so one could be inserted into the current chapter at that
+ * index, or a second chapter's half replaced the first's, and the pager crashed. They are kept with
+ * their chapter now, inserted only into their own, and kept only while that chapter is adjacent.
+ * Turning split off drops them with the halves shown ([cleanupPageSplit]).
  */
 class PagerViewerAdapter(private val viewer: PagerViewer) : ViewPagerAdapter() {
 
@@ -38,7 +45,7 @@ class PagerViewerAdapter(private val viewer: PagerViewer) : ViewPagerAdapter() {
     /**
      * Holds preprocessed items so they don't get removed when changing chapter
      */
-    private var preprocessed: MutableMap<Int, InsertPage> = mutableMapOf()
+    private var preprocessed: List<InsertPage> = emptyList()
 
     var nextTransition: ChapterTransition.Next? = null
         private set
@@ -81,13 +88,17 @@ class PagerViewerAdapter(private val viewer: PagerViewer) : ViewPagerAdapter() {
 
             val lastPage = pages.last()
 
-            // Insert preprocessed pages into current page list
-            preprocessed.keys.sortedDescending()
-                .forEach { key ->
-                    if (lastPage.index == key) {
-                        insertPageLastPage = preprocessed[key]
+            // Insert preprocessed pages into current page list, only this chapter's (upstream
+            // 3156b4a1c). Each goes after the last item of its page, which with tall-strip parts in
+            // the list is not the page's index, as upstream assumes.
+            preprocessed.filter { it.chapter.chapter.id == chapters.currChapter.chapter.id }
+                .sortedByDescending { it.index }
+                .forEach { page ->
+                    if (lastPage.index == page.index) {
+                        insertPageLastPage = page
                     }
-                    preprocessed[key]?.let { pages.add(key + 1, it) }
+                    val after = pages.indexOfLast { it.index == page.index }
+                    if (after >= 0) pages.add(after + 1, page)
                 }
 
             newItems.addAll(pages)
@@ -116,7 +127,9 @@ class PagerViewerAdapter(private val viewer: PagerViewer) : ViewPagerAdapter() {
             newItems.reverse()
         }
 
-        preprocessed = mutableMapOf()
+        // Halves of an adjacent chapter wait for it to become current; any other chapter's go.
+        val adjacentChapterIds = setOfNotNull(chapters.prevChapter?.chapter?.id, chapters.nextChapter?.chapter?.id)
+        preprocessed = preprocessed.filter { it.chapter.chapter.id in adjacentChapterIds }
         items = newItems
         notifyDataSetChanged()
 
@@ -164,9 +177,12 @@ class PagerViewerAdapter(private val viewer: PagerViewer) : ViewPagerAdapter() {
 
         val currentIndex = items.indexOf(currentPage)
 
-        // Put aside preprocessed pages for next chapter so they don't get removed when changing chapter
+        // Put aside pages of an adjacent chapter until it becomes the current one, so they are not lost on the change
         if (currentPage.chapter.chapter.id != currentChapter?.chapter?.id) {
-            preprocessed[newPage.index] = newPage
+            val chapterId = newPage.chapter.chapter.id
+            if (preprocessed.none { it.chapter.chapter.id == chapterId && it.index == newPage.index }) {
+                preprocessed = preprocessed + newPage
+            }
             return
         }
 
@@ -192,9 +208,11 @@ class PagerViewerAdapter(private val viewer: PagerViewer) : ViewPagerAdapter() {
         notifyDataSetChanged()
     }
 
+    /** Split turned off: the halves shown go, and so do the ones held for an adjacent chapter. */
     fun cleanupPageSplit() {
         val insertPages = items.filterIsInstance<InsertPage>()
         items.removeAll(insertPages)
+        preprocessed = emptyList()
         notifyDataSetChanged()
     }
 }

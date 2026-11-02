@@ -66,6 +66,14 @@ release may change behaviour.
   not the chapter the reader was still counting as current.
 - Picking a folder to copy downloads from while a copy is already running no longer keeps a
   permanent read permission on that folder; the permission is taken only for a copy that starts.
+- Opening an entry in the reader clears its new chapters notification, and the summary with it
+  when it was the last.
+- Turning incognito off closes a reader opened in incognito, which would otherwise go on without
+  saving progress or history.
+- With "Split wide pages" on, a wide page split in the chapter before or after the one being read
+  is kept for its own chapter, instead of being placed in the current one or lost, which could
+  crash the paged reader.
+- A back gesture still in progress as the reader or a dialog closed no longer crashes the app.
 - Progress and history in a chapter left open in the reader while a refresh finds it under a new
   address go to that chapter as the source now lists it, instead of being lost or written to
   another chapter. A page read just before the refresh is kept too.

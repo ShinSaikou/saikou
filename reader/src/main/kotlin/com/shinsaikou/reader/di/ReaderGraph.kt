@@ -1,8 +1,10 @@
 package com.shinsaikou.reader.di
 
 import com.shinsaikou.core.common.network.CloudflareSolveCoordinator
+import com.shinsaikou.core.common.preferences.BasePreferences
 import com.shinsaikou.domain.preferences.ReaderPreferences
 import com.shinsaikou.domain.preferences.UiPreferences
+import com.shinsaikou.reader.NewChaptersNotification
 import com.shinsaikou.reader.ReaderViewModel
 import com.shinsaikou.reader.state.ChapterWebActions
 import com.shinsaikou.reader.state.EntryScreenIntent
@@ -34,6 +36,8 @@ interface ReaderGraph {
     val pageImageActions: PageImageActions
     val uiPreferences: UiPreferences
     val readerPreferences: ReaderPreferences
+    val basePreferences: BasePreferences
+    val newChaptersNotification: NewChaptersNotification
 
     /**
      * The app scope's one coordinator, reached from this extension the way every app singleton is.

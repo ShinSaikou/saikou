@@ -220,6 +220,7 @@ dependencies {
     implementation(libs.bundles.coil)
     implementation(libs.bundles.sqldelight)
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.navigationEvent)
     implementation(libs.androidx.appCompat)
     // The app lock's prompt (phase 4 unit AL), at the version upstream v0.20.4 pins, in :app only.
     implementation(libs.androidx.biometric)

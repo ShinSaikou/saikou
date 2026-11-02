@@ -12,6 +12,7 @@ import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.net.toUri
 import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.shinsaikou.reader.bench.ReaderBenchHooks
@@ -21,6 +22,10 @@ import com.shinsaikou.reader.state.ReaderEvent
 import com.shinsaikou.reader.ui.ReaderScreen
 import com.shinsaikou.reader.ui.ReaderTheme
 import com.shinsaikou.reader.viewer.ViewerHolder
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 
 /**
  * Window plumbing and event forwarding, and no reader logic of its own. Contract 07 part 2 section
@@ -77,6 +82,17 @@ class ReaderActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         orientation = resources.configuration.orientation
         ReaderBenchHooks.beginOpen(intent.getStringExtra(ReaderIntents.EXTRA_BENCH_TAG))
+        // Upstream's two lines here: the entry's new-chapters notification is cleared, and the
+        // reader closes when incognito is turned off, since this session, opened in it, would go
+        // on writing no progress or history.
+        if (intent.hasExtra(ReaderIntents.EXTRA_MANGA_ID)) {
+            readerGraph.newChaptersNotification.dismiss(intent.getLongExtra(ReaderIntents.EXTRA_MANGA_ID, 0L))
+        }
+        readerGraph.basePreferences.incognitoMode.changes()
+            .drop(1)
+            .filter { !it }
+            .onEach { finish() }
+            .launchIn(lifecycleScope)
         setContent {
             ReaderTheme(readerGraph.uiPreferences) {
                 ReaderScreen(

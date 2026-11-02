@@ -117,6 +117,18 @@ class LibraryUpdateNotifier(
         }
     }
 
+    /**
+     * Cancels [mangaId]'s new-chapters notification, and the summary with it when the two were all
+     * the group had left, as upstream's `dismissNotification` does when the reader opens the entry.
+     */
+    fun dismissNewChapters(mangaId: Long) {
+        val id = newChaptersId(mangaId)
+        val active = manager.activeNotifications
+        val shown = active.firstOrNull { it.id == id } ?: return
+        if (active.count { it.groupKey == shown.groupKey } <= 2) manager.cancel(ID_LIBRARY_COMPLETE)
+        manager.cancel(id)
+    }
+
     fun showErrors(count: Int) {
         if (count == 0) return
         notify(
