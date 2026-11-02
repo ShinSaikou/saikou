@@ -66,6 +66,8 @@ android {
         // and it goes up by one per release. The earlier major-times-10000 formula no longer applies.
         versionCode = 3
         versionName = "0.1.0"
+        // AndroidJUnitRunner, plus a commit of the preferences the tests put back (SaikouTestRunner).
+        testInstrumentationRunner = "com.shinsaikou.util.SaikouTestRunner"
         buildConfigField("String", "COMMIT_SHA", "\"${gitShortSha()}\"")
         buildConfigField("String", "UPDATE_REPO", updateRepo.asJavaString())
         // Whether coming to the foreground checks for an app update by itself: the release build
