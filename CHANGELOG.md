@@ -50,6 +50,9 @@ release may change behaviour.
 - A failed download in the download queue shows the first line of the source's error, cut to 200
   characters, as the library update error list does, instead of the whole text (sometimes an
   entire error page).
+- Downloaded only applies in the reader too: the next and previous chapters are the downloaded
+  ones, so the reader no longer goes online to a chapter that is not downloaded.
+- The chapter transition marks the chapters that are downloaded.
 - A server that refuses the connection is named as such ("The server refused the connection")
   instead of reading as "No network connection", in snackbars, the library update error list,
   the download queue and the reader.

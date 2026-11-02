@@ -67,6 +67,12 @@ interface ViewerHost {
      */
     val manga: Manga?
 
+    /**
+     * The entry's downloaded chapters, which the chapter transition marks as upstream's does with
+     * its `DownloadManager`. Snapshot state in the reader, so the transition redraws when it changes.
+     */
+    val downloadedChapterIds: Set<Long> get() = emptySet()
+
     /** Current preload window (section 3.5); re-read on every use, it changes on trim. */
     fun preloadWindow(): PreloadPolicy.Window
 

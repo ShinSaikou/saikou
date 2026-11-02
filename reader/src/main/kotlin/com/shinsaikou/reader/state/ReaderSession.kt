@@ -42,8 +42,8 @@ class ReaderSession(val manga: Manga, val chapters: List<ReaderChapter>) {
     companion object {
 
         /**
-         * Upstream's `chapterList` rule, in six steps: drop tombstones, skip read, skip filtered, sort
-         * ascending, skip duplicates, wrap.
+         * Upstream's `chapterList` rule, in seven steps: drop tombstones, skip read, skip filtered,
+         * sort ascending, keep only the downloaded ones under downloaded only, skip duplicates, wrap.
          *
          * The one place this differs from upstream is the rule that makes the whole thing usable: the
          * chapter the user tapped is always in the result. Upstream adds it back after the read and
@@ -51,8 +51,9 @@ class ReaderSession(val manga: Manga, val chapters: List<ReaderChapter>) {
          * displace it; here the tapped chapter wins every group it is in.
          *
          * [downloaded] is the chapters whose files are on disk, as `DownloadedChapters` answers
-         * it, and the downloaded filter reads it as upstream's reader does. It is only consulted under
-         * `skipFiltered`, so the caller may pass an empty set when that is off or the filter is.
+         * it, and the downloaded filter and downloaded only read it as upstream's reader does. It is
+         * only consulted under `skipFiltered` or `downloadedOnly`, so the caller may pass an empty set
+         * when neither asks for it.
          * A Local-source chapter always counts as downloaded, which is how the chapter list and the
          * library already count it; upstream's reader skips it instead, so a Local entry under the
          * downloaded filter opened on the tapped chapter alone.
@@ -88,6 +89,14 @@ class ReaderSession(val manga: Manga, val chapters: List<ReaderChapter>) {
             }
 
             var sorted = kept.sortedWith(getChapterSort(manga, sortDescending = false))
+            // Upstream's filterDownloaded, which leaves a Local entry alone; the tapped chapter stays
+            // here too, as it does through every other pass. Before the duplicate pass, where
+            // upstream runs it after: a number whose preferred copy is not downloaded keeps its
+            // downloaded one, where upstream drops the downloaded copy, then the preferred one, and
+            // loses the number.
+            if (prefs.downloadedOnly && manga.source != SourceIds.LOCAL) {
+                sorted = sorted.filter { it.id in downloaded || it.id == initialChapterId }
+            }
             if (prefs.skipDupe) {
                 sorted = sorted.removeDuplicates(initial, ranking)
             }
@@ -106,9 +115,13 @@ class ReaderSession(val manga: Manga, val chapters: List<ReaderChapter>) {
     }
 }
 
-/** The three `ReaderPreferences` keys [ReaderSession.build] reads, passed in so it stays pure. */
+/**
+ * The three `ReaderPreferences` keys [ReaderSession.build] reads, and the app's downloaded only mode,
+ * passed in so it stays pure.
+ */
 data class SessionFilters(
     val skipRead: Boolean,
     val skipFiltered: Boolean,
     val skipDupe: Boolean,
+    val downloadedOnly: Boolean = false,
 )

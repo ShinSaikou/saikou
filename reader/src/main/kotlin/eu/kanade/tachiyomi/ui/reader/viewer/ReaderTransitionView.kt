@@ -13,6 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.AbstractComposeView
 import com.shinsaikou.reader.viewer.ViewerHost
+import com.shinsaikou.source.SourceIds
 import eu.kanade.presentation.theme.BaseSaikouTheme
 import eu.kanade.tachiyomi.ui.reader.model.ChapterTransition
 import tachiyomi.domain.manga.model.Manga
@@ -28,11 +29,13 @@ import eu.kanade.presentation.reader.ChapterTransition as ChapterTransitionConte
  *    own composition root and cannot inherit a `CompositionLocal` from `ReaderScreen`.
  *    `host.isDark` carries the night mode of upstream's `createReaderThemeContext()`, which this
  *    View's context had there: dark on a black or gray reader background, light on white.
- *  - `bind` loses its `DownloadManager` parameter. `:downloads` is a Phase 1 skeleton, nothing is
- *    downloaded, and the branch is deleted rather than stubbed (decision D24). Both
- *    "downloaded" flags are therefore hard false, which is what part 2 section 5.5 requires. The
- *    retry part 2 section 5.5 mentions is not here and is not a parameter: both transition holders
- *    already draw their own retry button off `ReaderChapter.stateFlow`, exactly as in upstream.
+ *  - `bind` loses its `DownloadManager` parameter: the two "downloaded" flags are read at compose
+ *    time instead, the chapter left from its page loader (a downloaded or Local chapter's loader
+ *    is local), the chapter ahead from [ViewerHost.downloadedChapterIds] or a Local entry, as
+ *    upstream decides them. Decision D24 had both hard false while `:downloads` was a Phase 1
+ *    skeleton. The retry part 2 section 5.5 mentions is not here and is not a parameter: both
+ *    transition holders already draw their own retry button off `ReaderChapter.stateFlow`, exactly
+ *    as in upstream.
  */
 class ReaderTransitionView @JvmOverloads constructor(
     context: Context,
@@ -47,7 +50,7 @@ class ReaderTransitionView @JvmOverloads constructor(
     }
 
     fun bind(transition: ChapterTransition, manga: Manga?) {
-        data = manga?.let { Data(transition = transition) }
+        data = manga?.let { Data(transition = transition, isLocal = it.source == SourceIds.LOCAL) }
     }
 
     @Composable
@@ -58,15 +61,16 @@ class ReaderTransitionView @JvmOverloads constructor(
                     LocalTextStyle provides MaterialTheme.typography.bodySmall,
                     LocalContentColor provides MaterialTheme.colorScheme.onBackground,
                 ) {
+                    val goingTo = it.transition.to?.chapter?.id
                     ChapterTransitionContent(
                         transition = it.transition,
-                        currChapterDownloaded = false,
-                        goingToChapterDownloaded = false,
+                        currChapterDownloaded = it.transition.from.pageLoader?.isLocal == true,
+                        goingToChapterDownloaded = it.isLocal || goingTo in host.downloadedChapterIds,
                     )
                 }
             }
         }
     }
 
-    private data class Data(val transition: ChapterTransition)
+    private data class Data(val transition: ChapterTransition, val isLocal: Boolean)
 }

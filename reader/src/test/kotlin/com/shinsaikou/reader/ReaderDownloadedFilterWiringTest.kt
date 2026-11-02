@@ -2,6 +2,7 @@ package com.shinsaikou.reader
 
 import android.content.Context
 import androidx.lifecycle.SavedStateHandle
+import com.shinsaikou.core.common.preferences.BasePreferences
 import com.shinsaikou.domain.chapter.interactor.GetBookmarkNotes
 import com.shinsaikou.domain.chapter.interactor.GetScanlatorPriority
 import com.shinsaikou.domain.chapter.interactor.RemoveBookmarkNote
@@ -64,6 +65,7 @@ class ReaderDownloadedFilterWiringTest {
     private val pageLoaderResolver = mockk<PageLoaderResolver>()
     private val getScanlatorPriority = mockk<GetScanlatorPriority>()
     private val readerPreferences = ReaderPreferences(InMemoryPreferenceStore())
+    private val basePreferences = BasePreferences(InMemoryPreferenceStore())
 
     private val chapters = (1L..3L).map { id ->
         Chapter.create().copy(
@@ -116,6 +118,25 @@ class ReaderDownloadedFilterWiringTest {
     }
 
     /**
+     * The app's downloaded only mode, which upstream's reader applies too: with no filter on the
+     * entry, the session holds the downloaded chapters (1 and 3) and the tapped one.
+     */
+    @Test
+    fun `under downloaded only the session holds the downloaded chapters and the tapped one`() =
+        runTest(testDispatcher) {
+            stubManga(Manga.CHAPTER_SORTING_NUMBER)
+            basePreferences.downloadedOnly.set(true)
+
+            val viewModel = viewModel(openedChapter = 1L)
+            advanceUntilIdle()
+
+            val session = checkNotNull(viewModel.state.value.session) {
+                "no session: ${viewModel.state.value.phase}"
+            }
+            session.chapters.map { it.chapter.id } shouldContainExactly listOf(1L, 3L)
+        }
+
+    /**
      * Chapters 1 to 3 are Group A's, and 4 and 5 are Group B's copies of numbers 2 and 3. Opened on
      * Group A's chapter 1, upstream's rule keeps Group A's copies; with Group B ranked, its copies.
      */
@@ -162,6 +183,7 @@ class ReaderDownloadedFilterWiringTest {
         removeBookmarkNote = mockk<RemoveBookmarkNote>(),
         pageLoaderResolver = pageLoaderResolver,
         downloadedChapters = downloadedChapters,
+        basePreferences = basePreferences,
         progressCommitterFactory = mockk<ProgressCommitter.Factory> {
             every { create(any()) } returns mockk(relaxed = true)
         },

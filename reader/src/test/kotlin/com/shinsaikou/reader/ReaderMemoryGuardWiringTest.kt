@@ -5,6 +5,7 @@ import android.content.ComponentCallbacks2
 import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModelStore
+import com.shinsaikou.core.common.preferences.BasePreferences
 import com.shinsaikou.domain.chapter.interactor.GetScanlatorPriority
 import com.shinsaikou.domain.preferences.ReaderPreferences
 import com.shinsaikou.reader.memory.MemoryInfoProvider
@@ -183,6 +184,7 @@ class ReaderMemoryGuardWiringTest {
         removeBookmarkNote = mockk<RemoveBookmarkNote>(),
         pageLoaderResolver = mockk<PageLoaderResolver>(),
         downloadedChapters = mockk<DownloadedChapters>(),
+        basePreferences = BasePreferences(InMemoryPreferenceStore()),
         progressCommitterFactory = progressCommitterFactory(),
         incognitoPolicy = mockk<IncognitoPolicy>(),
         readerPreferences = ReaderPreferences(InMemoryPreferenceStore()),

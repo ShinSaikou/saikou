@@ -2,7 +2,9 @@ package com.shinsaikou.reader.viewer
 
 import android.content.Context
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import coil3.decode.Decoder
 import com.shinsaikou.domain.preferences.AppTheme
 import com.shinsaikou.domain.preferences.ReaderPreferences
@@ -45,6 +47,7 @@ class ReaderViewerHost(
     override var appTheme: AppTheme = AppTheme.DEFAULT
     override var isDark: Boolean = true
     override var isAmoled: Boolean = false
+    override var downloadedChapterIds: Set<Long> by mutableStateOf(emptySet())
 
     override val menuVisible: Boolean get() = state().menuVisible
     override val isScrollingThroughPages: Boolean get() = state().scrubbing || state().movingBySlider

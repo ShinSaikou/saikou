@@ -108,10 +108,12 @@ fun ReaderScreen(
     // automatic the app's mode); the app theme and pure black stay the app's.
     val themeValues = rememberReaderThemeValues(uiPreferences)
     val readerTheme by prefs.readerTheme.collectAsState()
+    val downloadedChapterIds by viewModel.downloadedChapterIds.collectAsStateWithLifecycle()
     SideEffect {
         host.appTheme = themeValues.appTheme
         host.isDark = ReaderBackground.fromPreference(readerTheme).isDark(themeValues.isDark)
         host.isAmoled = themeValues.isAmoled
+        host.downloadedChapterIds = downloadedChapterIds
     }
 
     val displayRefreshHost = remember { DisplayRefreshHost(prefs) }

@@ -2,6 +2,7 @@ package com.shinsaikou.reader
 
 import android.content.Context
 import androidx.lifecycle.SavedStateHandle
+import com.shinsaikou.core.common.preferences.BasePreferences
 import com.shinsaikou.domain.chapter.interactor.GetBookmarkNotes
 import com.shinsaikou.domain.chapter.interactor.GetScanlatorPriority
 import com.shinsaikou.domain.chapter.interactor.RemoveBookmarkNote
@@ -159,6 +160,7 @@ class ReaderViewModelRestoreTest {
             removeBookmarkNote = mockk<RemoveBookmarkNote>(),
             pageLoaderResolver = resolver,
             downloadedChapters = mockk<DownloadedChapters>(),
+            basePreferences = BasePreferences(InMemoryPreferenceStore()),
             progressCommitterFactory = mockk<ProgressCommitter.Factory> {
                 every { create(any()) } returns mockk(relaxed = true)
             },

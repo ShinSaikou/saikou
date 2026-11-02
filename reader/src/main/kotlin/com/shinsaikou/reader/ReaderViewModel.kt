@@ -5,6 +5,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shinsaikou.core.common.coroutines.Dispatchers
+import com.shinsaikou.core.common.preferences.BasePreferences
 import com.shinsaikou.domain.chapter.interactor.GetBookmarkNotes
 import com.shinsaikou.domain.chapter.interactor.GetScanlatorPriority
 import com.shinsaikou.domain.chapter.interactor.RemoveBookmarkNote
@@ -35,6 +36,7 @@ import com.shinsaikou.reader.state.ReaderSession
 import com.shinsaikou.reader.state.ReaderState
 import com.shinsaikou.reader.state.ReaderStateMachine
 import com.shinsaikou.reader.state.SessionFilters
+import com.shinsaikou.source.SourceIds
 import com.shinsaikou.source.SourceManager
 import dev.zacsweers.metro.Assisted
 import dev.zacsweers.metro.AssistedFactory
@@ -42,11 +44,13 @@ import dev.zacsweers.metro.AssistedInject
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -55,8 +59,11 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.flow.withIndex
 import kotlinx.coroutines.isActive
@@ -100,6 +107,7 @@ class ReaderViewModel @AssistedInject constructor(
     private val removeBookmarkNote: RemoveBookmarkNote,
     private val pageLoaderResolver: PageLoaderResolver,
     private val downloadedChapters: DownloadedChapters,
+    private val basePreferences: BasePreferences,
     progressCommitterFactory: ProgressCommitter.Factory,
     private val incognitoPolicy: IncognitoPolicy,
     val readerPreferences: ReaderPreferences,
@@ -129,6 +137,17 @@ class ReaderViewModel @AssistedInject constructor(
 
     /** Only the effects part 2 section 5.2 lists; everything else is performed here. */
     val effects: Flow<ReaderEffect> = _effects.receiveAsFlow()
+
+    /**
+     * The entry's downloaded chapters, which the chapter transition marks. Empty until the session
+     * names the entry, and followed only while the screen collects it.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val downloadedChapterIds: StateFlow<Set<Long>> = _state
+        .map { it.manga?.id }
+        .distinctUntilChanged()
+        .flatMapLatest { mangaId -> mangaId?.let(downloadedChapters::subscribeByMangaId) ?: flowOf(emptySet()) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), emptySet())
 
     private val events = Channel<ReaderEvent>(Channel.UNLIMITED)
 
@@ -257,9 +276,11 @@ class ReaderViewModel @AssistedInject constructor(
                         skipRead = readerPreferences.skipRead.get(),
                         skipFiltered = readerPreferences.skipFiltered.get(),
                         skipDupe = readerPreferences.skipDupe.get(),
+                        downloadedOnly = basePreferences.downloadedOnly.get(),
                     )
-                    // A file lookup per manifest row, so it is only made when the filter reads it.
-                    val downloaded = if (filters.skipFiltered && manga.downloadedFilterRaw != Manga.SHOW_ALL) {
+                    // A file lookup per manifest row, so it is only made when a filter reads it.
+                    val downloadedFilter = filters.skipFiltered && manga.downloadedFilterRaw != Manga.SHOW_ALL
+                    val downloaded = if (downloadedFilter || filters.downloadedOnly) {
                         downloadedChapters.subscribeByMangaId(mangaId).first()
                     } else {
                         emptySet()
@@ -760,3 +781,6 @@ class ReaderViewModel @AssistedInject constructor(
 
     // endregion
 }
+
+/** How long [ReaderViewModel.downloadedChapterIds] keeps following the manifest once nothing collects it. */
+private const val STOP_TIMEOUT_MILLIS = 5_000L

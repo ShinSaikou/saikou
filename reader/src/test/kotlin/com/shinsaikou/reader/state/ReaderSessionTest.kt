@@ -106,6 +106,41 @@ class ReaderSessionTest {
         ids(session) shouldBe listOf(1L, 2L, 3L, 4L)
     }
 
+    /** The app's downloaded only mode, which upstream's reader applies whatever the entry's filters. */
+    @Test
+    fun `downloaded only keeps downloaded chapters, and the tapped chapter`() {
+        val session = build(initial = 2, prefs = none.copy(downloadedOnly = true), downloaded = setOf(3L, 4L))
+        ids(session) shouldBe listOf(2L, 3L, 4L)
+    }
+
+    /**
+     * Group a's copy of number 2 is the one the duplicate pass prefers, and only group b's is
+     * downloaded. Upstream's order, duplicates first, drops b's copy and then a's, and the number is
+     * gone; filtering first keeps b's.
+     */
+    @Test
+    fun `downloaded only runs before the duplicate pass, so a number keeps its downloaded copy`() {
+        val duplicated = listOf(
+            chapter(id = 1, number = 1.0, scanlator = "a", sourceOrder = 1),
+            chapter(id = 2, number = 2.0, scanlator = "a", sourceOrder = 2),
+            chapter(id = 3, number = 2.0, scanlator = "b", sourceOrder = 3),
+        )
+        val session = build(
+            all = duplicated,
+            initial = 1,
+            prefs = none.copy(skipDupe = true, downloadedOnly = true),
+            downloaded = setOf(1L, 3L),
+        )
+        ids(session) shouldBe listOf(1L, 3L)
+    }
+
+    @Test
+    fun `downloaded only leaves a local entry whole`() {
+        val local = manga().copy(source = SourceIds.LOCAL)
+        val session = build(manga = local, initial = 2, prefs = none.copy(downloadedOnly = true))
+        ids(session) shouldBe listOf(1L, 2L, 3L, 4L)
+    }
+
     // ---- Step 4, the sort ----
 
     @Test
