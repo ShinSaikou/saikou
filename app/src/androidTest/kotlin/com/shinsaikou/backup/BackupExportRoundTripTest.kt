@@ -259,6 +259,7 @@ class BackupExportRoundTripTest {
             appSettings = false,
             extensionStores = false,
             sourceSettings = false,
+            installExtensions = false,
         )
     }
 }

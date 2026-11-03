@@ -4,6 +4,7 @@ import com.shinsaikou.backup.fixture.BackupTestEnvironment
 import com.shinsaikou.backup.fixture.SyntheticBackupFixture
 import com.shinsaikou.backup.importer.BackupImporter.Companion.MANGA_BATCH_SIZE
 import com.shinsaikou.backup.importer.ImportError
+import com.shinsaikou.backup.importer.ImportPhase
 import com.shinsaikou.backup.importer.ImportProgress
 import com.shinsaikou.backup.importer.ImportReport
 import eu.kanade.tachiyomi.data.backup.BackupDecodeException
@@ -54,7 +55,7 @@ class BackupImporterStreamingTest {
             val file = env.writeImportFile(SyntheticBackupFixture.tachibk(fixture))
             val seen = mutableListOf<ImportProgress>()
 
-            env.importer.import(file, RestoreOptions()) { seen += it }
+            env.importer.import(file, RestoreOptions()) { if (it.phase == ImportPhase.MANGA) seen += it }
 
             seen.map { it.done } shouldContainExactly listOf(MANGA_BATCH_SIZE, MANGA_BATCH_SIZE * 2, fixture.backupManga.size)
             seen.map { it.total }.distinct() shouldContainExactly listOf(fixture.backupManga.size)
@@ -91,7 +92,9 @@ class BackupImporterStreamingTest {
                     .readByteArray()
                 val seen = mutableListOf<Int>()
 
-                val report = env.importer.import(env.writeImportFile(bytes), RestoreOptions()) { seen += it.done }
+                val report = env.importer.import(env.writeImportFile(bytes), RestoreOptions()) {
+                    if (it.phase == ImportPhase.MANGA) seen += it.done
+                }
 
                 env.count("mangas") shouldBe 299L
                 report.mangaTotal shouldBe 300

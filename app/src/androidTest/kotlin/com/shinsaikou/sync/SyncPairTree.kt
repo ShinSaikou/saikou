@@ -58,7 +58,12 @@ object SyncPairTree {
         val file = File(context.cacheDir, RESTORE_FILE)
         file.writeBytes(ProtoBuf.encodeToByteArray(Backup.serializer(), backup))
         try {
-            val options = RestoreOptions(appSettings = false, extensionStores = false, sourceSettings = false)
+            val options = RestoreOptions(
+                appSettings = false,
+                extensionStores = false,
+                sourceSettings = false,
+                installExtensions = false,
+            )
             val report = graph.backupImporter.import(file, options) {}
             assertTrue("the restore reported errors: ${report.errors}", report.errors.isEmpty())
             return linkedMapOf("created" to report.categoriesCreated)

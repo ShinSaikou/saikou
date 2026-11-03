@@ -357,10 +357,7 @@ class ExtensionManager(
             preferences.extensionUpdatesCount.set(pendingUpdateCount())
             return emptyList()
         }
-        val merged = lastListed.values.flatten()
-            .groupBy { it.packageName }
-            .values
-            .map { candidates -> candidates.maxBy { it.versionCode } }
+        val merged = lastListed.values.flatten().onePerPackage()
         _availableExtensions.value = merged
         _installedExtensions.value = _installedExtensions.value.map { it.withUpdateState(merged) }
         preferences.extensionUpdatesCount.set(pendingUpdateCount())
@@ -370,6 +367,33 @@ class ExtensionManager(
     /** Downloads, verifies, installs privately and loads. Progress reaches [installSteps]. */
     fun install(extension: Extension.Available): Job = scope.launch {
         runInstall(extension.packageName, extension.apkUrl)
+    }
+
+    /**
+     * [install] in the caller's coroutine, for a run that installs several in turn: returns once
+     * the install ended, true when it installed, and a cancel of the caller cancels it. Progress
+     * and a failure's reason reach [installSteps] and [installFailures] as for [install].
+     */
+    suspend fun installAndWait(extension: Extension.Available): Boolean {
+        runInstall(extension.packageName, extension.apkUrl)
+        return _installSteps.value[extension.packageName] == InstallStep.Installed
+    }
+
+    /**
+     * What the indexes at [indexUrls], configured rows' addresses, listed at their last successful
+     * fetch this process, merged as [availableExtensions] is. The restore installs unattended only
+     * from the repositories the owner had before it, and the merged list can carry another
+     * repository's entry for the same package.
+     */
+    suspend fun availableFrom(indexUrls: Set<String>): List<Extension.Available> = mutex.withLock {
+        lastListed.filterKeys { it in indexUrls }.values.flatten().onePerPackage()
+    }
+
+    /** Every package on disk: loaded, untrusted, or refused by the loader. */
+    fun packagesOnDisk(): Set<String> = buildSet {
+        _installedExtensions.value.mapTo(this) { it.packageName }
+        _untrustedExtensions.value.mapTo(this) { it.packageName }
+        _loadErrors.value.mapNotNullTo(this) { it.packageName }
     }
 
     /** Same as [install], for a package that is already installed and has an update. */
@@ -515,6 +539,10 @@ class ExtensionManager(
     /** Caller holds [mutex]. Loaded or not, every package on disk with an update. */
     private fun pendingUpdateCount(): Int = _installedExtensions.value.count { it.hasUpdate } +
         notLoadedUpdatePackages(_untrustedExtensions.value, _loadErrors.value, _availableExtensions.value).size
+
+    /** One entry per package: the highest version code wins when two indexes carry the same one. */
+    private fun List<Extension.Available>.onePerPackage(): List<Extension.Available> =
+        groupBy { it.packageName }.values.map { candidates -> candidates.maxBy { it.versionCode } }
 
     private fun Extension.Installed.withUpdateState(available: List<Extension.Available>): Extension.Installed {
         if (available.isEmpty()) return this

@@ -9,6 +9,7 @@ import com.shinsaikou.backup.importer.ImportCheckpointStore
 import com.shinsaikou.backup.importer.ImportReport
 import com.shinsaikou.backup.importer.PreferenceRestorer
 import com.shinsaikou.data.extension.ExtensionStoreRepositoryImpl
+import com.shinsaikou.domain.extension.SourceExtensionInstaller
 import com.shinsaikou.domain.manga.interactor.UpdateManga
 import com.shinsaikou.domain.preferences.LibraryPreferences
 import com.shinsaikou.libraryupdate.LibraryUpdateScheduler
@@ -152,9 +153,15 @@ internal fun SyncTestDevice.restore(bytes: ByteArray, filesDir: File): ImportRep
         libraryUpdateScheduler = mockk<LibraryUpdateScheduler>(relaxed = true),
         backupScheduler = mockk<BackupScheduler>(relaxed = true),
         syncRestorePreferences = restorePreferences,
+        sourceExtensionInstaller = mockk<SourceExtensionInstaller>(),
         json = Json { ignoreUnknownKeys = true },
     )
-    val options = RestoreOptions(appSettings = false, extensionStores = false, sourceSettings = false)
+    val options = RestoreOptions(
+        appSettings = false,
+        extensionStores = false,
+        sourceSettings = false,
+        installExtensions = false,
+    )
     val file = File(filesDir, "restore-${System.nanoTime()}.tachibk").apply { writeBytes(bytes) }
     return runBlocking { importer.import(file, options) {} }
 }
@@ -176,4 +183,5 @@ private class FileCheckpoints(private val directory: File) : ImportCheckpointSto
     override val importFile: File get() = File(directory, "current.tachibk")
     override val errorLog: File get() = File(directory, "errors.jsonl")
     override val reportFile: File get() = File(directory, "last-report.json")
+    override val storesBeforeFile: File get() = File(directory, "stores-before.json")
 }

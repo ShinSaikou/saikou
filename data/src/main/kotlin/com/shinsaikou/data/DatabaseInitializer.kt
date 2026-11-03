@@ -1,6 +1,7 @@
 package com.shinsaikou.data
 
 import app.cash.sqldelight.db.SqlDriver
+import com.shinsaikou.data.extension.mergeDuplicateExtensionStores
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
@@ -14,7 +15,9 @@ import dev.zacsweers.metro.SingleIn
  * safety net for a reset whose delete never committed; `HistoryRepositoryImpl` removes the rows
  * in the resetting transaction (decision E14). The categories' sync keys are backfilled in the same
  * transaction, after the driver's migration to schema version 2 (phase 3 unit C); see
- * [backfillCategorySyncKeys] for the category writes that may run it first.
+ * [backfillCategorySyncKeys] for the category writes that may run it first. Extension stores that
+ * name one repository under two addresses, which a restore before the merge left, are folded into
+ * one ([mergeDuplicateExtensionStores]).
  *
  * `PRAGMA optimize` is the only pragma set here: journal mode and foreign keys are decided when
  * the driver is built, in [DatabaseBindings].
@@ -34,6 +37,7 @@ class DatabaseInitializer(
             categoriesQueries.resetIsSyncing()
             historyQueries.removeResettedHistory()
             backfillCategorySyncKeys()
+            mergeDuplicateExtensionStores()
         }
         driver.execute(identifier = null, sql = "PRAGMA optimize", parameters = 0).await()
     }

@@ -26,6 +26,14 @@
         <item quantity="one">%d source needs an extension</item>
         <item quantity="other">%d sources need an extension</item>
     </plurals>
+    <plurals name="restore_extensions_installed_count">
+        <item quantity="one">%d extension installed</item>
+        <item quantity="other">%d extensions installed</item>
+    </plurals>
+    <plurals name="restore_extensions_waiting_count">
+        <item quantity="one">%d extension waits for Install all</item>
+        <item quantity="other">%d extensions wait for Install all</item>
+    </plurals>
     <string name="import_report_title">Restore report</string>
     <string name="import_export_error_log">Export error log</string>
 
@@ -59,6 +67,25 @@
     <string name="import_error_kind_preference_type_mismatch">App settings of a different type</string>
     <string name="import_error_kind_unknown_tracker">Unknown trackers</string>
     <string name="import_error_kind_batch_fallback">Entries restored one at a time</string>
+
+    <!-- Install extensions: the restore option, and what the report says it did -->
+    <string name="backup_option_install_extensions">Install extensions</string>
+    <string name="backup_option_install_extensions_detail">After the restore, installs the extensions the backup\'s sources come from, using only the extension stores you already had. Extensions from a store the backup adds wait in the restore report until you tap Install all.</string>
+    <string name="import_report_extensions">Extensions</string>
+    <string name="import_report_extensions_installed">Installed</string>
+    <string name="import_report_extensions_not_found">Not in any extension store</string>
+    <string name="import_report_extensions_not_found_detail">Search for these by name, or add the store that has them</string>
+    <string name="import_report_extensions_failed">Could not be installed</string>
+    <string name="import_report_extensions_from_added_stores">From stores this backup added</string>
+    <string name="import_report_extensions_from_added_stores_detail">Not installed, because these stores came with the backup. Install all installs them; do that only if you trust the stores below.</string>
+    <plurals name="backup_restore_extensions_waiting">
+        <item quantity="one">%d extension from a store this backup added</item>
+        <item quantity="other">%d extensions from stores this backup added</item>
+    </plurals>
+    <string name="backup_restore_extensions_waiting_detail_format">Not installed yet. Tap Install all only if you trust %1$s.</string>
+    <string name="import_report_extensions_unread_stores_format">Could not read %1$s, so a source above may be in it</string>
+    <string name="import_report_install_all">Install all</string>
+    <string name="import_report_installing_format">Installing %1$d of %2$d</string>
 
     <!-- Creating -->
     <string name="creating_backup">Creating backup</string>

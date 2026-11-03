@@ -102,6 +102,49 @@ class UpdateExtensionStoresTest {
     }
 
     @Test
+    fun `a row with no name takes the name of the index its descriptor redirects to and keeps its address`() = runTest {
+        // What upstream's legacy repository set restores to: an address, a legacy flag, nothing else.
+        val legacyUrl = "https://example.invalid/repo/repo.json"
+        val row = store(legacyUrl, name = "", signingKey = "").copy(
+            badgeLabel = "",
+            contact = ExtensionStore.Contact("https://example.invalid/repo", null),
+            isLegacy = true,
+        )
+        val index = store("https://example.invalid/elsewhere/index.pb", name = "Fixture Index")
+
+        val repoClient = mockk<ExtensionRepoClient>()
+        coEvery { repoClient.fetch(legacyUrl) } returns Result.success(fetched(index))
+        val stores = mockk<ExtensionStoreRepository>()
+        coEvery { stores.getAll() } returns listOf(row)
+        coEvery { stores.updateIfSigningKey(any(), any()) } returns true
+
+        UpdateExtensionStores(repoClient, stores).await() shouldBe 1
+
+        coVerify(exactly = 1) {
+            stores.updateIfSigningKey(
+                row.copy(name = index.name, badgeLabel = index.badgeLabel, signingKey = index.signingKey, contact = index.contact),
+                expectedSigningKey = "",
+            )
+        }
+    }
+
+    @Test
+    fun `a row with no name but a pinned key ignores a redirect that names another key`() = runTest {
+        val legacyUrl = "https://example.invalid/repo/repo.json"
+        val row = store(legacyUrl, name = "")
+        val index = store("https://example.invalid/elsewhere/index.pb", signingKey = "b".repeat(64))
+
+        val repoClient = mockk<ExtensionRepoClient>()
+        coEvery { repoClient.fetch(legacyUrl) } returns Result.success(fetched(index))
+        val stores = mockk<ExtensionStoreRepository>()
+        coEvery { stores.getAll() } returns listOf(row)
+
+        UpdateExtensionStores(repoClient, stores).await() shouldBe 0
+
+        coVerify(exactly = 0) { stores.updateIfSigningKey(any(), any()) }
+    }
+
+    @Test
     fun `one host that throws does not cancel the refresh of the others`() = runTest {
         val failingUrl = "https://example.invalid/index-failing.pb"
         val okUrl = "https://example.invalid/index-ok.pb"

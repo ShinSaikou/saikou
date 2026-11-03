@@ -78,15 +78,25 @@ class BackupNotifier(
 
     /**
      * The completion notification's one line, which the tap on it explains in full (the restore
-     * report, unit restore-report): the errors when there are any, else how many sources the file
-     * named that have no extension here, else nothing.
+     * report, unit restore-report): how many extensions wait for Install all because only a store
+     * the backup added lists them, since that needs the owner's tap; else the errors when there are
+     * any, else how many sources the file named that have no extension here, else how many
+     * extensions the run installed, else nothing. After Install extensions, a source without one is
+     * a source no repository listed.
      */
     internal fun restoreCompleteText(report: ImportReport): String? {
-        val missingSources = report.sourcesWithoutExtension.size
+        val installs = report.extensionInstalls
+        val waiting = installs?.fromAddedStores?.size ?: 0
+        val missingSources = installs?.notFound?.size ?: report.sourcesWithoutExtension.size
+        val installed = installs?.installed?.size ?: 0
         return when {
+            waiting > 0 ->
+                context.resources.getQuantityString(R.plurals.restore_extensions_waiting_count, waiting, waiting)
             report.errors.isNotEmpty() -> context.getString(R.string.restore_error_count, report.errors.size)
             missingSources > 0 ->
                 context.resources.getQuantityString(R.plurals.restore_missing_sources_count, missingSources, missingSources)
+            installed > 0 ->
+                context.resources.getQuantityString(R.plurals.restore_extensions_installed_count, installed, installed)
             else -> null
         }
     }

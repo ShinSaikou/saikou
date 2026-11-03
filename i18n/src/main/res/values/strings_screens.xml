@@ -944,6 +944,7 @@
     <string name="backup_phase_preferences">Settings</string>
     <string name="backup_phase_stores">Extension stores</string>
     <string name="backup_phase_entries">Entries</string>
+    <string name="backup_phase_extensions">Installing extensions</string>
     <string name="backup_phase_done">Finishing</string>
 
     <!-- Selection mode, shared by library, updates, history and the chapter list -->

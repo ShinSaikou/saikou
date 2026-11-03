@@ -22,7 +22,7 @@ data class ImportCheckpoint(
     val updatedAt: Long,
 )
 
-enum class ImportPhase { CATEGORIES, PREFERENCES, EXTENSION_STORES, MANGA, DONE }
+enum class ImportPhase { CATEGORIES, PREFERENCES, EXTENSION_STORES, MANGA, EXTENSIONS, DONE }
 
 data class ImportProgress(
     val phase: ImportPhase,
@@ -56,6 +56,7 @@ data class ImportError(
         EXTENSION_STORE,
         UNKNOWN_TRACKER_SKIPPED,
         BATCH_FALLBACK,
+        EXTENSION_INSTALL,
     }
 }
 
@@ -100,7 +101,41 @@ data class ImportReport(
      * restore of the same file, finds already named. Absent from a report an older build wrote.
      */
     val missingSources: List<Long> = emptyList(),
+    /**
+     * What Install extensions did, when it ran to its end: null when the option was off, the run
+     * was stopped first, or an older build wrote the report.
+     */
+    val extensionInstalls: ExtensionInstalls? = null,
 ) {
+    /**
+     * Extensions by name, as the indexes name them, except [notFound], which is the sources by the
+     * backup's names, so the owner knows what to search for. Each of [failed] has its reason among
+     * the errors, as an [ImportError.Kind.EXTENSION_INSTALL].
+     */
+    @Serializable
+    data class ExtensionInstalls(
+        val installed: List<String> = emptyList(),
+        val failed: List<String> = emptyList(),
+        val notFound: List<String> = emptyList(),
+        val alreadyInstalled: List<String> = emptyList(),
+        /** Repositories whose index could not be read, so a source in [notFound] may be in one of them. */
+        val unreadStores: List<String> = emptyList(),
+        /**
+         * Extensions that only a repository this restore added lists, so they were not installed:
+         * the owner installs them with Install all once they have seen which repository that is.
+         */
+        val fromAddedStores: List<FromAddedStore> = emptyList(),
+    )
+
+    /** An extension waiting for Install all, and the repository it would come from, by name and address. */
+    @Serializable
+    data class FromAddedStore(
+        val extensionName: String,
+        val packageName: String,
+        val storeName: String,
+        val storeUrl: String,
+    )
+
     /** The sources the restore report lists as having no extension, for a report of any build. */
     val sourcesWithoutExtension: List<Long>
         get() = (missingSources + stubSourcesRemembered).distinct()
@@ -116,4 +151,21 @@ data class ImportReport(
             explicitNulls = false
         }
     }
+}
+
+/**
+ * The extension stores configured when a restore of one file first started, before it wrote any
+ * (`ImportCheckpointStore.storesBeforeFile`). Install extensions installs unattended only from
+ * these; a retry of the same file reads them back rather than counting the stores its first
+ * attempt added as the owner's own.
+ */
+@Serializable
+data class StoresBefore(
+    val fileSha256: String,
+    val fileSize: Long,
+    val stores: List<Store>,
+) {
+    /** A store by its address and signing key; the key is stored as the store table holds it, never logged. */
+    @Serializable
+    data class Store(val indexUrl: String, val signingKey: String)
 }

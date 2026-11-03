@@ -3,6 +3,7 @@ package com.shinsaikou.extensions.store
 import com.shinsaikou.domain.extension.repository.ExtensionStoreRepository
 import com.shinsaikou.extensions.repo.ExtensionRepoClient
 import com.shinsaikou.extensions.repo.FetchedIndex
+import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -38,9 +39,33 @@ class AddExtensionStoreTest {
     fun `an index already configured is refused as a duplicate`() = runTest {
         coEvery { repoClient.fetch(store.indexUrl) } returns
             Result.success(FetchedIndex(store = store, extensions = null, fetchedAtElapsedMs = 0L))
-        coEvery { stores.get(store.indexUrl) } returns store
+        coEvery { stores.getAll() } returns listOf(store)
 
         subject.await(store.indexUrl).exceptionOrNull().shouldBeInstanceOf<StoreAlreadyConfiguredException>()
         coVerify(exactly = 0) { stores.upsert(any()) }
+    }
+
+    @Test
+    fun `the same repository under another address is refused as already added`() = runTest {
+        // Configured as a restore of upstream's legacy set leaves it: the descriptor, over http.
+        val legacy = store.copy(indexUrl = "http://example.invalid/repo.json", name = "", isLegacy = true)
+        coEvery { repoClient.fetch("https://example.invalid/") } returns
+            Result.success(FetchedIndex(store = store, extensions = null, fetchedAtElapsedMs = 0L))
+        coEvery { stores.getAll() } returns listOf(legacy)
+
+        subject.await("https://example.invalid/").exceptionOrNull().shouldBeInstanceOf<StoreAlreadyConfiguredException>()
+        coVerify(exactly = 0) { stores.upsert(any()) }
+    }
+
+    @Test
+    fun `another repository on the same host is added`() = runTest {
+        val other = store.copy(indexUrl = "https://example.invalid/other/index.pb", name = "Other Fixture Index")
+        coEvery { repoClient.fetch(other.indexUrl) } returns
+            Result.success(FetchedIndex(store = other, extensions = null, fetchedAtElapsedMs = 0L))
+        coEvery { stores.getAll() } returns listOf(store)
+        coEvery { stores.upsert(other) } returns Unit
+
+        subject.await(other.indexUrl).getOrNull() shouldBe other
+        coVerify(exactly = 1) { stores.upsert(other) }
     }
 }

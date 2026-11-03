@@ -61,4 +61,7 @@ class ExtensionStoreRepositoryImpl(
     override suspend fun remove(indexUrl: String) {
         handler.await { extension_storeQueries.delete(indexUrl) }
     }
+
+    override suspend fun mergeDuplicates(): Int =
+        handler.await(inTransaction = true) { mergeDuplicateExtensionStores() }
 }

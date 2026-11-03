@@ -2,6 +2,7 @@ package com.shinsaikou.backup.importer
 
 import android.content.Context
 import com.shinsaikou.backup.UpstreamPreferenceKeys
+import com.shinsaikou.domain.extension.ExtensionStoreDuplicates
 import com.shinsaikou.domain.extension.repository.ExtensionStoreRepository
 import com.shinsaikou.domain.preferences.DownloadPreferences
 import com.shinsaikou.domain.preferences.LibraryPreferences
@@ -242,10 +243,17 @@ class PreferenceRestorer(
 
     /**
      * Upstream's legacy repository set holds one base url per entry. Saikou keeps extension stores in
-     * a table, so the key itself is never stored; each value becomes a legacy store row.
+     * a table, so the key itself is never stored; each value becomes a legacy store row, unless a
+     * row already names that repository under another of its addresses. Such a row has a name and
+     * a key, which this one never has, and the set's entry would only list the repository a second
+     * time. The backup's own store list, which usually names the same repository, is restored after
+     * this, and the importer merges the two rows then.
      */
     private suspend fun restoreLegacyExtensionStores(urls: Set<String>, errors: MutableList<ImportError>) {
+        val configured = extensionStoreRepository.getAll()
+            .mapTo(HashSet()) { ExtensionStoreDuplicates.key(it.indexUrl) }
         urls.forEach { url ->
+            if (ExtensionStoreDuplicates.key(url) in configured) return@forEach
             try {
                 extensionStoreRepository.upsert(
                     ExtensionStore(

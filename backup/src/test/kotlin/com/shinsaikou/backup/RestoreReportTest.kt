@@ -144,6 +144,43 @@ class RestoreReportTest {
         notifier.restoreCompleteText(report()).shouldBeNull()
     }
 
+    @Test
+    fun `after Install extensions the line counts the sources no repository listed, else the installs`() {
+        val resources = mockk<Resources> {
+            every { getQuantityString(R.plurals.restore_missing_sources_count, 1, 1) } returns "1 source needs an extension"
+            every { getQuantityString(R.plurals.restore_extensions_installed_count, 2, 2) } returns "2 extensions installed"
+        }
+        val context = mockk<Context> { every { this@mockk.resources } returns resources }
+        val notifier = BackupNotifier(context, SecurityPreferences(FakePreferenceStore()), mockk())
+        val missing = listOf(1L, 2L, 3L)
+
+        notifier.restoreCompleteText(
+            report(missingSources = missing, installs = ImportReport.ExtensionInstalls(installed = listOf("A", "B"), notFound = listOf("C"))),
+        ) shouldBe "1 source needs an extension"
+        notifier.restoreCompleteText(
+            report(missingSources = missing, installs = ImportReport.ExtensionInstalls(installed = listOf("A", "B"))),
+        ) shouldBe "2 extensions installed"
+    }
+
+    @Test
+    fun `extensions waiting for Install all are counted before anything else, errors included`() {
+        val resources = mockk<Resources> {
+            every { getQuantityString(R.plurals.restore_extensions_waiting_count, 2, 2) } returns
+                "2 extensions wait for Install all"
+        }
+        val context = mockk<Context> { every { this@mockk.resources } returns resources }
+        val notifier = BackupNotifier(context, SecurityPreferences(FakePreferenceStore()), mockk())
+        val waiting = List(2) { ImportReport.FromAddedStore("Ext $it", "fixture.ext$it", "Added Store", "https://example.invalid/added") }
+
+        notifier.restoreCompleteText(
+            report(
+                errors = listOf(error(sourceLabel = null)),
+                missingSources = listOf(1L, 2L, 3L),
+                installs = ImportReport.ExtensionInstalls(notFound = listOf("C"), fromAddedStores = waiting),
+            ),
+        ) shouldBe "2 extensions wait for Install all"
+    }
+
     private fun error(sourceLabel: String?) = ImportError(
         kind = ImportError.Kind.CHAPTERS,
         subject = "An entry",
@@ -157,6 +194,7 @@ class RestoreReportTest {
         trackersNotSignedIn: List<Long> = emptyList(),
         missingSources: List<Long> = emptyList(),
         stubSourcesRemembered: List<Long> = emptyList(),
+        installs: ImportReport.ExtensionInstalls? = null,
     ) = ImportReport(
         fileSha256 = "00",
         startedAt = 1L,
@@ -180,6 +218,7 @@ class RestoreReportTest {
         errors = errors,
         trackersNotSignedIn = trackersNotSignedIn,
         missingSources = missingSources,
+        extensionInstalls = installs,
     )
 
     private companion object {

@@ -33,6 +33,16 @@ release may change behaviour.
   beside your app as Shin Saikou Debug, with a library of its own, so you can try a fix or send a
   detailed bug report without touching your library. Its Check for updates offers the next
   release's debug APK.
+- A restore can install the extensions the backup's sources come from. **Install extensions** on
+  the Restore tab is on by default: once the library is back, the restore reads the extension
+  stores and installs each extension it finds there, one after another, showing which of how many
+  it is on. It installs only from the extension stores you had before the restore. An extension
+  that only a store the backup adds offers is not installed: the Restore tab and the restore report
+  name that store and its address, and **Install all** installs those extensions once you have
+  checked it. A backup someone else made cannot install anything on its own. The restore report
+  also lists what was installed, what could not be, and the sources no extension store lists, by
+  name, so you know what to search for. The report's **Install all** installs whatever is still
+  offered, for a restore made with the option off too.
 
 ### Changed
 
@@ -75,6 +85,12 @@ release may change behaviour.
 
 - The shortcuts on a long press of the app icon (Library, Updates, History, Browse) open the
   app again. They pointed at a package that does not exist, so tapping one did nothing.
+- Restoring a backup from another reader no longer lists the same extension store twice, one of
+  them without a name. Such a backup names a store both in an old setting and in its list of
+  stores, and each became a row; a restore now keeps the one with the name. Stores listed twice by
+  an earlier restore are merged the next time Saikou starts, when both rows have the same signing
+  key; two rows with different keys stay apart. Adding a store by hand under another address of
+  one already added, such as with `http` or a trailing slash, now says it is already added.
 - With Two pane layout set to Always on a phone, an entry's title is readable again. The cover
   took the narrow pane's whole width and left the title one letter per line; the cover now sits
   above the title there, and the bar over the pane no longer shows a stray dot for the title.

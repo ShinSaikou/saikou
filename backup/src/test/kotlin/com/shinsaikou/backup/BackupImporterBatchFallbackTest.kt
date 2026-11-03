@@ -77,7 +77,8 @@ class BackupImporterBatchFallbackTest {
                 // its own transaction inside one (a category insert) joins it.
                 if (depth == 0) {
                     chunkTransactions++
-                    // Two phase transactions come first; the chunks follow.
+                    // Three phase transactions come first (the categories, the store list and the
+                    // merge of its duplicates); the chunks follow.
                     if (!failed && chunkTransactions == PHASE_TRANSACTIONS + failChunk) {
                         failed = true
                         throw IllegalStateException("The chunk transaction could not be opened")
@@ -93,7 +94,7 @@ class BackupImporterBatchFallbackTest {
         }
 
         private companion object {
-            const val PHASE_TRANSACTIONS = 2
+            const val PHASE_TRANSACTIONS = 3
         }
     }
 }

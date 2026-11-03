@@ -27,7 +27,10 @@ import tachiyomi.domain.extension.model.ExtensionStore
  * A row whose index cannot be read is left exactly as it was: a refresh is a convenience, and a
  * transport failure must never drop a repository the owner configured. A row that now redirects
  * somewhere else is also left alone, because the index URL is the primary key and rewriting it
- * here would strand the extensions already installed from it.
+ * here would strand the extensions already installed from it. The one exception is a row with no
+ * name, which is what upstream's legacy repository set restores to: its descriptor redirects to
+ * the index proper, so it would never get one. It keeps its address and how it is fetched, and
+ * takes the name, badge and contact of the index it redirects to, under the same key rule.
  */
 @SingleIn(AppScope::class)
 @Inject
@@ -46,8 +49,19 @@ class UpdateExtensionStores(
 
     private suspend fun refresh(row: ExtensionStore): Boolean {
         val fetched = repoClient.fetch(row.indexUrl).getOrNull() ?: return false
-        val store = fetched.store
-        if (store.indexUrl != row.indexUrl || store == row) return false
+        val redirected = fetched.store.indexUrl != row.indexUrl
+        if (redirected && row.name.isNotBlank()) return false
+        val store = if (redirected) {
+            row.copy(
+                name = fetched.store.name,
+                badgeLabel = fetched.store.badgeLabel,
+                signingKey = fetched.store.signingKey,
+                contact = fetched.store.contact,
+            )
+        } else {
+            fetched.store
+        }
+        if (store == row) return false
         if (row.signingKey.isNotBlank() && store.signingKey != row.signingKey) {
             logcat(LogPriority.WARN) { "Kept the pinned signing key of a repository whose index now names another" }
             return false

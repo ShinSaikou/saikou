@@ -149,8 +149,15 @@ fun CheckboxItem(label: String, pref: Preference<Boolean>) {
     )
 }
 
+/** Saikou: [detail] is an optional second line under the label, for an option that needs one. */
 @Composable
-fun CheckboxItem(label: String, checked: Boolean, onClick: () -> Unit, enabled: Boolean = true) {
+fun CheckboxItem(
+    label: String,
+    checked: Boolean,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    detail: String? = null,
+) {
     BaseSettingsItem(
         label = label,
         widget = {
@@ -162,6 +169,7 @@ fun CheckboxItem(label: String, checked: Boolean, onClick: () -> Unit, enabled: 
         onClick = onClick,
         checked = checked,
         enabled = enabled,
+        detail = detail,
     )
 }
 
@@ -458,6 +466,7 @@ private fun BaseSettingsItem(
     onClick: () -> Unit,
     checked: Boolean? = null,
     enabled: Boolean = true,
+    detail: String? = null,
 ) {
     Row(
         modifier = Modifier
@@ -482,9 +491,23 @@ private fun BaseSettingsItem(
         horizontalArrangement = Arrangement.spacedBy(24.dp),
     ) {
         widget(this)
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-        )
+        if (detail == null) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        } else {
+            Column {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                    text = detail,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }

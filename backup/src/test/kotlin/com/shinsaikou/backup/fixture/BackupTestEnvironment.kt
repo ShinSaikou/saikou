@@ -160,6 +160,7 @@ class BackupTestEnvironment(
     val checkpoints: ImportCheckpointStore =
         PreferenceImportCheckpointStore(context, backupPreferences, json)
 
+    val sourceExtensionInstaller = FakeSourceExtensionInstaller()
     val libraryUpdateScheduler = mockk<LibraryUpdateScheduler>(relaxed = true)
     val backupScheduler = mockk<BackupScheduler>(relaxed = true)
 
@@ -183,6 +184,7 @@ class BackupTestEnvironment(
         libraryUpdateScheduler = libraryUpdateScheduler,
         backupScheduler = backupScheduler,
         syncRestorePreferences = syncRestorePreferences,
+        sourceExtensionInstaller = sourceExtensionInstaller,
         json = json,
     )
 

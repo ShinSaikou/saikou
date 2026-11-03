@@ -23,7 +23,6 @@ import dev.zacsweers.metro.binding
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import eu.kanade.tachiyomi.extension.model.InstallStep
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -58,6 +57,7 @@ class ImportReportViewModel(
     private val missingExtensions: MissingExtensions,
     private val trackerManager: TrackerManager,
     private val extensionManager: ExtensionManager,
+    private val installs: RestoreExtensionInstalls,
     private val backupFileCopy: BackupFileCopy,
     private val adoptionScheduler: AdoptionScheduler,
     private val dispatchers: Dispatchers,
@@ -72,7 +72,12 @@ class ImportReportViewModel(
         val trackers: List<TrackerRow> = emptyList(),
         /** The errors by kind, in [ImportError.Kind]'s order. */
         val errorGroups: List<Pair<ImportError.Kind, List<ImportError>>> = emptyList(),
+        /** The manager's steps, and [InstallStep.Pending] for each package Install all has still to reach. */
         val installSteps: Map<String, InstallStep> = emptyMap(),
+        /** While [installAll] runs: which of how many it is installing. */
+        val installingAll: RestoreExtensionInstalls.Progress? = null,
+        /** The report's extensions from stores the restore added that are not installed yet. */
+        val waiting: List<ImportReport.FromAddedStore> = emptyList(),
         /** The copy of downloads from a folder, as the Downloads section shows it. */
         val adoption: AdoptionScheduler.State = AdoptionScheduler.State(running = false),
     ) {
@@ -87,15 +92,21 @@ class ImportReportViewModel(
 
     data class TrackerRow(val id: Long, val name: String)
 
+    /** The part of [State] that follows the device after the report is read. */
+    private data class Live(
+        val sources: List<MissingExtensions.Row>,
+        val trackers: List<TrackerRow>,
+        val installSteps: Map<String, InstallStep>,
+        val installingAll: RestoreExtensionInstalls.Progress?,
+        val waiting: List<ImportReport.FromAddedStore>,
+    )
+
     sealed interface Event {
         data class Snackbar(@StringRes val messageRes: Int) : Event
     }
 
     private val eventChannel = Channel<Event>(Channel.BUFFERED)
     val events: Flow<Event> = eventChannel.receiveAsFlow()
-
-    /** The install job per package, so a row's ring can cancel it, as `ExtensionsViewModel` keeps them. */
-    private val installJobs = mutableMapOf<String, Job>()
 
     init {
         viewModelScope.launch {
@@ -114,16 +125,29 @@ class ImportReportViewModel(
                 missingExtensions.forSources(report.sourcesWithoutExtension),
                 trackerManager.loggedInTrackersFlow(),
                 extensionManager.installSteps,
-            ) { sources, loggedIn, steps ->
+                installs.state,
+                installs.waiting(report),
+            ) { sources, loggedIn, steps, queue, waiting ->
                 val signedIn = loggedIn.mapTo(HashSet()) { it.id }
                 val trackers = report.trackersNotSignedIn
                     .filterNot { it in signedIn }
                     .mapNotNull { id -> trackerManager.get(id)?.let { TrackerRow(id, it.name) } }
-                Triple(sources, trackers, steps)
+                // A queued row shows as pending, with the ring that takes it out of the queue, so
+                // it offers no Install of its own that the queue would then start a second time.
+                val pending = queue.queued.filterNot { it in steps }.associateWith { InstallStep.Pending }
+                Live(sources, trackers, steps + pending, queue.installingAll, waiting)
             }
                 .flowOn(dispatchers.io)
-                .collect { (sources, trackers, steps) ->
-                    mutableState.update { it.copy(sources = sources, trackers = trackers, installSteps = steps) }
+                .collect { live ->
+                    mutableState.update {
+                        it.copy(
+                            sources = live.sources,
+                            trackers = live.trackers,
+                            installSteps = live.installSteps,
+                            installingAll = live.installingAll,
+                            waiting = live.waiting,
+                        )
+                    }
                 }
         }
     }
@@ -150,14 +174,20 @@ class ImportReportViewModel(
     }
 
     /** Installs [available] as the Extensions tab does, against the manager's current list. */
-    fun install(available: Extension.Available) {
-        val target = extensionManager.availableExtensions.value
-            .firstOrNull { it.packageName == available.packageName } ?: return
-        installJobs[target.packageName] = extensionManager.install(target)
-    }
+    fun install(available: Extension.Available) = installs.install(available)
 
-    fun cancelInstall(packageName: String) {
-        installJobs.remove(packageName)?.cancel()
+    fun cancelInstall(packageName: String) = installs.cancel(packageName)
+
+    /**
+     * Installs every source row's extension that a repository offers and that is not installing
+     * already, one after another ([RestoreExtensionInstalls.installAll]): the rows left after a
+     * restore without Install extensions, after an install that failed, and the extensions only a
+     * store the restore added lists, which it left for this tap. The queue goes on when the
+     * screen is left, and the Restore tab shows it too.
+     */
+    fun installAll() {
+        val report = state.value.report ?: return
+        installs.installAll(report.sourcesWithoutExtension)
     }
 
     /**

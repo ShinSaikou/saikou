@@ -3,6 +3,7 @@ package com.shinsaikou.ui.backup
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -53,8 +54,11 @@ private const val ERROR_LOG_MIME = "text/plain"
 
 /**
  * The restore report (unit restore-report), from the completion notification and the Backup
- * screen's Restore report row. In order: when the run ended and its counts; the sources the file
- * named that have no extension here, each with Install or Open Extensions; the trackers to sign in
+ * screen's Restore report row. In order: when the run ended and its counts; what Install
+ * extensions did, with the extensions it left for a tap because only a store the backup added lists
+ * them, each store named, and Install all; the sources the file named that have no extension here,
+ * each with Install or Open Extensions, and Install all above them when it is not shown already;
+ * the trackers to sign in
  * to, each with Sign in; the trackers this build lacks or does not know; the copy of downloads from
  * a folder, which no backup carries; and the errors by kind, with Export error log. A section with
  * nothing in it is left out.
@@ -106,8 +110,12 @@ fun ImportReportScreen() {
                 if (state.nothingMissing) {
                     item { InlineNotice(stringResource(R.string.import_report_nothing_missing)) }
                 }
+                extensionInstalls(report, state.waiting, state.installingAll, viewModel::installAll)
                 if (state.sources.isNotEmpty()) {
                     item { HeadingItem(R.string.import_report_missing_sources) }
+                    if (state.waiting.isEmpty() && state.sources.count { it.available != null } > 1) {
+                        item { InstallAllButton(state.installingAll, viewModel::installAll) }
+                    }
                     item {
                         MissingExtensionsList(
                             rows = state.sources,
@@ -182,6 +190,97 @@ private fun CopyDownloadsRow(adoption: AdoptionScheduler.State, onPick: () -> Un
     )
 }
 
+/** Install all, or which of how many it is installing while it runs. */
+@Composable
+private fun InstallAllButton(installing: RestoreExtensionInstalls.Progress?, onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        enabled = installing == null,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+    ) {
+        Text(
+            if (installing == null) {
+                stringResource(R.string.import_report_install_all)
+            } else {
+                stringResource(R.string.import_report_installing_format, installing.done, installing.total)
+            },
+        )
+    }
+}
+
+/**
+ * What the restore's Install extensions did: the extensions it installed, those it left for a tap
+ * because only a store the backup added lists them ([waiting], still not installed), under each
+ * store's name and address with Install all, the sources by the backup's names that no extension
+ * store lists (so the owner knows what to search for), the extensions that did not install (each
+ * with its reason among the errors), and the stores whose index could not be read. Left out when
+ * the option was off or the run stopped before it.
+ */
+private fun LazyListScope.extensionInstalls(
+    report: ImportReport,
+    waiting: List<ImportReport.FromAddedStore>,
+    installingAll: RestoreExtensionInstalls.Progress?,
+    onInstallAll: () -> Unit,
+) {
+    val installs = report.extensionInstalls ?: return
+    if (installs.installed.isEmpty() && installs.notFound.isEmpty() && installs.failed.isEmpty() && waiting.isEmpty()) {
+        return
+    }
+    item { HeadingItem(R.string.import_report_extensions) }
+    if (waiting.isNotEmpty()) {
+        item { FromAddedStoresRows(waiting) }
+        item { InstallAllButton(installingAll, onInstallAll) }
+    }
+    item {
+        Column {
+            NamesRow(R.string.import_report_extensions_installed, installs.installed)
+            NamesRow(
+                R.string.import_report_extensions_not_found,
+                installs.notFound,
+                hintRes = R.string.import_report_extensions_not_found_detail,
+            )
+            NamesRow(R.string.import_report_extensions_failed, installs.failed)
+            if (installs.notFound.isNotEmpty() && installs.unreadStores.isNotEmpty()) {
+                val stores = installs.unreadStores.joinToString()
+                InlineNotice(stringResource(R.string.import_report_extensions_unread_stores_format, stores))
+            }
+        }
+    }
+}
+
+/**
+ * The extensions waiting for Install all: why they were not installed, then a row per store with
+ * its name, its address and the extensions it would install, since the address is what the owner
+ * decides to trust.
+ */
+@Composable
+private fun FromAddedStoresRows(waiting: List<ImportReport.FromAddedStore>) {
+    Column {
+        ListRowLayout {
+            ListRowTitle(stringResource(R.string.import_report_extensions_from_added_stores))
+            ListRowDetail(stringResource(R.string.import_report_extensions_from_added_stores_detail), maxLines = Int.MAX_VALUE)
+        }
+        waiting.groupBy { it.storeUrl }.forEach { (storeUrl, extensions) ->
+            ListRowLayout {
+                ListRowTitle(extensions.first().storeName.ifBlank { storeUrl })
+                ListRowDetail(storeUrl, maxLines = Int.MAX_VALUE)
+                ListRowDetail(extensions.joinToString { it.extensionName }, maxLines = Int.MAX_VALUE)
+            }
+        }
+    }
+}
+
+/** A title, then [names] in full, comma-separated, and an optional hint under them. */
+@Composable
+private fun NamesRow(@StringRes titleRes: Int, names: List<String>, @StringRes hintRes: Int? = null) {
+    if (names.isEmpty()) return
+    ListRowLayout {
+        ListRowTitle(stringResource(titleRes))
+        ListRowDetail(names.joinToString(), maxLines = Int.MAX_VALUE)
+        if (hintRes != null) ListRowDetail(stringResource(hintRes))
+    }
+}
+
 /** A tracker the run found signed out, with the Tracking section's Sign in. */
 @Composable
 private fun TrackerRow(name: String, onSignIn: () -> Unit) {
@@ -234,4 +333,5 @@ private fun ImportError.Kind.labelRes(): Int = when (this) {
     ImportError.Kind.EXTENSION_STORE -> R.string.backup_option_stores
     ImportError.Kind.UNKNOWN_TRACKER_SKIPPED -> R.string.import_error_kind_unknown_tracker
     ImportError.Kind.BATCH_FALLBACK -> R.string.import_error_kind_batch_fallback
+    ImportError.Kind.EXTENSION_INSTALL -> R.string.backup_option_install_extensions
 }

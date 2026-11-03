@@ -7,6 +7,7 @@ import com.shinsaikou.backup.export.AutomaticBackupFiles
 import com.shinsaikou.backup.export.BackupScheduler
 import com.shinsaikou.backup.importer.BackupImportRequest
 import com.shinsaikou.backup.importer.ImportCheckpointStore
+import com.shinsaikou.backup.importer.ImportReport
 import com.shinsaikou.i18n.R
 import eu.kanade.tachiyomi.data.backup.BackupDecodeException
 import eu.kanade.tachiyomi.data.backup.BackupFileValidator
@@ -77,8 +78,15 @@ class BackupViewModelTest {
         every { displayName(uri) } returns "saikou-backup.tachibk"
     }
     private val reportFile get() = File(filesDir, "last-report.json")
+    private var stored: ImportReport? = null
     private val checkpoints = mockk<ImportCheckpointStore> {
         every { reportFile } answers { this@BackupViewModelTest.reportFile }
+        every { loadReport() } answers { stored }
+    }
+    private val queueState = MutableStateFlow(RestoreExtensionInstalls.State())
+    private val installs = mockk<RestoreExtensionInstalls>(relaxed = true) {
+        every { state } returns queueState
+        every { waiting(any()) } answers { flowOf(firstArg<ImportReport>().extensionInstalls?.fromAddedStores.orEmpty()) }
     }
 
     @BeforeEach
@@ -98,6 +106,7 @@ class BackupViewModelTest {
         backupFileCopy = fileCopy,
         validator = validator,
         checkpoints = checkpoints,
+        installs = installs,
         dispatchers = AppDispatchers(testDispatcher, testDispatcher, testDispatcher),
     ).also { advanceUntilIdle() }
 
@@ -160,6 +169,18 @@ class BackupViewModelTest {
             viewModel.state.value.restoring shouldBe false
             viewModel.state.value.restoreMessage shouldBe message
         }
+    }
+
+    @Test
+    fun `install extensions is on by default and unticking it reaches the queued run`() = runTest(testDispatcher) {
+        val viewModel = viewModel()
+        viewModel.state.value.restoreOptions.installExtensions shouldBe true
+        viewModel.setRestoreInstallExtensions(false)
+
+        viewModel.restorePicked(uri)
+        advanceUntilIdle()
+
+        verify(exactly = 1) { importRequest.start(uri, RestoreOptions(installExtensions = false)) }
     }
 
     @Test
@@ -287,4 +308,55 @@ class BackupViewModelTest {
 
         viewModel().state.value.lastReportAt shouldBe 1_700_000_000_000L
     }
+
+    @Test
+    fun `the extensions a restore left for a tap are listed on the tab, and Install all is the report's`() = runTest(testDispatcher) {
+        val waiting = ImportReport.FromAddedStore("Waiting Extension", "fixture.waiting", "Added Store", "https://example.invalid/added")
+        stored = report(missingSources = listOf(11L, 12L), fromAddedStores = listOf(waiting))
+        reportFile.writeText("{}")
+        val viewModel = viewModel()
+        viewModel.state.value.waiting shouldBe listOf(waiting)
+
+        viewModel.installAll()
+        queueState.value = RestoreExtensionInstalls.State(installingAll = RestoreExtensionInstalls.Progress(1, 2))
+        advanceUntilIdle()
+
+        verify(exactly = 1) { installs.installAll(listOf(11L, 12L)) }
+        viewModel.state.value.installingAll shouldBe RestoreExtensionInstalls.Progress(1, 2)
+    }
+
+    @Test
+    fun `with no report there is nothing waiting and Install all does nothing`() = runTest(testDispatcher) {
+        val viewModel = viewModel()
+
+        viewModel.installAll()
+
+        viewModel.state.value.waiting shouldBe emptyList()
+        verify(exactly = 0) { installs.installAll(any()) }
+    }
+
+    private fun report(missingSources: List<Long>, fromAddedStores: List<ImportReport.FromAddedStore>) = ImportReport(
+        fileSha256 = "00",
+        startedAt = 1L,
+        finishedAt = 2L,
+        cancelled = false,
+        resumed = false,
+        mangaTotal = 0,
+        mangaInserted = 0,
+        mangaMerged = 0,
+        mangaFailed = 0,
+        chaptersWritten = 0,
+        historyWritten = 0,
+        tracksWritten = 0,
+        categoriesCreated = 0,
+        preferencesWritten = 0,
+        sourcePreferenceFilesWritten = 0,
+        extensionStoresUpserted = 0,
+        stubSourcesRemembered = emptyList(),
+        unsupportedTrackers = emptyList(),
+        unknownTrackers = emptyList(),
+        errors = emptyList(),
+        missingSources = missingSources,
+        extensionInstalls = ImportReport.ExtensionInstalls(fromAddedStores = fromAddedStores),
+    )
 }

@@ -12,7 +12,7 @@ import tachiyomi.core.common.util.system.logcat
 import java.io.File
 
 /**
- * The three files a run reads and writes, plus the checkpoint itself. The checkpoint is small and
+ * The four files a run reads and writes, plus the checkpoint itself. The checkpoint is small and
  * rewritten often, so it lives in a preference rather than a table (contract 06 decision F3).
  */
 interface ImportCheckpointStore {
@@ -31,6 +31,12 @@ interface ImportCheckpointStore {
 
     /** `filesDir/backup-import/last-report.json`: the last [ImportReport], for the screen. */
     val reportFile: File
+
+    /**
+     * `filesDir/backup-import/stores-before.json`: the [StoresBefore] of the file being restored,
+     * kept until its run finishes, so a retry still knows which stores the first attempt added.
+     */
+    val storesBeforeFile: File
 
     /**
      * The last run's [ImportReport] from [reportFile] (unit restore-report), or null when no run has
@@ -71,6 +77,9 @@ class PreferenceImportCheckpointStore(
     override val reportFile: File
         get() = File(directory, REPORT_FILE_NAME)
 
+    override val storesBeforeFile: File
+        get() = File(directory, STORES_BEFORE_FILE_NAME)
+
     override fun load(): ImportCheckpoint? {
         val stored = backupPreferences.lastImportCheckpoint.get()
         if (stored.isEmpty()) return null
@@ -98,5 +107,6 @@ class PreferenceImportCheckpointStore(
         const val IMPORT_FILE_NAME = "current.tachibk"
         const val ERROR_LOG_NAME = "errors.jsonl"
         const val REPORT_FILE_NAME = "last-report.json"
+        const val STORES_BEFORE_FILE_NAME = "stores-before.json"
     }
 }

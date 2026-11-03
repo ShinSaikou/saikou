@@ -1,6 +1,7 @@
 package com.shinsaikou.ui.browse.extension
 
 import com.shinsaikou.extensions.ExtensionManager
+import com.shinsaikou.extensions.loader.LoadResult
 import com.shinsaikou.extensions.model.AvailableSource
 import com.shinsaikou.extensions.model.Extension
 import com.shinsaikou.source.Source
@@ -17,8 +18,9 @@ import tachiyomi.domain.manga.repository.MangaRepository
 
 /**
  * A [MissingExtensions] over flows a test drives: the registry (its first load, its live sources and
- * the names it remembers), the extension manager's available and untrusted lists and install steps,
- * and the library's entry count per source. Shared by the list's own test and the restore report's.
+ * the names it remembers), the extension manager's available, installed, untrusted and unloaded
+ * lists and install steps, and the library's entry count per source. Shared by the list's own test
+ * and the restore report's.
  *
  * The flows carry a Flow suffix for `ExtensionsViewModelTest`'s reason: inside a mockk block a bare
  * name matching one of the mock's properties binds to the mock.
@@ -29,6 +31,8 @@ class MissingExtensionsFixture {
     val liveFlow = MutableStateFlow<List<Source>>(emptyList())
     val availableFlow = MutableStateFlow<List<Extension.Available>>(emptyList())
     val untrustedFlow = MutableStateFlow<List<Extension.Untrusted>>(emptyList())
+    val installedFlow = MutableStateFlow<List<Extension.Installed>>(emptyList())
+    val loadErrorsFlow = MutableStateFlow<List<LoadResult.Error>>(emptyList())
     val installStepsFlow = MutableStateFlow<Map<String, InstallStep>>(emptyMap())
     val countsFlow = MutableStateFlow<Map<Long, Long>>(emptyMap())
 
@@ -61,6 +65,8 @@ class MissingExtensionsFixture {
             onRefresh()
         }
         every { untrustedExtensions } returns untrustedFlow
+        every { installedExtensions } returns installedFlow
+        every { loadErrors } returns loadErrorsFlow
         every { installSteps } returns installStepsFlow
         every { install(any()) } returns Job()
     }

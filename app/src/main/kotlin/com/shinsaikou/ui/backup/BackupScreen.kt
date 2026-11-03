@@ -9,6 +9,9 @@ import androidx.compose.ui.platform.testTag
 import com.shinsaikou.backup.export.AutomaticBackup
 import com.shinsaikou.domain.storage.StorageLocation
 import com.shinsaikou.ui.components.ListRow
+import com.shinsaikou.ui.components.ListRowDetail
+import com.shinsaikou.ui.components.ListRowLayout
+import com.shinsaikou.ui.components.ListRowTitle
 import com.shinsaikou.ui.storage.StorageLocationViewModel
 import com.shinsaikou.ui.storage.rememberStorageLocationPicker
 import com.shinsaikou.ui.storage.storageLocationSummary
@@ -52,6 +55,7 @@ import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.shinsaikou.backup.importer.ImportPhase
 import com.shinsaikou.backup.importer.ImportProgress
+import com.shinsaikou.backup.importer.ImportReport
 import com.shinsaikou.i18n.R
 import com.shinsaikou.navigation.LocalNavigator
 import com.shinsaikou.navigation.Route
@@ -65,6 +69,7 @@ import tachiyomi.presentation.core.components.CheckboxItem
 import tachiyomi.presentation.core.components.HeadingItem
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.components.material.TabText
+import tachiyomi.presentation.core.i18n.pluralStringResource
 import tachiyomi.presentation.core.i18n.stringResource
 
 private const val BACKUP_MIME = "application/octet-stream"
@@ -265,8 +270,8 @@ private fun CreateTab(
 }
 
 /**
- * What to take from the file, Restore backup with the check and the run it starts, the last
- * restore's report, and the kept automatic backups.
+ * What to take from the file, Restore backup with the check and the run it starts, the extensions
+ * the last restore left for a tap, the last restore's report, and the kept automatic backups.
  */
 @Composable
 private fun RestoreTab(
@@ -335,6 +340,9 @@ private fun RestoreTab(
         val message = state.restoreMessage
         if (message != null && !state.restoring) {
             item { InlineNotice(stringResource(message)) }
+        }
+        if (state.waiting.isNotEmpty() && !state.restoring) {
+            item { WaitingExtensions(state.waiting, state.installingAll, viewModel::installAll) }
         }
 
         val lastReportAt = state.lastReportAt
@@ -422,6 +430,38 @@ private fun RestoreCheck(
     }
 }
 
+/**
+ * The extensions the last restore did not install because only a store the backup added lists them:
+ * how many, the stores by name and address, which is what Install all asks the owner to trust, and
+ * the report's Install all.
+ */
+@Composable
+private fun WaitingExtensions(
+    waiting: List<ImportReport.FromAddedStore>,
+    installing: RestoreExtensionInstalls.Progress?,
+    onInstallAll: () -> Unit,
+) {
+    val stores = waiting.distinctBy { it.storeUrl }.joinToString { store ->
+        if (store.storeName.isBlank()) store.storeUrl else "${store.storeName} (${store.storeUrl})"
+    }
+    ListRowLayout(
+        trailing = {
+            TextButton(onClick = onInstallAll, enabled = installing == null) {
+                Text(
+                    if (installing == null) {
+                        stringResource(R.string.import_report_install_all)
+                    } else {
+                        stringResource(R.string.import_report_installing_format, installing.done, installing.total)
+                    },
+                )
+            }
+        },
+    ) {
+        ListRowTitle(pluralStringResource(R.plurals.backup_restore_extensions_waiting, waiting.size, waiting.size))
+        ListRowDetail(stringResource(R.string.backup_restore_extensions_waiting_detail_format, stores), maxLines = Int.MAX_VALUE)
+    }
+}
+
 /** A bold heading and a dashed line per name, as upstream's restore screen writes its two lists. */
 @Composable
 private fun CheckList(@StringRes headingRes: Int, names: List<String>) {
@@ -493,8 +533,8 @@ private val AutomaticBackup.id: String get() = if (inApp) "app/$name" else "loca
 /** The tag on each kept backup's row, which a device test counts. */
 internal const val AUTOMATIC_BACKUP_ROW_TAG = "backup_automatic_row"
 
-/** How many items [restoreOptions] adds: its five options. */
-private const val RESTORE_OPTION_ITEMS = 5
+/** How many items [restoreOptions] adds: its six options. */
+private const val RESTORE_OPTION_ITEMS = 6
 
 /**
  * The check's place in the Restore tab's list: the intro, [RESTORE_OPTION_ITEMS] and the button come
@@ -532,31 +572,51 @@ private fun LazyListScope.restoreOptions(options: RestoreOptions, viewModel: Bac
         options.sourceSettings,
         viewModel::setRestoreSourceSettings,
     )
+    optionItem(
+        R.string.backup_option_install_extensions,
+        options.installExtensions,
+        viewModel::setRestoreInstallExtensions,
+        detailRes = R.string.backup_option_install_extensions_detail,
+    )
 }
 
 private fun LazyListScope.optionItem(
     @StringRes labelRes: Int,
     checked: Boolean,
     onChange: (Boolean) -> Unit,
+    @StringRes detailRes: Int? = null,
 ) {
     item {
         CheckboxItem(
             label = stringResource(labelRes),
             checked = checked,
             onClick = { onChange(!checked) },
+            detail = detailRes?.let { stringResource(it) },
         )
     }
 }
 
 @Composable
 private fun RestoreProgress(progress: ImportProgress) {
+    // The installs count the ones through, while the line names the one under way: "1 of 1" for
+    // the first, over a bar that fills only once it has installed.
+    val position = if (progress.phase == ImportPhase.EXTENSIONS) {
+        (progress.done + 1).coerceAtMost(progress.total)
+    } else {
+        progress.done
+    }
     WorkingStatus(
-        text = stringResource(
-            R.string.backup_restore_progress_format,
-            stringResource(phaseLabel(progress.phase)),
-            progress.done,
-            progress.total,
-        ),
+        // A phase with nothing counted yet (the index fetch before the installs) is named alone.
+        text = if (progress.total > 0) {
+            stringResource(
+                R.string.backup_restore_progress_format,
+                stringResource(phaseLabel(progress.phase)),
+                position,
+                progress.total,
+            )
+        } else {
+            stringResource(phaseLabel(progress.phase))
+        },
         detail = progress.currentTitle,
         // A phase that counts nothing reports no total, and a bar drawn at zero would read as a
         // stalled run rather than as work with no countable steps.
@@ -594,5 +654,6 @@ private fun phaseLabel(phase: ImportPhase): Int = when (phase) {
     ImportPhase.PREFERENCES -> R.string.backup_phase_preferences
     ImportPhase.EXTENSION_STORES -> R.string.backup_phase_stores
     ImportPhase.MANGA -> R.string.backup_phase_entries
+    ImportPhase.EXTENSIONS -> R.string.backup_phase_extensions
     ImportPhase.DONE -> R.string.backup_phase_done
 }

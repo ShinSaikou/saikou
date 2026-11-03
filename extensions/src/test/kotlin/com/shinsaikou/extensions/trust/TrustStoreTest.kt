@@ -25,6 +25,7 @@ class TrustStoreTest {
         override suspend fun upsert(store: ExtensionStore) = Unit
         override suspend fun updateIfSigningKey(store: ExtensionStore, expectedSigningKey: String) = false
         override suspend fun remove(indexUrl: String) = Unit
+        override suspend fun mergeDuplicates() = 0
     }
 
     private fun storeRow(signingKey: String) = ExtensionStore(

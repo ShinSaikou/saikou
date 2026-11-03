@@ -68,7 +68,9 @@ class BackupImportTest {
         // the test reads the file with exactly the settings the importer reads it with.
         val expected = BackupDecoder(context, ProtoBuf).decode(file.source())
 
-        val report = runBlocking { graph.backupImporter.import(file, RestoreOptions(), progress = {}) }
+        // Everything the file carries, without fetching and installing the extensions it names.
+        val options = RestoreOptions(installExtensions = false)
+        val report = runBlocking { graph.backupImporter.import(file, options, progress = {}) }
         logReport(expected, report)
 
         assertTheRunFinished(expected, report)

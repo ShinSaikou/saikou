@@ -2,6 +2,8 @@ package com.shinsaikou.backup.importer
 
 import com.shinsaikou.backup.export.BackupScheduler
 import com.shinsaikou.data.DatabaseHandler
+import com.shinsaikou.domain.extension.ExtensionStoreDuplicates
+import com.shinsaikou.domain.extension.SourceExtensionInstaller
 import com.shinsaikou.domain.extension.repository.ExtensionStoreRepository
 import com.shinsaikou.domain.manga.interactor.UpdateManga
 import com.shinsaikou.domain.preferences.LibraryPreferences
@@ -80,6 +82,7 @@ class BackupImporter(
     private val libraryUpdateScheduler: LibraryUpdateScheduler,
     private val backupScheduler: BackupScheduler,
     private val syncRestorePreferences: SyncRestorePreferences,
+    private val sourceExtensionInstaller: SourceExtensionInstaller,
     private val json: Json,
 ) {
 
@@ -149,10 +152,16 @@ class BackupImporter(
             // 3. Remember a name for every source no provider serves, so library rows stay readable.
             rememberStubSources(backup, run)
 
+            // Before step 5 and 6 write any: the stores Install extensions may install from unattended.
+            // Taken whatever the options, so a run that adds stores and stops leaves the list for a
+            // later run of the same file, which would otherwise count those stores as the owner's.
+            val storesBefore = storesBefore(run)
+
             // 4 to 6 are idempotent, so a resumed run simply re-executes them.
             restoreCategories(backup, options, run)
             restorePreferences(backup, options, run)
             restoreExtensionStores(backup, options, run)
+            mergeDuplicateStores(options, run)
 
             // 7. The only phase with a cursor.
             if (options.libraryEntries) {
@@ -160,6 +169,10 @@ class BackupImporter(
                     restoreMangaList(entries, run.mangaTotal, options, run, progress)
                 }
             }
+
+            // 8. Last, so the library is back before the extensions download. Safe to repeat: what a
+            //    first attempt installed is on disk, and is not installed again.
+            if (options.installExtensions) installExtensions(run, storesBefore, progress)
         } catch (e: CancellationException) {
             // A cancel inside a chunk, or in an earlier step, throws out of it. What committed
             // before it stays, so the run finishes as a cancelled one before the cancel goes on.
@@ -315,9 +328,13 @@ class BackupImporter(
                         // that names another key for the same index is refused for that row, so a
                         // shared or crafted file cannot change which extensions are trusted. A blank
                         // key in the backup is no claim at all: the row's other settings restore and
-                        // the configured key stays.
-                        val configuredKey = extensionStoreRepository.get(store.indexUrl)
-                            ?.signingKey?.takeIf { it.isNotBlank() }
+                        // the configured key stays. The same index is the same repository under any
+                        // of its addresses (ExtensionStoreDuplicates.key), the row's own first.
+                        val repositoryKey = ExtensionStoreDuplicates.key(store.indexUrl)
+                        val configuredKey = extensionStoreRepository.getAll()
+                            .filter { ExtensionStoreDuplicates.key(it.indexUrl) == repositoryKey }
+                            .sortedByDescending { it.indexUrl == store.indexUrl }
+                            .firstNotNullOfOrNull { row -> row.signingKey.takeIf { it.isNotBlank() } }
                         if (configuredKey != null && store.signingKey.isNotBlank() &&
                             configuredKey != store.signingKey
                         ) {
@@ -349,6 +366,96 @@ class BackupImporter(
                     }
                 }
             }
+        }
+        run.flushErrors()
+    }
+
+    /**
+     * One row per repository. A file from upstream carries its repositories twice when it still holds
+     * the legacy `extension_repos` set beside the store list: the set's base address becomes a row
+     * with no name ([PreferenceRestorer]) and the list's index another with one, so the Extension
+     * stores screen listed the same repository twice. The rows are folded into the named one here,
+     * after both have been written, whichever of the two options wrote them.
+     */
+    private suspend fun mergeDuplicateStores(options: RestoreOptions, run: Run) {
+        if (!options.appSettings && !options.extensionStores) return
+        try {
+            extensionStoreRepository.mergeDuplicates()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            run.record(ImportError.Kind.EXTENSION_STORE, "Repositories listed under two addresses", null, e)
+        }
+        run.flushErrors()
+    }
+
+    /**
+     * The extension stores as they were before this file's first attempt wrote any: read now and
+     * kept in [ImportCheckpointStore.storesBeforeFile] on a first attempt, read back from it on a
+     * retry of the same file, which the first attempt's stores would otherwise pass for the
+     * owner's. [finish] deletes the file once the run is through.
+     */
+    private suspend fun storesBefore(run: Run): List<SourceExtensionInstaller.KnownStore> {
+        val file = checkpoints.storesBeforeFile
+        val kept = try {
+            file.takeIf { it.exists() }?.let { json.decodeFromString(StoresBefore.serializer(), it.readText()) }
+        } catch (_: Exception) {
+            null
+        }
+        val stores = if (kept != null && kept.fileSha256 == run.fileSha256 && kept.fileSize == run.fileSize) {
+            kept.stores
+        } else {
+            val read = extensionStoreRepository.getAll().map { StoresBefore.Store(it.indexUrl, it.signingKey) }
+            file.parentFile?.mkdirs()
+            file.writeText(json.encodeToString(StoresBefore.serializer(), StoresBefore(run.fileSha256, run.fileSize, read)))
+            read
+        }
+        return stores.map { SourceExtensionInstaller.KnownStore(it.indexUrl, it.signingKey) }
+    }
+
+    /**
+     * Installs the extensions of the sources the file named that no live source serves, one at a
+     * time ([SourceExtensionInstaller]), from the stores of [storesBefore] only: an extension only a
+     * store this restore added lists waits in the report for Install all. A source an extension
+     * already on disk serves is left to that extension. Each install that fails is an error of its
+     * own, with its reason; a run stopped here has no [ImportReport.extensionInstalls], and the
+     * report's list still offers the rest.
+     *
+     * The library is restored by now, so nothing here may undo the run: a failure of the phase
+     * itself is one more error, and the report is written as for any other run.
+     */
+    private suspend fun installExtensions(
+        run: Run,
+        storesBefore: List<SourceExtensionInstaller.KnownStore>,
+        progress: (ImportProgress) -> Unit,
+    ) {
+        try {
+            val wanted = run.missingSources.distinct()
+                .filter { sourceManager.get(it) == null }
+                .map { SourceExtensionInstaller.WantedSource(it, run.labelOf(it)) }
+            if (wanted.isEmpty()) return
+            run.phase = ImportPhase.EXTENSIONS
+            progress(ImportProgress(ImportPhase.EXTENSIONS, 0, 0, null))
+
+            val outcome = sourceExtensionInstaller.install(wanted, storesBefore) { step ->
+                progress(ImportProgress(ImportPhase.EXTENSIONS, step.done, step.total, step.extensionName))
+            }
+            outcome.failed.forEach { run.record(ImportError.Kind.EXTENSION_INSTALL, it.extensionName, null, it.message) }
+            run.extensionInstalls = ImportReport.ExtensionInstalls(
+                installed = outcome.installed,
+                failed = outcome.failed.map { it.extensionName },
+                notFound = outcome.notFound.map { it.name },
+                alreadyInstalled = outcome.alreadyInstalled,
+                unreadStores = outcome.unreadStores,
+                fromAddedStores = outcome.fromAddedStores.map {
+                    ImportReport.FromAddedStore(it.extensionName, it.packageName, it.storeName, it.storeUrl)
+                },
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logcat(LogPriority.WARN, e) { "Install extensions stopped" }
+            run.record(ImportError.Kind.EXTENSION_INSTALL, "Install extensions", null, e)
         }
         run.flushErrors()
     }
@@ -698,6 +805,7 @@ class BackupImporter(
             run.phase = ImportPhase.DONE
             checkpoints.clear()
             checkpoints.importFile.delete()
+            checkpoints.storesBeforeFile.delete()
         }
         writeReport(report)
         refused?.let { throw it }
@@ -795,6 +903,7 @@ class BackupImporter(
         var preferencesWritten: Int = 0
         var sourcePreferenceFilesWritten: Int = 0
         var extensionStoresUpserted: Int = 0
+        var extensionInstalls: ImportReport.ExtensionInstalls? = null
 
         var sourceLabels: Map<Long, String> = emptyMap()
         var unsupportedTrackers: List<Long> = emptyList()
@@ -906,6 +1015,7 @@ class BackupImporter(
             errors = errorLog,
             trackersNotSignedIn = trackersNotSignedIn,
             missingSources = missingSources.distinct(),
+            extensionInstalls = extensionInstalls,
         )
     }
 

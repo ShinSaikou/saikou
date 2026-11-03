@@ -26,4 +26,10 @@ interface ExtensionStoreRepository {
     suspend fun updateIfSigningKey(store: ExtensionStore, expectedSigningKey: String): Boolean
 
     suspend fun remove(indexUrl: String)
+
+    /**
+     * Folds rows that name one repository under different addresses into one, in one transaction
+     * ([com.shinsaikou.domain.extension.ExtensionStoreDuplicates.merge]). Returns the rows removed.
+     */
+    suspend fun mergeDuplicates(): Int
 }

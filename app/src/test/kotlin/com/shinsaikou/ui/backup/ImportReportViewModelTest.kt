@@ -6,11 +6,13 @@ import com.shinsaikou.backup.importer.ImportCheckpointStore
 import com.shinsaikou.backup.importer.ImportError
 import com.shinsaikou.backup.importer.ImportReport
 import com.shinsaikou.downloads.adoption.AdoptionScheduler
+import com.shinsaikou.extensions.model.Extension
 import com.shinsaikou.i18n.R
 import com.shinsaikou.tracking.Tracker
 import com.shinsaikou.tracking.TrackerManager
 import com.shinsaikou.ui.browse.extension.MissingExtensions
 import com.shinsaikou.ui.browse.extension.MissingExtensionsFixture
+import eu.kanade.tachiyomi.extension.model.InstallStep
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.nulls.shouldBeNull
@@ -20,6 +22,10 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -42,6 +48,12 @@ import kotlinx.coroutines.Dispatchers as KotlinxDispatchers
 class ImportReportViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
+
+    /**
+     * The app scope Install all's queue runs in: on the test's dispatcher, so `advanceUntilIdle`
+     * runs it, and not the test's child, since a queue waits on install jobs a test may never end.
+     */
+    private val appScope = CoroutineScope(SupervisorJob() + testDispatcher)
     private val extensions = MissingExtensionsFixture()
     private val signedInFlow = MutableStateFlow(false)
     private val tracker = mockk<Tracker> {
@@ -68,6 +80,7 @@ class ImportReportViewModelTest {
 
     @AfterEach
     fun tearDown() {
+        appScope.cancel()
         KotlinxDispatchers.resetMain()
     }
 
@@ -76,6 +89,7 @@ class ImportReportViewModelTest {
         missingExtensions = extensions.missingExtensions,
         trackerManager = trackerManager,
         extensionManager = extensions.extensionManager,
+        installs = RestoreExtensionInstalls(extensions.extensionManager, extensions.missingExtensions, appScope),
         backupFileCopy = fileCopy,
         adoptionScheduler = adoptionScheduler,
         dispatchers = AppDispatchers(testDispatcher, testDispatcher, testDispatcher),
@@ -241,6 +255,144 @@ class ImportReportViewModelTest {
     }
 
     @Test
+    fun `install all installs every offered extension one after another and counts them`() = runTest(testDispatcher) {
+        val first = extensions.available(PACKAGE, SOURCE_LISTED)
+        val second = extensions.available(SECOND_PACKAGE, SOURCE_SECOND)
+        extensions.remember(SOURCE_LISTED, "Listed")
+        extensions.remember(SOURCE_SECOND, "Second")
+        extensions.availableFlow.value = listOf(first, second)
+        stored = report(missingSources = listOf(SOURCE_LISTED, SOURCE_SECOND, SOURCE_UNLISTED))
+        val firstJob = Job()
+        val secondJob = Job()
+        every { extensions.extensionManager.install(first) } returns firstJob
+        every { extensions.extensionManager.install(second) } returns secondJob
+        val viewModel = viewModel()
+
+        viewModel.installAll()
+        advanceUntilIdle()
+        verify(exactly = 1) { extensions.extensionManager.install(first) }
+        verify(exactly = 0) { extensions.extensionManager.install(second) }
+        viewModel.state.value.installingAll shouldBe RestoreExtensionInstalls.Progress(1, 2)
+
+        firstJob.complete()
+        advanceUntilIdle()
+        viewModel.state.value.installingAll shouldBe RestoreExtensionInstalls.Progress(2, 2)
+        secondJob.complete()
+        advanceUntilIdle()
+
+        verify(exactly = 1) { extensions.extensionManager.install(second) }
+        verify(exactly = 2) { extensions.extensionManager.install(any()) }
+        viewModel.state.value.installingAll.shouldBeNull()
+    }
+
+    @Test
+    fun `a package Install all has queued shows as pending, and its own Install starts nothing until its turn`() =
+        runTest(testDispatcher) {
+            val (first, second) = twoOffered()
+            val firstJob = Job()
+            every { extensions.extensionManager.install(first) } returns firstJob
+            val viewModel = viewModel()
+
+            viewModel.installAll()
+            advanceUntilIdle()
+            viewModel.state.value.installSteps[SECOND_PACKAGE] shouldBe InstallStep.Pending
+            viewModel.install(second)
+            advanceUntilIdle()
+            verify(exactly = 0) { extensions.extensionManager.install(second) }
+
+            firstJob.complete()
+            advanceUntilIdle()
+            verify(exactly = 1) { extensions.extensionManager.install(second) }
+        }
+
+    @Test
+    fun `a package that started installing elsewhere while queued is not started again on its turn`() =
+        runTest(testDispatcher) {
+            val (first, second) = twoOffered()
+            val firstJob = Job()
+            every { extensions.extensionManager.install(first) } returns firstJob
+            val viewModel = viewModel()
+
+            viewModel.installAll()
+            advanceUntilIdle()
+            // The Extensions tab's own Install, say, which this queue holds no job for.
+            extensions.installStepsFlow.value = mapOf(SECOND_PACKAGE to InstallStep.Downloading)
+            firstJob.complete()
+            advanceUntilIdle()
+
+            verify(exactly = 0) { extensions.extensionManager.install(second) }
+            viewModel.state.value.installingAll.shouldBeNull()
+        }
+
+    @Test
+    fun `a row's own install under way is left out of Install all`() = runTest(testDispatcher) {
+        val (first, second) = twoOffered()
+        every { extensions.extensionManager.install(first) } returns Job()
+        every { extensions.extensionManager.install(second) } returns Job()
+        val viewModel = viewModel()
+
+        viewModel.install(first)
+        viewModel.installAll()
+        advanceUntilIdle()
+
+        verify(exactly = 1) { extensions.extensionManager.install(first) }
+        verify(exactly = 1) { extensions.extensionManager.install(second) }
+        viewModel.state.value.installingAll shouldBe RestoreExtensionInstalls.Progress(1, 1)
+    }
+
+    @Test
+    fun `a queued row's ring takes it out of the queue`() = runTest(testDispatcher) {
+        val (first, second) = twoOffered()
+        val firstJob = Job()
+        every { extensions.extensionManager.install(first) } returns firstJob
+        val viewModel = viewModel()
+
+        viewModel.installAll()
+        advanceUntilIdle()
+        viewModel.cancelInstall(SECOND_PACKAGE)
+        advanceUntilIdle()
+        viewModel.state.value.installSteps[SECOND_PACKAGE].shouldBeNull()
+        firstJob.complete()
+        advanceUntilIdle()
+
+        verify(exactly = 0) { extensions.extensionManager.install(second) }
+    }
+
+    @Test
+    fun `extensions from a store the restore added wait in the report until Install all installs them`() =
+        runTest(testDispatcher) {
+            extensions.remember(SOURCE_LISTED, "Listed")
+            val offering = extensions.available(PACKAGE, SOURCE_LISTED)
+            extensions.availableFlow.value = listOf(offering)
+            val waiting = ImportReport.FromAddedStore(offering.name, PACKAGE, "Added Store", "https://example.invalid/added/index.pb")
+            stored = report(
+                missingSources = listOf(SOURCE_LISTED),
+                extensionInstalls = ImportReport.ExtensionInstalls(fromAddedStores = listOf(waiting)),
+            )
+            val viewModel = viewModel()
+            viewModel.state.value.waiting shouldContainExactly listOf(waiting)
+
+            viewModel.installAll()
+            advanceUntilIdle()
+            verify(exactly = 1) { extensions.extensionManager.install(offering) }
+
+            extensions.installedFlow.value = listOf(mockk<Extension.Installed> { every { packageName } returns PACKAGE })
+            advanceUntilIdle()
+            viewModel.state.value.waiting.shouldBeEmpty()
+        }
+
+    /** Two sources the report names, each offered by an extension of its own. */
+    private fun twoOffered(): Pair<Extension.Available, Extension.Available> {
+        val first = extensions.available(PACKAGE, SOURCE_LISTED)
+        val second = extensions.available(SECOND_PACKAGE, SOURCE_SECOND)
+        extensions.remember(SOURCE_LISTED, "Listed")
+        extensions.remember(SOURCE_SECOND, "Second")
+        extensions.availableFlow.value = listOf(first, second)
+        stored = report(missingSources = listOf(SOURCE_LISTED, SOURCE_SECOND))
+        return first to second
+    }
+
+    @Test
     fun `the error log is one stamped line per error in the order the run met them`() {
         val errors = listOf(
             error(ImportError.Kind.CHAPTERS, "An entry", at = 0L, sourceLabel = "A source"),
@@ -286,6 +438,7 @@ class ImportReportViewModelTest {
         missingSources: List<Long> = emptyList(),
         trackersNotSignedIn: List<Long> = emptyList(),
         unknownTrackers: List<Long> = emptyList(),
+        extensionInstalls: ImportReport.ExtensionInstalls? = null,
     ) = ImportReport(
         fileSha256 = "00",
         startedAt = 1L,
@@ -309,12 +462,15 @@ class ImportReportViewModelTest {
         errors = errors,
         trackersNotSignedIn = trackersNotSignedIn,
         missingSources = missingSources,
+        extensionInstalls = extensionInstalls,
     )
 
     private companion object {
         const val SOURCE_LISTED = 7_310_000_000_000_111L
         const val SOURCE_UNLISTED = 7_310_000_000_000_112L
         const val PACKAGE = "dev.example.fixture.listed"
+        const val SOURCE_SECOND = 7_310_000_000_000_113L
+        const val SECOND_PACKAGE = "dev.example.fixture.second"
         const val TRACKER_ID = 1L
         const val UNSHIPPED_TRACKER_ID = 2L
         const val TREE = "content://fixture/tree/primary%3ADownloads"

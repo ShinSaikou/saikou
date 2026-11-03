@@ -321,6 +321,7 @@ class ScaleRowsTest {
                             appSettings = false,
                             extensionStores = false,
                             sourceSettings = false,
+                            installExtensions = false,
                         ),
                         progress = {},
                     )

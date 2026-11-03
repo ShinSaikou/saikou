@@ -2,6 +2,7 @@ package com.shinsaikou.backup.fixture
 
 import android.content.SharedPreferences
 import androidx.preference.PreferenceScreen
+import com.shinsaikou.domain.extension.SourceExtensionInstaller
 import com.shinsaikou.source.CatalogueSource
 import com.shinsaikou.source.ConfigurableSource
 import com.shinsaikou.source.Source
@@ -90,6 +91,29 @@ class FakeStubSourceNames : StubSourceNames {
     override suspend fun remember(id: Long, name: String, lang: String) {
         beforeRemember?.invoke()
         remembered[id] = StubSourceNames.Entry(id, name, lang)
+    }
+}
+
+/**
+ * Answers Install extensions with [answer], by default every source not found, as a device whose
+ * repositories list none of the fixture's sources; [requests] is each call's sources, in order, and
+ * [storesBefore] each call's stores from before the restore.
+ */
+class FakeSourceExtensionInstaller : SourceExtensionInstaller {
+    val requests = mutableListOf<List<SourceExtensionInstaller.WantedSource>>()
+    val storesBefore = mutableListOf<List<SourceExtensionInstaller.KnownStore>>()
+
+    var answer: suspend (List<SourceExtensionInstaller.WantedSource>, (SourceExtensionInstaller.Progress) -> Unit) -> SourceExtensionInstaller.Outcome =
+        { sources, _ -> SourceExtensionInstaller.Outcome(notFound = sources) }
+
+    override suspend fun install(
+        sources: List<SourceExtensionInstaller.WantedSource>,
+        storesBefore: List<SourceExtensionInstaller.KnownStore>,
+        onProgress: (SourceExtensionInstaller.Progress) -> Unit,
+    ): SourceExtensionInstaller.Outcome {
+        requests += sources
+        this.storesBefore += storesBefore
+        return answer(sources, onProgress)
     }
 }
 

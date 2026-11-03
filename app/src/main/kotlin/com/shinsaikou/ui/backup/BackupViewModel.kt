@@ -12,6 +12,7 @@ import com.shinsaikou.backup.export.BackupScheduler
 import com.shinsaikou.backup.importer.BackupImportRequest
 import com.shinsaikou.backup.importer.ImportCheckpointStore
 import com.shinsaikou.backup.importer.ImportProgress
+import com.shinsaikou.backup.importer.ImportReport
 import com.shinsaikou.core.common.coroutines.Dispatchers
 import com.shinsaikou.i18n.R
 import com.shinsaikou.presentation.core.viewmodel.StateViewModel
@@ -26,8 +27,10 @@ import eu.kanade.tachiyomi.data.backup.create.BackupOptions
 import eu.kanade.tachiyomi.data.backup.restore.RestoreOptions
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
@@ -50,6 +53,10 @@ import kotlinx.coroutines.withContext
  * upstream's `RestoreBackupScreen` checks it (unit restore-report): [check] reads the header for the
  * sources this device has no extension for and the trackers it is not signed in to, and the screen
  * shows them with Restore and Cancel, since opening a file is not yet asking to restore it.
+ *
+ * Under the last restore's result, the tab counts the extensions that restore left for the owner
+ * because only a store the backup added lists them, with the report's Install all
+ * ([RestoreExtensionInstalls]), so the owner who stays on the tab meets them there.
  */
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModel>())
 @ViewModelKey(BackupViewModel::class)
@@ -61,6 +68,7 @@ class BackupViewModel(
     private val backupFileCopy: BackupFileCopy,
     private val validator: BackupFileValidator,
     private val checkpoints: ImportCheckpointStore,
+    private val installs: RestoreExtensionInstalls,
     private val dispatchers: Dispatchers,
 ) : StateViewModel<BackupViewModel.State>(State()) {
 
@@ -82,6 +90,10 @@ class BackupViewModel(
         val pendingRestore: PendingRestore? = null,
         /** When the last restore's report was written, for the Restore report row; null with none. */
         val lastReportAt: Long? = null,
+        /** The last restore's extensions from stores it added that are not installed yet. */
+        val waiting: List<ImportReport.FromAddedStore> = emptyList(),
+        /** While the report's Install all runs, from this tab or the report: which of how many. */
+        val installingAll: RestoreExtensionInstalls.Progress? = null,
     )
 
     /** A file [check] has read, with what it found missing on this device. */
@@ -104,6 +116,11 @@ class BackupViewModel(
      * has to come after the queued line, not under it.
      */
     private val reports = Mutex()
+
+    /** The last restore's report, read with [refreshLastReport], for [installAll]. */
+    private var lastReport: ImportReport? = null
+
+    private var waitingJob: Job? = null
 
     init {
         // A restore writes the app preferences back, the export interval among them, and nothing
@@ -144,6 +161,9 @@ class BackupViewModel(
                 .flowOn(dispatchers.io)
                 .collect { progress -> mutableState.update { it.copy(progress = progress) } }
         }
+        viewModelScope.launch {
+            installs.state.collect { queue -> mutableState.update { it.copy(installingAll = queue.installingAll) } }
+        }
     }
 
     fun setExportLibraryEntries(enabled: Boolean) = updateExport { it.copy(libraryEntries = enabled) }
@@ -175,6 +195,8 @@ class BackupViewModel(
     fun setRestoreExtensionStores(enabled: Boolean) = updateRestore { it.copy(extensionStores = enabled) }
 
     fun setRestoreSourceSettings(enabled: Boolean) = updateRestore { it.copy(sourceSettings = enabled) }
+
+    fun setRestoreInstallExtensions(enabled: Boolean) = updateRestore { it.copy(installExtensions = enabled) }
 
     /** [uri] is the document the screen's picker just created. */
     fun export(uri: Uri) {
@@ -259,8 +281,10 @@ class BackupViewModel(
     }
 
     /**
-     * The report file's time rather than its decoded `finishedAt`: a run where every entry failed
-     * writes megabytes of errors, and this row only needs the date.
+     * The report file's time rather than its decoded `finishedAt`, which the row shows before the
+     * report is decoded: a run where every entry failed writes megabytes of errors. The report is
+     * then read on IO for the extensions it left waiting, which follow the device from there: one
+     * installed from anywhere leaves the count.
      */
     private fun refreshLastReport() {
         viewModelScope.launch {
@@ -268,7 +292,20 @@ class BackupViewModel(
                 runCatching { checkpoints.reportFile.takeIf { it.exists() }?.lastModified() }.getOrNull()
             }
             mutableState.update { it.copy(lastReportAt = at) }
+            val report = if (at == null) null else withContext(dispatchers.io) { checkpoints.loadReport() }
+            lastReport = report
+            waitingJob?.cancel()
+            waitingJob = viewModelScope.launch {
+                val waiting = report?.let(installs::waiting) ?: flowOf(emptyList())
+                waiting.flowOn(dispatchers.io).collect { list -> mutableState.update { it.copy(waiting = list) } }
+            }
         }
+    }
+
+    /** The report's Install all, from the Restore tab: the same queue, which the report then shows too. */
+    fun installAll() {
+        val report = lastReport ?: return
+        installs.installAll(report.sourcesWithoutExtension)
     }
 
     /** Lists the kept backups again: on opening the screen, and after an export may have rotated them. */

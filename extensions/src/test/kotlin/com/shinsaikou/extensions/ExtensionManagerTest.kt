@@ -129,6 +129,25 @@ class ExtensionManagerTest {
     }
 
     @Test
+    fun `installAndWait returns when the install ended, with whether it installed`() = runTest {
+        every { installer.downloadAndInstall(PACKAGE, APK_URL) } returns flow {
+            emit(InstallStep.Pending)
+            emit(InstallStep.Installed)
+        }
+        coEvery { loader.loadPackage(PACKAGE) } returns LoadResult.Success(installed(PACKAGE, versionCode = 1L))
+        val manager = buildManager()
+
+        manager.installAndWait(available()) shouldBe true
+        manager.packagesOnDisk() shouldBe setOf(PACKAGE)
+
+        every { installer.downloadAndInstall(PACKAGE, APK_URL) } returns flow {
+            emit(InstallStep.Pending)
+            throw InstallFailedException(InstallRejection.UNSIGNED)
+        }
+        manager.installAndWait(available()) shouldBe false
+    }
+
+    @Test
     fun `a failed install keeps its reason until the package is tried again`() = runTest {
         // The silent failure this guards: the step alone says Error, and the row went back to its
         // button with no word on why. The refusal now stays beside the step.
@@ -368,6 +387,27 @@ class ExtensionManagerTest {
         manager.availableExtensions.value.map { it.packageName }.sorted() shouldBe listOf(PACKAGE, OTHER_PACKAGE)
         val failure = result.exceptionOrNull().shouldBeInstanceOf<RepoRefreshException>()
         failure.failures shouldBe listOf(RepoRefreshException.Failure(second, down))
+    }
+
+    @Test
+    fun `availableFrom lists only what the named indexes list, the newest entry per package among them`() = runTest {
+        val first = store()
+        val second = store(indexUrl = OTHER_INDEX_URL, name = "Other Fixture Index")
+        val firstIndex = FetchedIndex(store = first, extensions = emptyList(), fetchedAtElapsedMs = 0L)
+        val secondIndex = FetchedIndex(store = second, extensions = emptyList(), fetchedAtElapsedMs = 0L)
+        coEvery { stores.getAll() } returns listOf(first, second)
+        coEvery { repoClient.fetch(INDEX_URL) } returns Result.success(firstIndex)
+        coEvery { repoClient.fetch(OTHER_INDEX_URL) } returns Result.success(secondIndex)
+        coEvery { repoClient.extensions(firstIndex) } returns Result.success(listOf(available(PACKAGE, versionCode = 1L)))
+        // The other index carries the same package, newer, and one of its own.
+        coEvery { repoClient.extensions(secondIndex) } returns
+            Result.success(listOf(available(PACKAGE, versionCode = 2L), available(OTHER_PACKAGE)))
+        val manager = buildManager()
+        manager.refreshAvailable()
+
+        manager.availableExtensions.value.single { it.packageName == PACKAGE }.versionCode shouldBe 2L
+        manager.availableFrom(setOf(INDEX_URL)).map { it.packageName to it.versionCode } shouldBe listOf(PACKAGE to 1L)
+        manager.availableFrom(emptySet()) shouldBe emptyList()
     }
 
     @Test

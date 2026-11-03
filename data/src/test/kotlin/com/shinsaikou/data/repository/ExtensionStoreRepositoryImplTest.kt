@@ -1,8 +1,10 @@
 package com.shinsaikou.data.repository
 
 import app.cash.turbine.test
+import com.shinsaikou.data.DatabaseInitializer
 import com.shinsaikou.data.extension.ExtensionStoreRepositoryImpl
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.test.runTest
 import tachiyomi.domain.extension.model.ExtensionStore
@@ -87,6 +89,42 @@ class ExtensionStoreRepositoryImplTest : RepositoryTest() {
         repository.updateIfSigningKey(store(name = "Renamed"), expectedSigningKey = "0".repeat(64)) shouldBe false
 
         repository.get(INDEX_URL) shouldBe store(signingKey = "1".repeat(64))
+    }
+
+    @Test
+    fun `mergeDuplicates folds a repository listed under two addresses into its named row`() = runTest {
+        // What a restore of a backup with upstream's legacy set beside its store list left behind.
+        val base = "https://example.invalid/repo"
+        val legacy = ExtensionStore(
+            indexUrl = "$base/repo.json",
+            name = "",
+            badgeLabel = "",
+            signingKey = "",
+            contact = ExtensionStore.Contact(website = base, discord = null),
+            isLegacy = true,
+            extensionListUrl = null,
+        )
+        val named = store().copy(indexUrl = "$base/index.pb")
+        val other = store().copy(indexUrl = "https://example.invalid/other/index.pb")
+        listOf(legacy, named, other).forEach { repository.upsert(it) }
+
+        repository.mergeDuplicates() shouldBe 1
+
+        repository.getAll() shouldContainExactlyInAnyOrder listOf(named, other)
+        repository.mergeDuplicates() shouldBe 0
+    }
+
+    @Test
+    fun `the start-up sweep repairs the duplicates an earlier restore left`() = runTest {
+        val base = "https://example.invalid/repo"
+        val unnamed = store(name = "").copy(indexUrl = "$base/repo.json", badgeLabel = "", isLegacy = true)
+        val named = store().copy(indexUrl = "$base/index.pb", extensionListUrl = null)
+        repository.upsert(unnamed)
+        repository.upsert(named)
+
+        DatabaseInitializer(handler, driver).initialize()
+
+        repository.getAll() shouldContainExactly listOf(named)
     }
 
     private fun store(
