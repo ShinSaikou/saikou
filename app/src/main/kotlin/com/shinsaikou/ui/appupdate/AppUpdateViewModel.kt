@@ -1,5 +1,6 @@
 package com.shinsaikou.ui.appupdate
 
+import android.content.res.Resources
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shinsaikou.appupdate.AppUpdate
@@ -8,6 +9,7 @@ import com.shinsaikou.appupdate.AppUpdateChecker
 import com.shinsaikou.appupdate.AppUpdateInstaller
 import com.shinsaikou.appupdate.AppUpdatePreferences
 import com.shinsaikou.appupdate.AppUpdateScheduler
+import com.shinsaikou.i18n.R
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
@@ -22,7 +24,18 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
- * The prompt over the main screen and the two rows in Settings > Advanced. Each holds its own
+ * The line a check the owner asked for ends with, on the snackbar of the screen it was asked from
+ * (Settings > Advanced, More > About); null for a newer release, which raises the prompt instead.
+ */
+internal fun AppUpdateChecker.Result.message(resources: Resources, appName: String): String? = when (this) {
+    is AppUpdateChecker.Result.Available -> null
+    AppUpdateChecker.Result.UpToDate -> resources.getString(R.string.app_update_up_to_date)
+    AppUpdateChecker.Result.Failed -> resources.getString(R.string.app_update_check_failed)
+    is AppUpdateChecker.Result.NoApk -> resources.getString(R.string.app_update_no_apk, appName, version)
+}
+
+/**
+ * The prompt over the main screen, the two rows in Settings > Advanced and the one in More > About. Each holds its own
  * instance; the offer and the check in progress are [AppUpdateChecker]'s, one per process, so both
  * see the same.
  *
@@ -70,7 +83,7 @@ class AppUpdateViewModel(
         State(offer = offer, checking = checking, askInstallPermission = local.askInstallPermission, notice = local.notice)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), State())
 
-    /** Settings' "Check for updates"; [onResult] says how it went, and a newer release also raises the prompt. */
+    /** "Check for updates" in Settings and in About; [onResult] says how it went, and a newer release also raises the prompt. */
     fun checkNow(onResult: (AppUpdateChecker.Result) -> Unit) {
         viewModelScope.launch { onResult(checker.checkNow()) }
     }

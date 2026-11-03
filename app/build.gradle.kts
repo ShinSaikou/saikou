@@ -74,6 +74,9 @@ android {
         // only. A debug build checks only when asked, and the benchmark build never by itself, so a
         // measured launch makes no request to GitHub.
         buildConfigField("boolean", "APP_UPDATE_AUTO_CHECK", "false")
+        // Which of a release's APKs the in-app updater offers: app-release.apk in every build but
+        // publicDebug, which offers app-debug.apk, the build it is itself.
+        buildConfigField("boolean", "APP_UPDATE_DEBUG_APK", "false")
 
         // The Google Drive client the owner registers (phase 3 Q1, owner item 2), a Desktop app
         // client whose secret ships in the APK by design. Empty when absent, and then the app offers
@@ -153,6 +156,26 @@ android {
             isDebuggable = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro", "benchmark-rules.pro")
         }
+        // The debug APK each release ships as app-debug.apk, for trying a fix and sending a bug
+        // report. It is debug with its own package, so it installs next to the release with a
+        // library of its own and the label "Shin Saikou Debug" (src/publicDebug/res). Debug itself
+        // stays com.shinsaikou: the tools, the device tests and the docs install and start it by
+        // that id. It has none of src/debug's test hooks either, so it is the app as shipped, with
+        // a debugger and logs. Signed like the release, so the owner's key with
+        // -Psaikou.ownerSigning=true, and one release's debug APK then updates the last one's.
+        create("publicDebug") {
+            initWith(getByName("debug"))
+            isDebuggable = true
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+            buildConfigField("boolean", "APP_UPDATE_DEBUG_APK", "true")
+            signingConfig = when (releaseKey) {
+                is ReleaseKey.Owner -> signingConfigs.getByName("release")
+                is ReleaseKey.Unavailable -> null
+                ReleaseKey.Debug -> signingConfigs.getByName("debug")
+            }
+            matchingFallbacks += "debug"
+        }
     }
 
     // AGP registers connected-test tasks only for this variant. It stays on debug for ordinary
@@ -175,7 +198,7 @@ val checkOwnerSigning = tasks.register("checkOwnerSigning") {
     val reason = (releaseKey as? ReleaseKey.Unavailable)?.reason
     doLast { if (reason != null) throw GradleException(reason) }
 }
-tasks.matching { it.name == "preReleaseBuild" }.configureEach { dependsOn(checkOwnerSigning) }
+tasks.matching { it.name == "preReleaseBuild" || it.name == "prePublicDebugBuild" }.configureEach { dependsOn(checkOwnerSigning) }
 
 // Q18's row release_build_owner_signed reads the report this writes. The certificate comes from the
 // release signing config's own values, so the check is of the key the build signed with.

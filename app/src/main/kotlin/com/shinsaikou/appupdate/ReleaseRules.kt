@@ -28,7 +28,7 @@ sealed interface ReleaseVerdict {
     /** Newer, but the owner chose to skip exactly this version or a newer one. */
     data class Skipped(val version: String) : ReleaseVerdict
 
-    /** Newer, but no `.apk` asset fits this device, so there is nothing to install. */
+    /** Newer, but no `.apk` asset of this build's kind fits this device, so there is nothing to install. */
     data class NoApk(val version: String) : ReleaseVerdict
 }
 
@@ -41,7 +41,7 @@ object ReleaseRules {
      * Judges [release] against the installed [versionName]. [skippedVersion] is the version the
      * owner skipped (empty for none); it holds back that version and any older one, and a newer
      * release is offered again. [honourSkip] is false for a check the owner asked for, which offers
-     * a skipped version anyway.
+     * a skipped version anyway. [kind] is the build installed, whose own APK alone is offered.
      */
     fun judge(
         release: GitHubRelease,
@@ -49,6 +49,7 @@ object ReleaseRules {
         skippedVersion: String,
         primaryAbi: String?,
         honourSkip: Boolean,
+        kind: ApkKind,
     ): ReleaseVerdict {
         // The latest endpoint never answers with either, but a fork's proxy or a future API might.
         if (release.draft || release.prerelease) return ReleaseVerdict.UpToDate
@@ -57,7 +58,7 @@ object ReleaseRules {
         if (offered <= installed) return ReleaseVerdict.UpToDate
         val skipped = AppVersion.fromTag(skippedVersion)
         if (honourSkip && skipped != null && offered <= skipped) return ReleaseVerdict.Skipped(offered.toString())
-        val asset = ApkAssets.choose(release.assets, primaryAbi) ?: return ReleaseVerdict.NoApk(offered.toString())
+        val asset = ApkAssets.choose(release.assets, primaryAbi, kind) ?: return ReleaseVerdict.NoApk(offered.toString())
         return ReleaseVerdict.Offer(
             AppUpdate(
                 version = offered.toString(),

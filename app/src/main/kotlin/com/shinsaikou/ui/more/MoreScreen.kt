@@ -30,7 +30,8 @@ import tachiyomi.presentation.core.i18n.stringResource
 import com.shinsaikou.R as AppR
 
 /**
- * The More tab: the two process-wide toggles, then the way in to everything that is not a tab.
+ * The More tab: the two process-wide toggles, then the way in to everything that is not a tab. The
+ * logo at the top opens About, as upstream's About row does.
  *
  * It has no view model of its own. Both toggles are `BasePreferences` values the whole app reads,
  * so they live on `MainViewModel`, which the navigation host owns; this screen is handed their
@@ -58,7 +59,13 @@ fun MoreScreen(
         },
     ) { padding ->
         ScrollbarLazyColumn(contentPadding = padding) {
-            item { LogoHeader(iconPadding = PaddingValues(vertical = 32.dp)) }
+            item {
+                LogoHeader(
+                    iconPadding = PaddingValues(vertical = 32.dp),
+                    onClick = { navigator.open(Route.About) },
+                    onClickLabel = stringResource(R.string.about_open, stringResource(R.string.app_name)),
+                )
+            }
             item { SectionLabel(stringResource(R.string.more_section_quick)) }
             item {
                 SwitchRow(

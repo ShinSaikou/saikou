@@ -22,6 +22,17 @@ release may change behaviour.
   clears every entry, hidden ones too.
 - **Open random entry** in the Library's menu opens a random entry from the category on screen,
   after filters and search.
+- An About screen: tap the logo at the top of the More tab. It shows the version, the build and
+  the commit (tap them to copy one line for a report), has **Check for updates**, and lists the
+  latest release's APKs with their size, to update or download. **Share bug report** sends a text
+  file with the version, the device and the app's recent log, with sign-in tokens and cookies taken
+  out; it can still name titles and sources from your library. **Copy device info** copies the
+  same lines without the log, for a chat. Report an issue, Discord and the website are linked
+  there too.
+- From the release after this one, every release carries a debug APK next to the app. It installs
+  beside your app as Shin Saikou Debug, with a library of its own, so you can try a fix or send a
+  detailed bug report without touching your library. Its Check for updates offers the next
+  release's debug APK.
 
 ### Changed
 
@@ -62,6 +73,8 @@ release may change behaviour.
 
 ### Fixed
 
+- The shortcuts on a long press of the app icon (Library, Updates, History, Browse) open the
+  app again. They pointed at a package that does not exist, so tapping one did nothing.
 - With Two pane layout set to Always on a phone, an entry's title is readable again. The cover
   took the narrow pane's whole width and left the title one letter per line; the cover now sits
   above the title there, and the bar over the pane no longer shows a stray dot for the title.

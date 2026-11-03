@@ -15,7 +15,8 @@ import java.io.File
  * crash directory, so nothing here needs a manifest or resource change.
  *
  * The crash screen shares through the same call with [CrashLogProvider]'s [authority], so the file
- * is served from its own process rather than from the main one.
+ * is served from its own process rather than from the main one. More > About shares its bug report
+ * through it too, from the cache's `share/` directory, with a [subject] of its own.
  */
 object CrashLogExport {
 
@@ -26,12 +27,13 @@ object CrashLogExport {
         activity: Activity,
         file: File,
         authority: String = "${activity.packageName}.provider",
+        subject: String = activity.getString(R.string.crash_share_subject),
     ): Boolean = runCatching {
         val uri = FileProvider.getUriForFile(activity, authority, file)
         val send = Intent(Intent.ACTION_SEND).apply {
             type = MIME_TYPE
             putExtra(Intent.EXTRA_STREAM, uri)
-            putExtra(Intent.EXTRA_SUBJECT, activity.getString(R.string.crash_share_subject))
+            putExtra(Intent.EXTRA_SUBJECT, subject)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             clipData = ClipData.newRawUri(null, uri)
         }

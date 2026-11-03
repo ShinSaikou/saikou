@@ -28,7 +28,8 @@ class ReleaseRulesTest {
         versionName: String = "0.0.1",
         skipped: String = "",
         honourSkip: Boolean = true,
-    ) = ReleaseRules.judge(release, versionName, skipped, primaryAbi = "arm64-v8a", honourSkip = honourSkip)
+        kind: ApkKind = ApkKind.RELEASE,
+    ) = ReleaseRules.judge(release, versionName, skipped, primaryAbi = "arm64-v8a", honourSkip = honourSkip, kind = kind)
 
     @Test
     fun `a newer release is offered with its file, digest and notes`() {
@@ -90,6 +91,24 @@ class ReleaseRulesTest {
             ReleaseVerdict.NoApk("0.0.2")
         judge(release(assets = listOf(notes))) shouldBe ReleaseVerdict.NoApk("0.0.2")
         judge(release(assets = emptyList())) shouldBe ReleaseVerdict.NoApk("0.0.2")
+    }
+
+    @Test
+    fun `with both APKs attached, the release offers app-release apk and the debug APK app-debug apk`() {
+        val releaseApk = apk.copy(name = "app-release.apk", downloadUrl = "https://github.com/example/app/releases/download/v0.0.2/app-release.apk")
+        val debugApk = apk.copy(name = "app-debug.apk", downloadUrl = "https://github.com/example/app/releases/download/v0.0.2/app-debug.apk")
+        val both = release(assets = listOf(debugApk, releaseApk))
+
+        judge(both).shouldBeInstanceOf<ReleaseVerdict.Offer>().update.assetUrl shouldBe releaseApk.downloadUrl
+        judge(both, versionName = "0.0.1-debug", kind = ApkKind.DEBUG)
+            .shouldBeInstanceOf<ReleaseVerdict.Offer>().update.assetUrl shouldBe debugApk.downloadUrl
+    }
+
+    @Test
+    fun `a release without the debug APK has nothing for the debug build`() {
+        val releaseApk = apk.copy(name = "app-release.apk")
+        judge(release(assets = listOf(releaseApk)), versionName = "0.0.1-debug", kind = ApkKind.DEBUG) shouldBe
+            ReleaseVerdict.NoApk("0.0.2")
     }
 
     @Test

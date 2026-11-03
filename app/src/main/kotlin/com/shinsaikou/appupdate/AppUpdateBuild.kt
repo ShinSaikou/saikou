@@ -13,4 +13,6 @@ data class AppUpdateBuild(
     val automaticChecks: Boolean,
     /** `Build.SUPPORTED_ABIS[0]`, which picks the release's file. */
     val primaryAbi: String?,
+    /** Which of the release's APKs this build updates from: the debug APK's own for publicDebug, else the release's. */
+    val apkKind: ApkKind = ApkKind.RELEASE,
 )

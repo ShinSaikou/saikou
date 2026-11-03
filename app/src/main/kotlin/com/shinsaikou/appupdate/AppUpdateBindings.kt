@@ -34,5 +34,6 @@ object AppUpdateBuildBindings {
         versionName = BuildConfig.VERSION_NAME,
         automaticChecks = BuildConfig.APP_UPDATE_AUTO_CHECK,
         primaryAbi = Build.SUPPORTED_ABIS.firstOrNull(),
+        apkKind = if (BuildConfig.APP_UPDATE_DEBUG_APK) ApkKind.DEBUG else ApkKind.RELEASE,
     )
 }

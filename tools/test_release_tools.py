@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unit tests for tools/release/: release_version.py, install_release.py and pre_switch.py.
+"""Unit tests for tools/release/: release_version.py, install_release.py, pre_switch.py and release_assets.py.
 
 Run with: python3 -m unittest discover -s tools -p 'test_*.py'
 
@@ -25,7 +25,15 @@ The cases that matter, and why each one is here:
   - both device scripts print each named serial's model and whether it is an emulator (ro.kernel.qemu
     is 1 or the serial starts with emulator-) before they install or read anything, and refuse
     nothing on it;
-  - gate.sh runs release_version.py in phase 3 only, and the collect subject keeps 0.1.0 otherwise.
+  - gate.sh runs release_version.py in phase 3 only, and the collect subject keeps 0.1.0 otherwise;
+  - release_assets.py copies the release and publicDebug APKs as app-release.apk and app-debug.apk only
+    when they are com.shinsaikou and com.shinsaikou.debug at one versionCode, the debug name is the
+    release's plus -debug, and both carry the same signer; any failed check, a missing APK or a tool
+    that failed copies nothing and removes an earlier run's pair; it prints the two-asset gh command,
+    and no certificate;
+  - while last-release.json records a versionCode below 5 (0.1.2, the first updater that tells the two
+    APKs apart), and for the release at 5 itself, release_assets.py copies app-release.apk alone, says
+    why and prints the one-asset gh command, since an older updater finds no APK in a release with two.
 """
 
 from __future__ import annotations
@@ -49,6 +57,7 @@ sys.path.insert(0, str(TOOLS / "release"))
 import apk as apks  # noqa: E402
 import install_release  # noqa: E402
 import pre_switch  # noqa: E402
+import release_assets  # noqa: E402
 import release_version  # noqa: E402
 
 OWNER_PHONE = "owner-phone"
@@ -471,6 +480,158 @@ class GateWiringTest(unittest.TestCase):
         self.assertEqual(self.gate.count("SUBJECT_VERSION="), 2)
         self.assertIn('--subject "com.shinsaikou:$SUBJECT_VERSION:$(git rev-parse --short HEAD)"', self.gate)
         self.assertNotIn("com.shinsaikou:0.1.0:", self.gate)
+
+
+class ReleaseAssetsTest(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.stubs = Stubs(self)
+        self.out = self.stubs.dir / "release-assets"
+        self.record(5)
+
+    def record(self, code: int) -> None:
+        """The versionCode last-release.json records: 5 (0.1.2 on the devices) unless a test says otherwise."""
+        self.stubs.last.write_text(json.dumps({"versionCode": code}))
+
+    def pair(self, release: dict | None = None, debug: dict | None = None) -> tuple[Path, Path]:
+        release_apk = self.stubs.apk("app-release.apk", **{"code": 6, "version_name": "0.1.3", "signer": "owner",
+                                                            **(release or {})})
+        debug_apk = self.stubs.apk("app-publicDebug.apk", **{"code": 6, "version_name": "0.1.3-debug",
+                                                             "package": "com.shinsaikou.debug", "signer": "owner",
+                                                             **(debug or {})})
+        return release_apk, debug_apk
+
+    def run_assets(self, release_apk: Path, debug_apk: Path, aapt2: Path | None = None) -> tuple[int, str, str]:
+        return run_main(release_assets.main, ["--release", str(release_apk), "--debug", str(debug_apk),
+                                              "--out", str(self.out), "--last", str(self.stubs.last),
+                                              "--aapt2", str(aapt2 or self.stubs.aapt2),
+                                              "--apksigner", str(self.stubs.apksigner)])
+
+    def test_a_matching_pair_is_copied_under_the_release_names_with_the_command(self):
+        release_apk, debug_apk = self.pair()
+        code, out, err = self.run_assets(release_apk, debug_apk)
+        self.assertEqual(code, release_assets.COPIED, err)
+        self.assertEqual((self.out / "app-release.apk").read_text(), release_apk.read_text())
+        self.assertEqual((self.out / "app-debug.apk").read_text(), debug_apk.read_text())
+        self.assertEqual(sorted(path.name for path in self.out.iterdir()), ["app-debug.apk", "app-release.apk"])
+        self.assertIn(f"gh release create v0.1.3 {self.out / 'app-release.apk'} {self.out / 'app-debug.apk'} "
+                      "-R ShinSaikou/saikou --notes-file <notes>", out)
+        self.assertNotIn("left out", out)
+
+    def test_below_the_first_two_apk_updater_only_the_release_apk_is_copied(self):
+        self.assertEqual(release_assets.FIRST_TWO_APK_UPDATER, 5)
+        self.record(4)
+        (self.out).mkdir()
+        (self.out / "app-debug.apk").write_text("an earlier run's debug APK")
+        release_apk, debug_apk = self.pair({"code": 5, "version_name": "0.1.2"},
+                                           {"code": 5, "version_name": "0.1.2-debug"})
+        code, out, err = self.run_assets(release_apk, debug_apk)
+        self.assertEqual(code, release_assets.COPIED, err)
+        self.assertEqual(sorted(path.name for path in self.out.iterdir()), ["app-release.apk"])
+        self.assertEqual((self.out / "app-release.apk").read_text(), release_apk.read_text())
+        self.assertIn(f"app-debug.apk is left out of this release: an install below versionCode 5 (0.1.0, 0.1.1) has "
+                      f"an updater that finds no APK in a release with two. {self.stubs.last} records 4;", out)
+        self.assertIn(f"gh release create v0.1.2 {self.out / 'app-release.apk'} -R ShinSaikou/saikou "
+                      "--notes-file <notes>", out)
+        self.assertNotIn("app-debug.apk -R", out)
+
+    def test_the_release_at_the_first_two_apk_updater_ships_alone_even_once_recorded(self):
+        release_apk, debug_apk = self.pair({"code": 5, "version_name": "0.1.2"},
+                                           {"code": 5, "version_name": "0.1.2-debug"})
+        code, out, err = self.run_assets(release_apk, debug_apk)
+        self.assertEqual(code, release_assets.COPIED, err)
+        self.assertEqual(sorted(path.name for path in self.out.iterdir()), ["app-release.apk"])
+        self.assertIn("app-debug.apk is left out of this release", out)
+
+    def test_which_releases_attach_the_debug_apk(self):
+        for recorded, release_code, ships in ((2, 5, False), (4, 5, False), (5, 5, False), (4, 6, False),
+                                              (5, 6, True), (6, 7, True)):
+            with self.subTest(recorded=recorded, release_code=release_code):
+                self.assertEqual(release_assets.ships_debug(recorded, release_code), ships)
+
+    def test_every_mismatch_is_refused_and_named(self):
+        cases = {
+            "the release APK is app.other, not com.shinsaikou": ({"package": "app.other"}, None),
+            "the debug APK is com.shinsaikou, not com.shinsaikou.debug": (None, {"package": "com.shinsaikou"}),
+            "versionCode 5 is not the release's 6": (None, {"code": 5}),
+            "versionName 0.1.2-debug is not 0.1.3-debug": (None, {"version_name": "0.1.2-debug"}),
+            "versionName 0.1.3-debug is not a plain version": ({"version_name": "0.1.3-debug"}, {"version_name": "0.1.3-debug-debug"}),
+            "not signed with the same key": (None, {"signer": "debug"}),
+        }
+        for reason, (release, debug) in cases.items():
+            with self.subTest(reason=reason):
+                code, out, err = self.run_assets(*self.pair(release, debug))
+                self.assertEqual(code, release_assets.REFUSED, out)
+                self.assertIn(reason, err)
+                self.assertFalse(self.out.exists() and any(self.out.iterdir()))
+
+    def test_a_refused_run_removes_an_earlier_runs_pair(self):
+        self.assertEqual(self.run_assets(*self.pair())[0], release_assets.COPIED)
+        code, _, err = self.run_assets(*self.pair(debug={"signer": "debug"}))
+        self.assertEqual(code, release_assets.REFUSED)
+        self.assertEqual(list(self.out.iterdir()), [])
+        self.assertIn("holds neither APK", err)
+
+    def test_a_missing_apk_after_a_copied_pair_removes_the_pair(self):
+        release_apk, debug_apk = self.pair()
+        self.assertEqual(self.run_assets(release_apk, debug_apk)[0], release_assets.COPIED)
+        debug_apk.unlink()
+        code, _, err = self.run_assets(release_apk, debug_apk)
+        self.assertEqual(code, release_assets.BAD_INPUT)
+        self.assertIn("run ./gradlew :app:assemblePublicDebug", err)
+        self.assertEqual(list(self.out.iterdir()), [])
+        self.assertIn("holds neither APK", err)
+
+    def test_a_tool_failure_after_a_copied_pair_removes_the_pair(self):
+        release_apk, debug_apk = self.pair()
+        self.assertEqual(self.run_assets(release_apk, debug_apk)[0], release_assets.COPIED)
+        failing = self.stubs.tool("aapt2-failing", "import sys\nsys.exit(3)\n")
+        code, _, err = self.run_assets(release_apk, debug_apk, aapt2=failing)
+        self.assertEqual(code, release_assets.BAD_INPUT)
+        self.assertIn("aapt2-failing exited 3", err)
+        self.assertEqual(list(self.out.iterdir()), [])
+        self.assertIn("holds neither APK", err)
+
+    def test_an_unreadable_record_after_a_copied_pair_removes_the_pair(self):
+        release_apk, debug_apk = self.pair()
+        self.assertEqual(self.run_assets(release_apk, debug_apk)[0], release_assets.COPIED)
+        self.stubs.last.write_text("{}")
+        code, _, err = self.run_assets(release_apk, debug_apk)
+        self.assertEqual(code, release_assets.BAD_INPUT)
+        self.assertIn("holds no positive integer versionCode", err)
+        self.assertEqual(list(self.out.iterdir()), [])
+
+    def test_a_signer_set_that_only_overlaps_is_not_the_same_key(self):
+        code, _, err = self.run_assets(*self.pair(debug={"signer": "owner,other"}))
+        self.assertEqual(code, release_assets.REFUSED)
+        self.assertIn("not signed with the same key", err)
+
+    def test_a_missing_apk_names_the_task_that_builds_it(self):
+        release_apk, _ = self.pair()
+        code, _, err = self.run_assets(release_apk, self.stubs.dir / "gone.apk")
+        self.assertEqual(code, release_assets.BAD_INPUT)
+        self.assertIn("run ./gradlew :app:assemblePublicDebug", err)
+        self.assertFalse(self.out.exists())
+
+    def test_nothing_printed_is_a_certificate(self):
+        _, out, err = self.run_assets(*self.pair())
+        self.assertNotIn(base64.b64encode(b"CERT-owner").decode(), out + err)
+        self.assertNotIn("CERTIFICATE", out + err)
+
+    def test_the_defaults_are_gradles_outputs(self):
+        outputs = apks.ROOT / "app" / "build" / "outputs"
+        self.assertEqual(release_assets.DEFAULT_RELEASE, outputs / "apk" / "release" / "app-release.apk")
+        self.assertEqual(release_assets.DEFAULT_DEBUG, outputs / "apk" / "publicDebug" / "app-publicDebug.apk")
+        self.assertEqual(release_assets.DEFAULT_OUT, outputs / "release-assets")
+
+    def test_contributing_documents_the_two_asset_release(self):
+        steps = (TOOLS.parent / "CONTRIBUTING.md").read_text()
+        self.assertIn(":app:assembleRelease :app:assemblePublicDebug :app:verifyReleaseSigning -Psaikou.ownerSigning=true", steps)
+        self.assertIn("python3 tools/release/release_assets.py", steps)
+        self.assertIn("gh release create v<version> app/build/outputs/release-assets/app-release.apk "
+                      "app/build/outputs/release-assets/app-debug.apk -R ShinSaikou/saikou --notes-file <notes>", steps)
+        self.assertIn("0.1.2 ships `app-release.apk` alone", steps)
+        self.assertIn("download the update from\n   https://shinsaikou.com.", steps)
 
 
 if __name__ == "__main__":

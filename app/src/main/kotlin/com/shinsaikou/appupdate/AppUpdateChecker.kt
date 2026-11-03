@@ -115,5 +115,6 @@ class AppUpdateChecker(
         skippedVersion = preferences.skippedVersion.get(),
         primaryAbi = build.primaryAbi,
         honourSkip = honourSkip,
+        kind = build.apkKind,
     )
 }

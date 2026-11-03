@@ -101,8 +101,10 @@ class ViewModelBindingTest {
     }
 
     @Test
-    fun `the scan finds all twenty-seven known view models, so a shrunken scan cannot pass vacuously`() {
+    fun `the scan finds all twenty-nine known view models, so a shrunken scan cannot pass vacuously`() {
         val expected = setOf(
+            // More > About: the latest release's APKs and the bug report.
+            "src/main/kotlin/com/shinsaikou/ui/about/AboutViewModel.kt",
             // The in-app updater's prompt and its Settings rows.
             "src/main/kotlin/com/shinsaikou/ui/appupdate/AppUpdateViewModel.kt",
             "src/main/kotlin/com/shinsaikou/ui/backup/BackupViewModel.kt",

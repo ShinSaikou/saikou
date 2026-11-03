@@ -34,7 +34,11 @@ class AppUpdateCheckerTest {
     )
     private val newer = GitHubRelease(tagName = "v0.0.2", body = "Fixes.", assets = listOf(apk))
 
-    private fun checker(automaticChecks: Boolean = true, versionName: String = "0.0.1") = AppUpdateChecker(
+    private fun checker(
+        automaticChecks: Boolean = true,
+        versionName: String = "0.0.1",
+        apkKind: ApkKind = ApkKind.RELEASE,
+    ) = AppUpdateChecker(
         releases = releases,
         preferences = preferences,
         build = AppUpdateBuild(
@@ -42,6 +46,7 @@ class AppUpdateCheckerTest {
             versionName = versionName,
             automaticChecks = automaticChecks,
             primaryAbi = "arm64-v8a",
+            apkKind = apkKind,
         ),
         clock = clock,
     )
@@ -183,5 +188,19 @@ class AppUpdateCheckerTest {
         checker.checkAutomatically()
 
         coVerify(exactly = 1) { releases.latest() }
+    }
+
+    @Test
+    fun `a release with both APKs offers each build its own`() = runTest {
+        val base = "https://github.com/example/app/releases/download/v0.0.2/"
+        val releaseApk = GitHubAsset(name = "app-release.apk", downloadUrl = base + "app-release.apk")
+        val debugApk = GitHubAsset(name = "app-debug.apk", downloadUrl = base + "app-debug.apk")
+        coEvery { releases.latest() } returns newer.copy(assets = listOf(releaseApk, debugApk))
+
+        val release = checker().checkNow()
+        val debug = checker(versionName = "0.0.1-debug", apkKind = ApkKind.DEBUG).checkNow()
+
+        (release as AppUpdateChecker.Result.Available).update.assetName shouldBe "app-release.apk"
+        (debug as AppUpdateChecker.Result.Available).update.assetName shouldBe "app-debug.apk"
     }
 }

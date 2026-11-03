@@ -58,6 +58,7 @@ import com.shinsaikou.navigation.SaikouNavigator
 import com.shinsaikou.presentation.core.components.SolveBanner
 import com.shinsaikou.presentation.core.util.LocalTabletUiMode
 import com.shinsaikou.presentation.core.util.isTabletUi
+import com.shinsaikou.ui.about.AboutScreen
 import com.shinsaikou.ui.appupdate.AppUpdatePrompt
 import com.shinsaikou.ui.backup.BackupScreen
 import com.shinsaikou.ui.backup.ImportReportScreen
@@ -356,6 +357,7 @@ private fun AppScaffold(
                 }
                 composable<Route.ImportReport> { ImportReportScreen() }
                 composable<Route.CrashLog> { CrashLogScreen() }
+                composable<Route.About> { AboutScreen() }
                 composable<Route.DownloadQueue> { DownloadQueueScreen() }
                 composable<Route.AdoptionSummary> { AdoptionSummaryScreen() }
                 composable<Route.MigratePicker> { backStackEntry ->

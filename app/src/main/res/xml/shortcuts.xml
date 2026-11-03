@@ -2,7 +2,10 @@
 <!--
     Long-press shortcuts. Each action string is the one MainIntents already maps in
     MainIntents.destinationOf, so the launcher and the notifications reach the navigation host
-    through exactly one mapping. targetPackage is the applicationId, substituted at merge time.
+    through exactly one mapping. targetPackage is the applicationId written out: placeholders such
+    as ${applicationId} are filled in the manifest only, never in a resource, and a shortcut aimed
+    at a package of that literal name opens nothing. publicDebug, whose id ends in .debug, has its
+    own copy in src/publicDebug/res/xml; a change here goes there too.
 -->
 <shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
 
@@ -14,7 +17,7 @@
         android:shortcutLongLabel="@string/shortcut_library_long">
         <intent
             android:action="com.shinsaikou.SHORTCUT_LIBRARY"
-            android:targetPackage="${applicationId}"
+            android:targetPackage="com.shinsaikou"
             android:targetClass="com.shinsaikou.ui.main.MainActivity" />
     </shortcut>
 
@@ -26,7 +29,7 @@
         android:shortcutLongLabel="@string/shortcut_updates_long">
         <intent
             android:action="com.shinsaikou.SHORTCUT_UPDATES"
-            android:targetPackage="${applicationId}"
+            android:targetPackage="com.shinsaikou"
             android:targetClass="com.shinsaikou.ui.main.MainActivity" />
     </shortcut>
 
@@ -38,7 +41,7 @@
         android:shortcutLongLabel="@string/shortcut_history_long">
         <intent
             android:action="com.shinsaikou.SHORTCUT_HISTORY"
-            android:targetPackage="${applicationId}"
+            android:targetPackage="com.shinsaikou"
             android:targetClass="com.shinsaikou.ui.main.MainActivity" />
     </shortcut>
 
@@ -50,7 +53,7 @@
         android:shortcutLongLabel="@string/shortcut_browse_long">
         <intent
             android:action="com.shinsaikou.SHORTCUT_BROWSE"
-            android:targetPackage="${applicationId}"
+            android:targetPackage="com.shinsaikou"
             android:targetClass="com.shinsaikou.ui.main.MainActivity" />
     </shortcut>
 </shortcuts>

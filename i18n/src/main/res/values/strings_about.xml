@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  More > About, opened by a tap on the logo at the top of the More tab: the build that is installed,
+  Check for updates, the latest release's APKs, and the bug report. Every %1$s named app is the
+  app's name. All fresh; a file of its own so parallel units never collide on one file (R13).
+-->
+<resources>
+    <!-- The publicDebug build's name, which its own app_name points at (app/src/publicDebug/res). -->
+    <string name="app_name_debug" translatable="false">Shin Saikou Debug</string>
+
+    <string name="about_title">About</string>
+    <string name="about_open">About %1$s</string>
+
+    <!-- The block at the top; a tap copies about_version_copy_format -->
+    <string name="about_build_type_release">Release</string>
+    <string name="about_build_type_debug">Debug</string>
+    <string name="about_version_format">Version %1$s (%2$d)</string>
+    <string name="about_build_format">%1$s build, commit %2$s</string>
+    <string name="about_version_copy_format">%1$s %2$s (%3$d), %4$s build, commit %5$s</string>
+    <string name="about_copy_version">Copy version</string>
+
+    <!-- Builds: the latest release's APKs -->
+    <string name="about_section_builds">Builds</string>
+    <string name="about_builds_loading">Reading the latest release…</string>
+    <string name="about_builds_failed">Could not reach GitHub to list the builds</string>
+    <string name="about_builds_none">The latest release has no APKs to download</string>
+    <string name="about_build_release_title">Release build</string>
+    <string name="about_build_release_detail">The normal app</string>
+    <string name="about_build_debug_title">Debug build</string>
+    <string name="about_build_debug_detail">Installs next to the normal app as %1$s, with a library of its own, for trying fixes and sending bug reports</string>
+    <string name="about_build_file_format">%1$s, %2$s, %3$s</string>
+    <string name="about_build_download">Download</string>
+    <string name="about_build_installed">Installed</string>
+    <string name="about_all_releases">All releases</string>
+    <string name="about_all_releases_detail">Every version with its notes, on GitHub</string>
+
+    <!-- Help -->
+    <string name="about_section_help">Help</string>
+    <string name="about_share_bug_report">Share bug report</string>
+    <string name="about_share_bug_report_detail">This version, your device and the app\'s recent log, as a text file</string>
+    <string name="about_bug_report_privacy">The report can include titles and source names from your library.</string>
+    <string name="about_bug_report_subject">%1$s bug report</string>
+    <string name="about_bug_report_failed">The bug report could not be written.</string>
+    <string name="about_bug_report_share_failed">Nothing on this device can share the bug report.</string>
+    <string name="about_copy_device_info">Copy device info</string>
+    <string name="about_copy_device_info_detail">The same version and device lines without the log, to paste into a chat</string>
+    <string name="about_report_issue">Report an issue</string>
+    <string name="about_report_issue_detail">Open a new issue on GitHub</string>
+    <string name="about_discord">Discord</string>
+    <string name="about_discord_detail">Questions and chat with other readers</string>
+    <string name="about_website">Website</string>
+    <string name="about_website_detail">The user guide and answers to common questions</string>
+</resources>

@@ -137,6 +137,13 @@ sealed interface Route {
     @Serializable
     data object CrashLog : Route
 
+    /**
+     * Upstream's More > About, from a tap on the logo at the top of the More tab: the build
+     * installed, Check for updates, the latest release's APKs, and the bug report.
+     */
+    @Serializable
+    data object About : Route
+
     @Serializable
     data object DownloadQueue : Route
 

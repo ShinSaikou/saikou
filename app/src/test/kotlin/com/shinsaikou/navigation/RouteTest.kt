@@ -327,6 +327,7 @@ class RouteTest {
         Route.BackupRestore(uri = "content://fixture/backup.saikou"),
         Route.ImportReport,
         Route.CrashLog,
+        Route.About,
         Route.DownloadQueue,
         Route.AdoptionSummary,
         Route.MigratePicker(sourceId = 1L),
@@ -361,6 +362,7 @@ class RouteTest {
         is Route.BackupRestore -> Route.BackupRestore::class.qualifiedName!!
         Route.ImportReport -> Route.ImportReport::class.qualifiedName!!
         Route.CrashLog -> Route.CrashLog::class.qualifiedName!!
+        Route.About -> Route.About::class.qualifiedName!!
         Route.DownloadQueue -> Route.DownloadQueue::class.qualifiedName!!
         Route.AdoptionSummary -> Route.AdoptionSummary::class.qualifiedName!!
         is Route.MigratePicker -> Route.MigratePicker::class.qualifiedName!!

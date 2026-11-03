@@ -277,13 +277,13 @@ fun LabelledExtendedFloatingActionButton(
  * list item with the icon in the primary colour, the title, and [detail] under it when there is one.
  * No divider, as upstream's rows have none. [selected] tints the row, as the tablet's settings list
  * marks the open section; [trailing] is a control drawn last, such as the switch of a row whose tap
- * flips it.
+ * flips it. A row with no [onClick] only says something, and a tap on it does nothing.
  */
 @Composable
 fun IconListRow(
     title: String,
     icon: ImageVector,
-    onClick: () -> Unit,
+    onClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
     detail: String? = null,
     selected: Boolean = false,
@@ -298,7 +298,7 @@ fun IconListRow(
         trailingContent = trailing,
         modifier = modifier
             .selectedBackground(selected)
-            .clickable(onClick = onClick),
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         // Transparent, so a selected row's tint shows through.
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
     )

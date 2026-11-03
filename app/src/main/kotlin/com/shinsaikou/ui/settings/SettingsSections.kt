@@ -58,7 +58,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.shinsaikou.appupdate.AppUpdateChecker
 import com.shinsaikou.core.common.network.PREF_DOH_CUSTOM
 import com.shinsaikou.core.common.network.customDohUrl
 import com.shinsaikou.core.common.preferences.SecurityPreferences.SecureScreenMode
@@ -85,6 +84,7 @@ import com.shinsaikou.reader.settings.ReaderSettingsOptions
 import com.shinsaikou.reader.settings.titleRes
 import com.shinsaikou.reader.ui.stringRes
 import com.shinsaikou.ui.appupdate.AppUpdateViewModel
+import com.shinsaikou.ui.appupdate.message
 import com.shinsaikou.ui.components.CategoryFilterDialog
 import com.shinsaikou.ui.components.InlineNotice
 import com.shinsaikou.ui.components.ListRow
@@ -2005,8 +2005,6 @@ private fun AppUpdateRows(appName: String, showMessage: (String, SnackbarAction?
     val viewModel: AppUpdateViewModel = metroViewModel()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val resources = LocalResources.current
-    val upToDate = stringResource(R.string.app_update_up_to_date)
-    val failed = stringResource(R.string.app_update_check_failed)
     SettingsSearchTarget(R.string.pref_app_update_check) {
         ListRow(
             title = stringResource(R.string.pref_app_update_check),
@@ -2014,13 +2012,7 @@ private fun AppUpdateRows(appName: String, showMessage: (String, SnackbarAction?
             onClick = {
                 if (!state.checking) {
                     viewModel.checkNow { result ->
-                        val message = when (result) {
-                            is AppUpdateChecker.Result.Available -> null
-                            AppUpdateChecker.Result.UpToDate -> upToDate
-                            AppUpdateChecker.Result.Failed -> failed
-                            is AppUpdateChecker.Result.NoApk -> resources.getString(R.string.app_update_no_apk, appName, result.version)
-                        }
-                        if (message != null) showMessage(message, null)
+                        result.message(resources, appName)?.let { showMessage(it, null) }
                     }
                 }
             },

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The publicDebug build's name over :i18n's app_name: the launcher label and every line that names
+  the app, so the debug APK installed next to the release is never taken for it. The name itself is
+  :i18n's app_name_debug, which the About screen's Debug build row names too.
+-->
+<resources>
+    <string name="app_name" translatable="false">@string/app_name_debug</string>
+</resources>

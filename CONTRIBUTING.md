@@ -70,8 +70,9 @@ checkout (a composite build), so a change there can be tested here before it is 
 ### Release signing
 
 `keystore.properties` (gitignored, optional) holds `storeFile`, `storePassword`, `keyAlias` and
-`keyPassword`. The release build signs with the debug key unless `-Psaikou.ownerSigning=true` is
-given, so a fresh clone can always build a release:
+`keyPassword`. The release build, and the `publicDebug` build each release ships beside it, sign
+with the debug key unless `-Psaikou.ownerSigning=true` is given, so a fresh clone can always build a
+release:
 
 ```bash
 ./gradlew :app:assembleRelease
@@ -211,23 +212,57 @@ The app updates itself from the latest GitHub release of `ShinSaikou/saikou`; a 
 
 1. Raise `versionCode` by one and set `versionName` in `app/build.gradle.kts`, and move the
    **Unreleased** lines of [CHANGELOG.md](CHANGELOG.md) under the new version.
-2. Build the release with the owner's key:
+2. Build the release and the debug APK with the owner's key:
 
    ```bash
-   ./gradlew :app:assembleRelease :app:verifyReleaseSigning -Psaikou.ownerSigning=true
+   ./gradlew :app:assembleRelease :app:assemblePublicDebug :app:verifyReleaseSigning -Psaikou.ownerSigning=true
    ```
 
-3. Publish it, with the version name as the tag:
+3. Check that the two belong together and give them their release names, `app-release.apk` and
+   `app-debug.apk`, in `app/build/outputs/release-assets/`. It refuses a pair whose packages,
+   versions or signing keys do not match, and prints the command for the next step:
 
    ```bash
-   gh release create v<version> app/build/outputs/apk/release/app-release.apk --notes-file <notes>
+   python3 tools/release/release_assets.py
    ```
+
+4. Publish with the `gh release create` line step 3 printed, the version name as the tag. It names
+   only the APKs step 3 copied. With both it reads:
+
+   ```bash
+   gh release create v<version> app/build/outputs/release-assets/app-release.apk app/build/outputs/release-assets/app-debug.apk -R ShinSaikou/saikou --notes-file <notes>
+   ```
+
+   and with the release APK alone:
+
+   ```bash
+   gh release create v<version> app/build/outputs/release-assets/app-release.apk -R ShinSaikou/saikou --notes-file <notes>
+   ```
+
+   0.1.2 (versionCode 5) is the first release whose updater tells the two APKs apart. The updater
+   of 0.1.0 and 0.1.1 takes the only `.apk` of a release, so it finds none in a release with two.
+   So 0.1.2 ships `app-release.apk` alone, and `app-debug.apk` is attached from the release after
+   it. `release_assets.py` enforces this: while `tools/gate/last-release.json` records a versionCode
+   below 5, and for the release at 5 itself, it copies only `app-release.apk`, says why, and prints
+   the `gh release create` line with that one asset. The pair starts once the file records 5 or
+   more, which `install_release.py` writes after 0.1.2 is on the owner's devices; commit it then.
+   The notes of the first release with both APKs carry this sentence for anyone still on 0.1.0 or 0.1.1:
+   "If the app says no APK was found for your device, download the update from
+   https://shinsaikou.com."
+
+`app-release.apk` is the app; the site's Download button links to
+`releases/latest/download/app-release.apk`, so that name never changes. `app-debug.apk` is the
+`publicDebug` build: debuggable, without R8, as `com.shinsaikou.debug` and labelled "Shin Saikou
+Debug", so it installs next to the app with a library of its own, for trying a fix and sending a bug
+report (More > About lists both). The `debug` build stays `com.shinsaikou` for local work, the
+tools and the device tests.
 
 The updater offers a release whose tag (`v0.0.2` or `0.0.2`) is newer than the installed version,
-never a draft or a prerelease, and installs the `.apk` asset named for the device's ABI, else the
-one named `universal`, else the only one. It refuses an APK that is not signed with the same key as
-the installed app, so a release signed with any other key, the debug key included, cannot update an
-installed copy.
+never a draft or a prerelease. The release app takes only the APKs without `debug` in their name,
+and the debug APK only those with it; among those it installs the one named for the device's ABI,
+else the one named `universal`, else the only one. It refuses an APK that is not signed with the
+same key as the installed app, so a release signed with any other key, the debug key included,
+cannot update an installed copy.
 
 ## Commits and pull requests
 
