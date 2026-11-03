@@ -28,11 +28,14 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -467,6 +470,208 @@ class ExtensionManagerTest {
         coVerify(exactly = 0) { loader.loadPackage(any()) }
         manager.loadErrors.value shouldBe listOf(off)
         manager.sources.value.shouldBeEmpty()
+    }
+
+    @Test
+    fun `a repository just added is read alone and what it lists joins the list`() = runTest {
+        val (first, second) = twoStores()
+        coEvery { stores.getAll() } returns listOf(first)
+        val manager = buildManager()
+        manager.refreshAvailable().isSuccess shouldBe true
+
+        coEvery { stores.getAll() } returns listOf(first, second)
+        val result = manager.refreshStore(OTHER_INDEX_URL).await()
+
+        result.isSuccess shouldBe true
+        manager.availableExtensions.value.map { it.packageName }.sorted() shouldBe listOf(PACKAGE, OTHER_PACKAGE)
+        coVerify(exactly = 1) { repoClient.fetch(INDEX_URL) }
+        coVerify(exactly = 1) { repoClient.fetch(OTHER_INDEX_URL) }
+        manager.refreshingStores.value.shouldBeEmpty()
+    }
+
+    @Test
+    fun `an added repository's update is counted at once`() = runTest {
+        coEvery { loader.loadAll() } returns listOf(LoadResult.Success(installed(OTHER_PACKAGE)))
+        preferences.autoCheckUpdates.set(false)
+        val (first, second) = twoStores(otherVersionCode = 2L)
+        coEvery { stores.getAll() } returns listOf(first)
+        val manager = buildManager()
+        manager.start()
+        advanceUntilIdle()
+        manager.refreshAvailable()
+        preferences.extensionUpdatesCount.get() shouldBe 0
+
+        coEvery { stores.getAll() } returns listOf(first, second)
+        manager.refreshStore(OTHER_INDEX_URL).await()
+
+        manager.updates.value.map { it.packageName } shouldBe listOf(OTHER_PACKAGE)
+        preferences.extensionUpdatesCount.get() shouldBe 1
+    }
+
+    @Test
+    fun `while another repository has not been read this process, adding one reads them all`() = runTest {
+        // A list built from the new index alone would call every extension of the other one
+        // obsolete, so the whole configuration is read, as a pull reads it.
+        twoStores()
+        val manager = buildManager()
+
+        manager.refreshStore(OTHER_INDEX_URL).await().isSuccess shouldBe true
+
+        manager.availableExtensions.value.map { it.packageName }.sorted() shouldBe listOf(PACKAGE, OTHER_PACKAGE)
+        coVerify(exactly = 1) { repoClient.fetch(INDEX_URL) }
+    }
+
+    @Test
+    fun `a repository that cannot be read is named in the failure, which also reaches the page`() = runTest {
+        val (first, second) = twoStores()
+        coEvery { stores.getAll() } returns listOf(first)
+        val manager = buildManager()
+        manager.refreshAvailable()
+        val failures = mutableListOf<Throwable>()
+        managerScope!!.launch { manager.storeRefreshFailures.collect { failures += it } }
+        advanceUntilIdle()
+        coEvery { stores.getAll() } returns listOf(first, second)
+        val down = RepoFetchException(OTHER_INDEX_URL, RepoFetchException.Kind.NETWORK)
+        coEvery { repoClient.fetch(OTHER_INDEX_URL) } returns Result.failure(down)
+
+        val result = manager.refreshStore(OTHER_INDEX_URL).await()
+        advanceUntilIdle()
+
+        val failure = result.exceptionOrNull().shouldBeInstanceOf<RepoRefreshException>()
+        failure.failures shouldBe listOf(RepoRefreshException.Failure(second, down))
+        failures shouldBe listOf(failure)
+        manager.availableExtensions.value.map { it.packageName } shouldBe listOf(PACKAGE)
+        manager.refreshingStores.value.shouldBeEmpty()
+    }
+
+    @Test
+    fun `a repository removed while it was read adds nothing`() = runTest {
+        val (first, second) = twoStores()
+        coEvery { stores.getAll() } returns listOf(first)
+        val manager = buildManager()
+        manager.refreshAvailable()
+        coEvery { stores.getAll() } returns listOf(first, second)
+        coEvery { stores.get(OTHER_INDEX_URL) } returns null
+
+        manager.refreshStore(OTHER_INDEX_URL).await().isSuccess shouldBe true
+
+        manager.availableExtensions.value.map { it.packageName } shouldBe listOf(PACKAGE)
+    }
+
+    @Test
+    fun `a repository removed while every index is read for it does not come back`() = runTest {
+        // The fallback read: the other repository has not been read this process, so adding this
+        // one reads both. It is removed while its own fetch is pending, when forgetStore finds no
+        // listing to drop, and the merge after the fetch must not publish it again.
+        val (first, second) = twoStores()
+        val pending = CompletableDeferred<Unit>()
+        val secondIndex = FetchedIndex(store = second, extensions = emptyList(), fetchedAtElapsedMs = 0L)
+        coEvery { repoClient.fetch(OTHER_INDEX_URL) } coAnswers {
+            pending.await()
+            Result.success(secondIndex)
+        }
+        val manager = buildManager()
+
+        val read = manager.refreshStore(OTHER_INDEX_URL)
+        advanceUntilIdle()
+        coVerify(exactly = 1) { repoClient.fetch(INDEX_URL) }
+        coEvery { stores.getAll() } returns listOf(first)
+        coEvery { stores.get(OTHER_INDEX_URL) } returns null
+        manager.forgetStore(OTHER_INDEX_URL)
+        pending.complete(Unit)
+
+        read.await().isSuccess shouldBe true
+        manager.availableExtensions.value.map { it.packageName } shouldBe listOf(PACKAGE)
+    }
+
+    @Test
+    fun `the only repository fetched, removed meanwhile, leaves nothing listed or obsolete`() = runTest {
+        coEvery { loader.loadAll() } returns listOf(LoadResult.Success(installed(PACKAGE)))
+        preferences.autoCheckUpdates.set(false)
+        val pending = CompletableDeferred<Unit>()
+        val fetched = FetchedIndex(store = store(), extensions = emptyList(), fetchedAtElapsedMs = 0L)
+        coEvery { stores.getAll() } returns listOf(store())
+        coEvery { repoClient.fetch(INDEX_URL) } coAnswers {
+            pending.await()
+            Result.success(fetched)
+        }
+        coEvery { repoClient.extensions(fetched) } returns Result.success(listOf(available(PACKAGE, versionCode = 2L)))
+        val manager = buildManager()
+        manager.start()
+        advanceUntilIdle()
+
+        val refresh = async { manager.refreshAvailable() }
+        advanceUntilIdle()
+        coEvery { stores.getAll() } returns emptyList()
+        manager.forgetStore(INDEX_URL)
+        pending.complete(Unit)
+        refresh.await()
+
+        manager.availableExtensions.value.shouldBeEmpty()
+        manager.installedExtensions.value.single().hasUpdate shouldBe false
+        manager.installedExtensions.value.single().isObsolete shouldBe false
+        preferences.extensionUpdatesCount.get() shouldBe 0
+    }
+
+    @Test
+    fun `forgetting a removed repository takes its entries out and leaves the others`() = runTest {
+        twoStores()
+        val manager = buildManager()
+        manager.refreshAvailable()
+
+        manager.forgetStore(OTHER_INDEX_URL)
+
+        manager.availableExtensions.value.map { it.packageName } shouldBe listOf(PACKAGE)
+    }
+
+    @Test
+    fun `forgetting the last repository read leaves no update and no obsolete extension`() = runTest {
+        coEvery { loader.loadAll() } returns listOf(LoadResult.Success(installed(PACKAGE)))
+        preferences.autoCheckUpdates.set(false)
+        seedIndex(available(PACKAGE, versionCode = 2L))
+        val manager = buildManager()
+        manager.start()
+        advanceUntilIdle()
+        manager.refreshAvailable()
+        preferences.extensionUpdatesCount.get() shouldBe 1
+
+        manager.forgetStore(INDEX_URL)
+
+        manager.availableExtensions.value.shouldBeEmpty()
+        manager.installedExtensions.value.single().hasUpdate shouldBe false
+        manager.installedExtensions.value.single().isObsolete shouldBe false
+        preferences.extensionUpdatesCount.get() shouldBe 0
+    }
+
+    @Test
+    fun `forgetting a repository never read this process changes nothing`() = runTest {
+        preferences.extensionUpdatesCount.set(2)
+        val manager = buildManager()
+
+        manager.forgetStore(INDEX_URL)
+
+        manager.availableExtensions.value.shouldBeEmpty()
+        preferences.extensionUpdatesCount.get() shouldBe 2
+    }
+
+    /**
+     * Two configured stores, each listing one package: [PACKAGE] at [INDEX_URL] and [OTHER_PACKAGE]
+     * at [OTHER_INDEX_URL], the second at [otherVersionCode].
+     */
+    private fun twoStores(otherVersionCode: Long = 1L): Pair<ExtensionStore, ExtensionStore> {
+        val first = store()
+        val second = store(indexUrl = OTHER_INDEX_URL, name = "Other Fixture Index")
+        val firstIndex = FetchedIndex(store = first, extensions = emptyList(), fetchedAtElapsedMs = 0L)
+        val secondIndex = FetchedIndex(store = second, extensions = emptyList(), fetchedAtElapsedMs = 0L)
+        coEvery { stores.getAll() } returns listOf(first, second)
+        coEvery { stores.get(INDEX_URL) } returns first
+        coEvery { stores.get(OTHER_INDEX_URL) } returns second
+        coEvery { repoClient.fetch(INDEX_URL) } returns Result.success(firstIndex)
+        coEvery { repoClient.fetch(OTHER_INDEX_URL) } returns Result.success(secondIndex)
+        coEvery { repoClient.extensions(firstIndex) } returns Result.success(listOf(available(PACKAGE)))
+        coEvery { repoClient.extensions(secondIndex) } returns
+            Result.success(listOf(available(OTHER_PACKAGE, versionCode = otherVersionCode)))
+        return first to second
     }
 
     /** One configured store whose index lists [entries]. */

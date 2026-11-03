@@ -5,12 +5,16 @@ import android.os.Build
 import android.util.Log
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasProgressBarRangeInfo
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
@@ -32,7 +36,8 @@ import org.junit.runners.model.Statement
 /**
  * The extension store screens over the fixture store (phase 5 unit TG2): [FixtureStore] adds the
  * update fixture server's repository, the Extensions page lists its extension, and R111's removal
- * confirmation names the store and does what each of its answers says.
+ * confirmation names the store and does what each of its answers says. A store added or removed on
+ * the stores screen changes the Extensions page with no refresh.
  *
  * Both methods need `tools/bench/browse_fixture_server.py` on the host and `saikou.browse.fixture=true`
  * ([FixtureStore] says how it is started); without the argument each logs a `Skipped:` line and
@@ -80,7 +85,7 @@ class ExtensionStoresDeviceTest {
 
     /**
      * Item 1's proof of the helper: the store added as the stores screen adds one, the Extensions
-     * page listing the fixture extension from it with the store counted in its header, the add's two
+     * page listing the fixture extension from it with the store counted in its bar's menu, the add's two
      * requests and the page's index fetch in the server's log, and no store and no available
      * extension left once the helper restores the device.
      */
@@ -98,6 +103,7 @@ class ExtensionStoresDeviceTest {
             runBlocking(Dispatchers.IO) { fixture.add() }
             openExtensionsPage()
             awaitText(FixtureStore.EXTENSION_NAME)
+            openOverflow()
             awaitText(string(R.string.ext_stores_count_format, 1))
 
             runBlocking(Dispatchers.IO) {
@@ -133,7 +139,7 @@ class ExtensionStoresDeviceTest {
     /**
      * R111 item 8 and its carry-over 1: removing a store asks first, in upstream's dialog naming the store
      * by name and index address. Cancel closes it and keeps the store; OK removes it, and the screen
-     * says no store is configured. Reached as the owner reaches it, from the Extensions page's header.
+     * says no store is configured. Reached as the owner reaches it, from the Extensions page's bar.
      */
     @Test
     fun removingTheFixtureStoreAsksFirstNamingItAndCancelKeepsItWhileOkRemovesIt() {
@@ -148,8 +154,7 @@ class ExtensionStoresDeviceTest {
             runBlocking(Dispatchers.IO) { fixture.add() }
             openExtensionsPage()
             awaitText(FixtureStore.EXTENSION_NAME)
-            composeRule.onNode(hasText(string(R.string.ext_stores_count_format, 1)) and hasClickAction()).performClick()
-            awaitText(string(R.string.ext_stores_title))
+            openStores(storeCount = 1)
             awaitText(FixtureStore.STORE_NAME)
             awaitText(FixtureStore.INDEX_URL)
 
@@ -187,6 +192,70 @@ class ExtensionStoresDeviceTest {
         }
         teardown.step { runBlocking(Dispatchers.IO) { fixture.restore() } }
         teardown.finish()
+    }
+
+    /**
+     * The owner's way in: a repository typed on the stores screen lists its extension on the
+     * Extensions page as soon as the screen is left, with no pull, and removing it there takes the
+     * extension off the page the same way. The page was opened with no store, so its own fetch on
+     * opening had nothing to read; what lists the extension is the add's read of the one index.
+     */
+    @Test
+    fun aStoreAddedOnTheStoresScreenListsItsExtensionWithNoRefreshAndRemovingItTakesItOff() {
+        val method = "aStoreAddedOnTheStoresScreenListsItsExtensionWithNoRefreshAndRemovingItTakesItOff"
+        if (!FixtureStore.isServed()) return skip("$method: no saikou.browse.fixture argument")
+        if (runBlocking(Dispatchers.IO) { FixtureStore.foreignStores(graph) }.isNotEmpty()) {
+            return skip("$method: an extension store other than the browse fixture store is configured")
+        }
+        val fixture = FixtureStore(graph)
+        val teardown = Teardown()
+        teardown.step {
+            runBlocking(Dispatchers.IO) { fixture.expectTheScreensAdd() }
+            openExtensionsPage()
+            awaitText(string(R.string.ext_empty_no_stores))
+            openStores(storeCount = 0)
+            awaitText(string(R.string.ext_stores_empty))
+
+            composeRule.onNode(hasSetTextAction()).performTextInput(FixtureStore.ADDRESS)
+            composeRule.onNode(hasText(string(R.string.action_add)) and hasClickAction()).performClick()
+            awaitText(FixtureStore.INDEX_URL)
+            back()
+            awaitText(FixtureStore.EXTENSION_NAME)
+            runBlocking(Dispatchers.IO) {
+                fixture.assertOnlyTheFixtureWasAsked(FixtureStore.INDEX_PATH, FixtureStore.DESCRIPTOR_PATH)
+            }
+            logServed(method, fixture.served())
+
+            openStores(storeCount = 1)
+            composeRule.onNode(hasText(string(R.string.action_remove)) and hasClickAction()).performClick()
+            awaitText(string(R.string.ext_stores_remove_title))
+            composeRule.onNode(hasText(string(R.string.action_ok)) and hasClickAction()).performClick()
+            awaitText(string(R.string.ext_stores_empty))
+            back()
+            awaitText(string(R.string.ext_empty_no_stores))
+            awaitNoText(FixtureStore.EXTENSION_NAME)
+            assertTrue("an available extension outlived the store", graph.extensionManager.availableExtensions.value.isEmpty())
+        }
+        teardown.step { runBlocking(Dispatchers.IO) { fixture.restore() } }
+        teardown.finish()
+    }
+
+    /** The Extensions page bar's menu, then its repositories, named with [storeCount]. */
+    private fun openStores(storeCount: Int) {
+        openOverflow()
+        composeRule.onNode(hasText(string(R.string.ext_stores_count_format, storeCount)) and hasClickAction()).performClick()
+        awaitText(string(R.string.ext_stores_title))
+    }
+
+    private fun openOverflow() {
+        composeRule.onNode(hasContentDescription(string(R.string.action_menu_overflow_description)) and hasClickAction())
+            .performClick()
+    }
+
+    private fun back() {
+        composeRule.onAllNodes(hasContentDescription(string(R.string.action_back)) and hasClickAction())
+            .onFirst()
+            .performClick()
     }
 
     private fun awaitNoText(text: String) {

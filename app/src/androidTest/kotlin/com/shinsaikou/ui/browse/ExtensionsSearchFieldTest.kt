@@ -2,22 +2,22 @@ package com.shinsaikou.ui.browse
 
 import android.util.Log
 import androidx.activity.ComponentActivity
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.performClick
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.navigation.compose.rememberNavController
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.shinsaikou.SaikouApp
-import com.shinsaikou.extensions.loader.LoadError
-import com.shinsaikou.extensions.loader.LoadResult
+import com.shinsaikou.i18n.R
 import com.shinsaikou.navigation.LocalNavigator
 import com.shinsaikou.navigation.SaikouNavigator
 import com.shinsaikou.ui.DELETED_KEYS
@@ -38,12 +38,10 @@ import org.junit.runner.RunWith
  * on 2026-10-02 the owner's phone turned "Asura" into "suraA" here, because the field's text was
  * the view model's copy, which comes back through a flow on the IO dispatcher a frame or more late.
  *
- * The page is composed on its own, with the real [ExtensionsViewModel] built through the app's view
- * model map and its state collected as [BrowseScreen] collects it, so every key still goes to the
- * view model and the query still comes back the way it does in the app. A test device has no
- * extension and no store, and the field is hidden when there is nothing to search and nothing
- * typed, so the state handed to the page carries one fixture row, a load error, in place of the
- * view model's empty groups. Only the rows are replaced; the query is the view model's own.
+ * The field is in Browse's bar while the Extensions page is shown, so the bar is composed on its own
+ * with the search held as [BrowseScreen] holds it ([rememberExtensionsSearch]), over the real
+ * [ExtensionsViewModel] built through the app's view model map: every key still goes to the view
+ * model and the query still comes back the way it does in the app. The search icon opens the field.
  *
  * The view model fetches every configured extension index when it is built and nothing is
  * available, so while a store other than the browse fixture's is configured (whose fetch reaches
@@ -80,21 +78,23 @@ class ExtensionsSearchFieldTest {
     fun keysTypedOneAtATimeReachTheFieldAndTheViewModelInOrder() {
         if (skippedForAForeignStore("keysTypedOneAtATimeReachTheFieldAndTheViewModelInOrder")) return
         setPage(shown = { true })
+        openSearch()
 
         composeRule.typeThenDelete(WHERE)
         assertEquals("the view model's query", TYPED_QUERY.dropLast(DELETED_KEYS), viewModel.state.value.searchQuery)
     }
 
     /**
-     * The page leaves the composition whenever Browse shows another of its pages, while the view
-     * model, which belongs to Browse, keeps the query. Coming back shows that query in the field,
-     * as it did when the field read the view model's copy directly.
+     * Browse can leave the composition, a trip to another tab, while the view model, which belongs to
+     * Browse's entry, keeps the query. Coming back shows that query in the field, already open, as it
+     * did when the field read the view model's copy directly.
      */
     @Test
     fun aQueryTypedBeforeThePageLeftIsInTheFieldWhenItComesBack() {
         if (skippedForAForeignStore("aQueryTypedBeforeThePageLeftIsInTheFieldWhenItComesBack")) return
         var shown by mutableStateOf(true)
         setPage(shown = { shown })
+        openSearch()
         composeRule.typeThenDelete(WHERE)
 
         composeRule.runOnIdle { shown = false }
@@ -120,27 +120,27 @@ class ExtensionsSearchFieldTest {
             val navController = rememberNavController()
             val navigator = remember(navController) { SaikouNavigator(navController, composeRule.activity) }
             CompositionLocalProvider(LocalNavigator provides navigator) {
-                val state by viewModel.state.collectAsState()
                 if (shown()) {
-                    ExtensionsTab(
-                        viewModel = viewModel,
-                        state = state.copy(isInitialized = true, groups = FIXTURE_GROUPS),
-                        padding = PaddingValues(),
+                    var search by rememberExtensionsSearch(viewModel)
+                    ExtensionsTopBar(
+                        title = WHERE,
+                        searchQuery = search,
+                        onSearchQueryChange = { search = it },
+                        storeCount = 0L,
                     )
                 }
             }
         }
     }
 
+    private fun openSearch() {
+        val label = instrumentation.targetContext.getString(R.string.action_search)
+        composeRule.onNode(hasContentDescription(label) and hasClickAction()).performClick()
+        composeRule.waitForIdle()
+    }
+
     private companion object {
         const val LOG_TAG = "ExtensionsSearchFieldTest"
         const val WHERE = "Extensions"
-
-        /** A row the page can draw without an icon or a network call; it never takes a tap here. */
-        val FIXTURE_GROUPS: List<Pair<ExtensionGroup, List<ExtensionUi>>> = listOf(
-            ExtensionGroup.Errors to listOf(
-                ExtensionUi.LoadError(LoadResult.Error("com.shinsaikou.fixture.searchfield", LoadError.NOT_AN_EXTENSION)),
-            ),
-        )
     }
 }

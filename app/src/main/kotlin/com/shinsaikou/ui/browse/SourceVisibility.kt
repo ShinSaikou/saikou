@@ -21,3 +21,10 @@ internal fun CatalogueSource.isInEnabledLanguage(enabled: Set<String>): Boolean 
 internal fun matureSourceIds(installed: List<Extension.Installed>): Set<Long> = installed
     .filter { it.isNsfw }
     .flatMapTo(mutableSetOf()) { extension -> extension.sources.map { it.id } }
+
+/**
+ * Puts the Local source after every extension source and leaves the rest in the order they came in:
+ * sorted by name it otherwise lands among the extensions' sources, under L. The Sources page applies
+ * it inside the pinned group and inside the rest, and Global Search after the pinned sources.
+ */
+internal fun <T : CatalogueSource> localSourceLast(): Comparator<T> = compareBy { it.id == SourceIds.LOCAL }

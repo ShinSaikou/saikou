@@ -1,5 +1,6 @@
 package com.shinsaikou.ui.browse
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -64,8 +65,8 @@ import tachiyomi.presentation.core.screens.LoadingScreen
  *
  * [extensionsQuery] (`Route.Browse.extensionsQuery`, unit restore-report) seeds the Extensions
  * page's search the same way, once: a source the restore report found missing opens here with its
- * name searched. The seed is dropped once the view model holds it, so the page shown again after
- * Sources or Migrate keeps whatever the owner typed since.
+ * name searched. The search is Browse's own ([rememberExtensionsSearch]), so the page shown again
+ * after Sources or Migrate keeps whatever the owner typed since.
  */
 @Composable
 fun BrowseScreen(initialPage: BrowsePage, extensionsQuery: String? = null) {
@@ -75,10 +76,8 @@ fun BrowseScreen(initialPage: BrowsePage, extensionsQuery: String? = null) {
     val resources = LocalResources.current
     val snackbarHostState = remember { SnackbarHostState() }
     var page by rememberSaveable { mutableStateOf(initialPage) }
-    var seedQuery by rememberSaveable { mutableStateOf(extensionsQuery) }
-    LaunchedEffect(extensionsState.searchQuery) {
-        if (seedQuery != null && extensionsState.searchQuery == seedQuery) seedQuery = null
-    }
+    var extensionsSearch by rememberExtensionsSearch(extensionsViewModel, initialQuery = extensionsQuery)
+    BackHandler(enabled = page == BrowsePage.EXTENSIONS && extensionsSearch != null) { extensionsSearch = null }
 
     LaunchedEffect(extensionsViewModel) {
         extensionsViewModel.events.collect { event ->
@@ -94,48 +93,49 @@ fun BrowseScreen(initialPage: BrowsePage, extensionsQuery: String? = null) {
     Scaffold(
         topBar = { scrollBehavior ->
             Column {
-                ScreenTopBar(
-                    title = stringResource(R.string.browse_title),
-                    scrollBehavior = scrollBehavior,
-                    // Global search hangs off the tab's own bar rather than either page, because
-                    // this is the only way into it and the owner should not have to guess which of
-                    // the two pages is holding it.
-                    actions = {
-                        TopBarAction(
-                            label = stringResource(R.string.action_global_search),
-                            icon = Icons.Outlined.Search,
-                            onClick = { navigator.open(Route.GlobalSearch()) },
-                        )
-                        // Upstream's Filter action on the Sources page only, after global search as
-                        // upstream's Sources tab orders its two (phase 5 unit BF).
-                        if (page == BrowsePage.SOURCES) {
+                // Upstream's Extensions page has a bar of its own: its search, then the filter and
+                // the repositories (phase 5 unit BX's filter included).
+                if (page == BrowsePage.EXTENSIONS) {
+                    ExtensionsTopBar(
+                        title = stringResource(R.string.browse_title),
+                        searchQuery = extensionsSearch,
+                        onSearchQueryChange = { extensionsSearch = it },
+                        storeCount = extensionsState.storeCount,
+                        scrollBehavior = scrollBehavior,
+                    )
+                } else {
+                    ScreenTopBar(
+                        title = stringResource(R.string.browse_title),
+                        scrollBehavior = scrollBehavior,
+                        // Global search hangs off the bar of both pages but Extensions, whose own
+                        // search icon searches the extensions, as upstream's does; two search icons
+                        // side by side would leave the owner guessing which is which.
+                        actions = {
                             TopBarAction(
-                                label = stringResource(R.string.action_filter),
-                                icon = Icons.Outlined.FilterList,
-                                onClick = { navigator.open(Route.SourcesFilter) },
+                                label = stringResource(R.string.action_global_search),
+                                icon = Icons.Outlined.Search,
+                                onClick = { navigator.open(Route.GlobalSearch()) },
                             )
-                        }
-                        // Upstream's Filter action on the Extensions page, opening the extension
-                        // filter (phase 5 unit BX). Upstream keeps it in the tab's overflow before
-                        // "Extension stores"; this bar shows icons, and the stores stay in the
-                        // page's own header.
-                        if (page == BrowsePage.EXTENSIONS) {
-                            TopBarAction(
-                                label = stringResource(R.string.action_filter),
-                                icon = Icons.Outlined.FilterList,
-                                onClick = { navigator.open(Route.ExtensionFilter) },
-                            )
-                        }
-                        // Upstream's help action on the Migrate page only, after global search.
-                        if (page == BrowsePage.MIGRATE) {
-                            TopBarAction(
-                                label = stringResource(R.string.migration_help_guide),
-                                icon = Icons.AutoMirrored.Outlined.HelpOutline,
-                                onClick = { navigator.openUrl(MIGRATION_GUIDE_URL) },
-                            )
-                        }
-                    },
-                )
+                            // Upstream's Filter action on the Sources page only, after global search as
+                            // upstream's Sources tab orders its two (phase 5 unit BF).
+                            if (page == BrowsePage.SOURCES) {
+                                TopBarAction(
+                                    label = stringResource(R.string.action_filter),
+                                    icon = Icons.Outlined.FilterList,
+                                    onClick = { navigator.open(Route.SourcesFilter) },
+                                )
+                            }
+                            // Upstream's help action on the Migrate page only, after global search.
+                            if (page == BrowsePage.MIGRATE) {
+                                TopBarAction(
+                                    label = stringResource(R.string.migration_help_guide),
+                                    icon = Icons.AutoMirrored.Outlined.HelpOutline,
+                                    onClick = { navigator.openUrl(MIGRATION_GUIDE_URL) },
+                                )
+                            }
+                        },
+                    )
+                }
                 BrowseTabRow(
                     page = page,
                     updateCount = extensionsState.updatesCount,
@@ -154,7 +154,6 @@ fun BrowseScreen(initialPage: BrowsePage, extensionsQuery: String? = null) {
                 viewModel = extensionsViewModel,
                 state = extensionsState,
                 padding = padding,
-                initialQuery = seedQuery,
             )
             BrowsePage.MIGRATE -> MigrateSourcesBody(padding = padding)
         }

@@ -12,6 +12,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.unit.Dp
 import coil3.compose.AsyncImage
 import com.shinsaikou.source.SourceIds
@@ -24,23 +27,58 @@ import com.shinsaikou.source.SourceIds
  */
 @Composable
 fun ExtensionIconImage(icon: ExtensionIcon?, size: Dp, modifier: Modifier = Modifier) {
+    ExtensionIconImage(icon, modifier.size(size))
+}
+
+/** [ExtensionIconImage] at whatever size [modifier] gives it, as the extension list's ring needs. */
+@Composable
+fun ExtensionIconImage(icon: ExtensionIcon?, modifier: Modifier) {
     var failed by remember(icon) { mutableStateOf(false) }
     if (icon == null || failed) {
-        Icon(
-            imageVector = Icons.Outlined.Extension,
-            contentDescription = null,
-            modifier = modifier.size(size),
-            tint = MaterialTheme.colorScheme.primary,
-        )
+        ExtensionMark(modifier)
     } else {
         AsyncImage(
             model = icon,
             contentDescription = null,
-            modifier = modifier.size(size),
+            modifier = modifier,
             onError = { failed = true },
         )
     }
 }
+
+/**
+ * The icon an index lists for an extension not yet installed, as upstream's `ExtensionIcon` draws
+ * one: a faint square while it loads, the image with slightly rounded corners, and the generic mark
+ * when it does not load.
+ */
+@Composable
+fun AvailableExtensionIcon(iconUrl: String, modifier: Modifier) {
+    var failed by remember(iconUrl) { mutableStateOf(false) }
+    if (failed) {
+        ExtensionMark(modifier)
+    } else {
+        AsyncImage(
+            model = iconUrl,
+            contentDescription = null,
+            placeholder = ColorPainter(ICON_PLACEHOLDER),
+            modifier = modifier.clip(MaterialTheme.shapes.extraSmall),
+            onError = { failed = true },
+        )
+    }
+}
+
+@Composable
+private fun ExtensionMark(modifier: Modifier) {
+    Icon(
+        imageVector = Icons.Outlined.Extension,
+        contentDescription = null,
+        modifier = modifier,
+        tint = MaterialTheme.colorScheme.primary,
+    )
+}
+
+/** Upstream's placeholder grey, at the same alpha. */
+private val ICON_PLACEHOLDER = Color(0x1F888888)
 
 /**
  * A source's icon on a list of sources: its extension's launcher icon, as upstream's `SourceIcon`, and

@@ -22,14 +22,19 @@ import eu.kanade.tachiyomi.extension.model.InstallStep
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
@@ -37,6 +42,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.sync.Mutex
@@ -121,6 +127,20 @@ class ExtensionManager(
      * no room for a reason, and without one a refused update looks exactly like nothing happening.
      */
     val installFailures: StateFlow<Map<String, Throwable>> = _installFailures.asStateFlow()
+
+    private val _refreshingStores = MutableStateFlow<Set<String>>(emptySet())
+
+    /** The index URLs [refreshStore] is reading right now, for the screens' loading state. */
+    val refreshingStores: StateFlow<Set<String>> = _refreshingStores.asStateFlow()
+
+    private val _storeRefreshFailures = MutableSharedFlow<Throwable>(extraBufferCapacity = 1)
+
+    /**
+     * Each failure of [refreshStore], a [RepoRefreshException] as a refresh's would be, for the
+     * Extensions page's banner: the fetch outlives the repository screen that asked for it. An add
+     * that failed after its screen closed comes here too ([reportStoreFailure]).
+     */
+    val storeRefreshFailures: SharedFlow<Throwable> = _storeRefreshFailures.asSharedFlow()
 
     /** What each configured index listed at its last successful fetch this process, by index URL. Guarded by [mutex]. */
     private val lastListed = mutableMapOf<String, List<Extension.Available>>()
@@ -231,22 +251,120 @@ class ExtensionManager(
         }
 
         val merged = mutex.withLock {
-            lastListed.keys.retainAll(rows.mapTo(mutableSetOf()) { it.indexUrl })
-            fetched.forEach { (row, index) -> lastListed[row.indexUrl] = index.second }
-            // One row per package, the highest version code wins when two indexes carry the same one.
-            val merged = lastListed.values.flatten()
-                .groupBy { it.packageName }
-                .values
-                .map { candidates -> candidates.maxBy { it.versionCode } }
-            _availableExtensions.value = merged
-            _installedExtensions.value = _installedExtensions.value.map { it.withUpdateState(merged) }
-            // The one place the count is certain to be known, so it is written whatever it is.
-            preferences.extensionUpdatesCount.set(pendingUpdateCount())
-            merged
+            // The configuration as it is now, not as it was before the fetch: a repository removed
+            // meanwhile had nothing for forgetStore to drop yet, and what it listed must not come
+            // back here. A remove commits before its forgetStore takes the lock, so whichever of the
+            // two takes it first, the other one sees the removal.
+            val configured = withContext(ioDispatcher) { stores.getAll() }.mapTo(mutableSetOf()) { it.indexUrl }
+            lastListed.keys.retainAll(configured)
+            fetched.forEach { (row, index) -> if (row.indexUrl in configured) lastListed[row.indexUrl] = index.second }
+            publishListed()
         }
         preferences.lastIndexRefresh.set(System.currentTimeMillis())
         warnOnSourceIdDrift(fetched.map { it.second.first }, merged)
         return if (failures.isEmpty()) Result.success(Unit) else Result.failure(RepoRefreshException(failures))
+    }
+
+    /**
+     * Reads the one configured index at [indexUrl], a repository just added, and merges what it
+     * lists into [availableExtensions], so the Extensions page offers it without a refresh. The read
+     * runs in the manager's scope, as an install does, and goes on after the screen that asked for
+     * it has closed; [refreshingStores] holds [indexUrl] meanwhile, and a failure also reaches
+     * [storeRefreshFailures].
+     *
+     * While another configured index has not been read this process every index is read instead,
+     * as [refreshAvailable] reads them: a list built from this index alone would call every
+     * extension from the others obsolete and drop their updates.
+     */
+    fun refreshStore(indexUrl: String): Deferred<Result<Unit>> {
+        // Marked before the read is dispatched, so the page never draws a frame of "nothing to
+        // show" in between; ATOMIC starts the body whatever happens, so the mark always comes off.
+        _refreshingStores.update { it + indexUrl }
+        return scope.async(start = CoroutineStart.ATOMIC) { refreshMarkedStore(indexUrl) }
+    }
+
+    /**
+     * Passes [error] to [storeRefreshFailures]: a repository add that failed once the screen that
+     * started it had closed, so the Extensions page's banner says why it never appeared.
+     */
+    fun reportStoreFailure(error: Throwable) {
+        _storeRefreshFailures.tryEmit(error)
+    }
+
+    private suspend fun refreshMarkedStore(indexUrl: String): Result<Unit> {
+        try {
+            // The table read can throw too, and the caller awaits a result, never a throw.
+            val result = try {
+                readStore(indexUrl)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                Result.failure(e)
+            }
+            return result.onFailure { _storeRefreshFailures.tryEmit(it) }
+        } finally {
+            _refreshingStores.update { it - indexUrl }
+        }
+    }
+
+    private suspend fun readStore(indexUrl: String): Result<Unit> {
+        val rows = withContext(ioDispatcher) { stores.getAll() }
+        val row = rows.firstOrNull { it.indexUrl == indexUrl } ?: return Result.success(Unit)
+        val othersRead = mutex.withLock { rows.all { it.indexUrl == indexUrl || it.indexUrl in lastListed } }
+        if (!othersRead) return refreshAvailable()
+
+        val result = repoClient.fetch(indexUrl)
+            .mapCatching { index -> index to repoClient.extensions(index).getOrThrow() }
+        val (index, listed) = result.getOrElse { error ->
+            logcat(LogPriority.WARN, error) { "Index fetch failed" }
+            return Result.failure(RepoRefreshException(listOf(RepoRefreshException.Failure(row, error))))
+        }
+        val merged = mutex.withLock {
+            // Removed while it was read: whatever it listed must not come back after forgetStore.
+            if (withContext(ioDispatcher) { stores.get(indexUrl) } == null) return Result.success(Unit)
+            lastListed[indexUrl] = listed
+            publishListed()
+        }
+        warnOnSourceIdDrift(listOf(index), merged)
+        return Result.success(Unit)
+    }
+
+    /**
+     * Takes what the index at [indexUrl] listed out of [availableExtensions], once its repository has
+     * been removed, so the Extensions page stops offering it without a refresh. An extension
+     * installed from it stays installed and now reads as obsolete. An index never read this process
+     * listed nothing here, and nothing changes.
+     */
+    suspend fun forgetStore(indexUrl: String) {
+        mutex.withLock {
+            if (lastListed.remove(indexUrl) == null) return
+            publishListed()
+        }
+    }
+
+    /**
+     * Caller holds [mutex]. Publishes [lastListed] as [availableExtensions], one row per package with
+     * the highest version code winning when two indexes carry the same one, and recomputes the
+     * update state from it. Just after an index fetch the count is certain to be known, so it is
+     * written whatever it is.
+     */
+    private fun publishListed(): List<Extension.Available> {
+        if (lastListed.isEmpty()) {
+            // No index left read, the last one removed: nothing is an update or obsolete any more,
+            // which is what a start that has read none knows too.
+            _availableExtensions.value = emptyList()
+            _installedExtensions.value = _installedExtensions.value.map { it.copy(hasUpdate = false, isObsolete = false) }
+            preferences.extensionUpdatesCount.set(pendingUpdateCount())
+            return emptyList()
+        }
+        val merged = lastListed.values.flatten()
+            .groupBy { it.packageName }
+            .values
+            .map { candidates -> candidates.maxBy { it.versionCode } }
+        _availableExtensions.value = merged
+        _installedExtensions.value = _installedExtensions.value.map { it.withUpdateState(merged) }
+        preferences.extensionUpdatesCount.set(pendingUpdateCount())
+        return merged
     }
 
     /** Downloads, verifies, installs privately and loads. Progress reaches [installSteps]. */

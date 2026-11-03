@@ -30,6 +30,7 @@ import io.mockk.just
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -73,6 +74,8 @@ class ExtensionsViewModelTest {
     private val installFailuresFlow = MutableStateFlow<Map<String, Throwable>>(emptyMap())
     private val notLoadedUpdatesFlow = MutableStateFlow<Set<String>>(emptySet())
     private val storeCountFlow = MutableStateFlow(1L)
+    private val refreshingStoresFlow = MutableStateFlow<Set<String>>(emptySet())
+    private val storeRefreshFailuresFlow = MutableSharedFlow<Throwable>(extraBufferCapacity = 1)
 
     private val extensionManager = mockk<ExtensionManager> {
         every { isInitialized } returns initializedFlow
@@ -84,6 +87,8 @@ class ExtensionsViewModelTest {
         every { installSteps } returns installStepsFlow
         every { installFailures } returns installFailuresFlow
         every { notLoadedUpdates } returns notLoadedUpdatesFlow
+        every { refreshingStores } returns refreshingStoresFlow
+        every { storeRefreshFailures } returns storeRefreshFailuresFlow
     }
     private val updateExtensionStores = mockk<UpdateExtensionStores>()
     private val getExtensionStoreCount = mockk<GetExtensionStoreCountAsFlow>()
@@ -389,6 +394,53 @@ class ExtensionsViewModelTest {
     }
 
     @Test
+    fun `a repository being read on its own shows the page as refreshing until it is read`() = runTest(testDispatcher) {
+        availableFlow.value = listOf(available(PACKAGE_AVAILABLE, name = "Fixture Available"))
+        val viewModel = buildViewModel()
+        advanceUntilIdle()
+        viewModel.state.value.isRefreshingStore shouldBe false
+
+        refreshingStoresFlow.value = setOf("https://example.invalid/added/index.json")
+        advanceUntilIdle()
+        viewModel.state.value.isRefreshingStore shouldBe true
+
+        // An emission from the manager underneath keeps it, as it keeps the refresh flag.
+        availableFlow.value = emptyList()
+        advanceUntilIdle()
+        viewModel.state.value.isRefreshingStore shouldBe true
+
+        refreshingStoresFlow.value = emptySet()
+        advanceUntilIdle()
+        viewModel.state.value.isRefreshingStore shouldBe false
+    }
+
+    @Test
+    fun `a repository that could not be read on its own reaches the banner`() = runTest(testDispatcher) {
+        availableFlow.value = listOf(available(PACKAGE_AVAILABLE, name = "Fixture Available"))
+        val viewModel = buildViewModel()
+        advanceUntilIdle()
+        val failure = IllegalStateException("fixture added repository failure")
+
+        storeRefreshFailuresFlow.emit(failure)
+        advanceUntilIdle()
+
+        viewModel.state.value.refreshError shouldBe failure
+    }
+
+    @Test
+    fun `an obsolete installed extension leads the installed group`() = runTest(testDispatcher) {
+        installedFlow.value = listOf(
+            installed(PACKAGE_A, name = "Fixture A"),
+            installed(PACKAGE_NO_UPDATE, name = "Fixture Z").copy(isObsolete = true),
+        )
+        val viewModel = buildViewModel()
+        advanceUntilIdle()
+
+        viewModel.state.value.rows(ExtensionGroup.Installed).map { it.packageName } shouldContainExactly
+            listOf(PACKAGE_NO_UPDATE, PACKAGE_A)
+    }
+
+    @Test
     fun `language groups lead with all and en, then read alphabetically`() = runTest(testDispatcher) {
         availableFlow.value = listOf(
             available("dev.example.fixture.de", name = "Fixture German", lang = "de"),
@@ -604,6 +656,66 @@ class ExtensionsViewModelTest {
         // some later install put in its place.
         viewModel.cancelInstall(PACKAGE_AVAILABLE)
         verify(exactly = 1) { extensionManager.install(extension) }
+    }
+
+    @Test
+    fun `a second install of a package still installing starts nothing, and cancel stops the first`() =
+        runTest(testDispatcher) {
+            // A tap on the row during its install used to start a second job for the same package,
+            // which took the first one's place in the map: cancel stopped only the newer download.
+            val extension = available(PACKAGE_AVAILABLE, name = "Fixture Available")
+            availableFlow.value = listOf(extension)
+            val job = Job()
+            every { extensionManager.install(extension) } returns job
+
+            val viewModel = buildViewModel()
+            advanceUntilIdle()
+
+            viewModel.install(extension)
+            viewModel.install(extension)
+            verify(exactly = 1) { extensionManager.install(extension) }
+
+            viewModel.cancelInstall(PACKAGE_AVAILABLE)
+            job.isCancelled shouldBe true
+        }
+
+    @Test
+    fun `a package whose install has ended can be installed again`() = runTest(testDispatcher) {
+        // Error is an ended install too, so Retry and a tap on the row both start a new one.
+        val extension = available(PACKAGE_AVAILABLE, name = "Fixture Available")
+        availableFlow.value = listOf(extension)
+        val ended = Job().apply { complete() }
+        every { extensionManager.install(extension) } returnsMany listOf(ended, Job())
+
+        val viewModel = buildViewModel()
+        advanceUntilIdle()
+
+        viewModel.install(extension)
+        viewModel.install(extension)
+
+        verify(exactly = 2) { extensionManager.install(extension) }
+    }
+
+    @Test
+    fun `update all while an update is running starts no second one for that package`() = runTest(testDispatcher) {
+        val first = installed(PACKAGE_HAS_UPDATE, name = "Fixture One", hasUpdate = true)
+        val broken = LoadResult.Error(PACKAGE_BROKEN, LoadError.CLASS_LOAD_FAILED, versionCode = 1L, libVersion = 1.6)
+        installedFlow.value = listOf(first)
+        updatesFlow.value = listOf(first)
+        loadErrorsFlow.value = listOf(broken)
+        notLoadedUpdatesFlow.value = setOf(PACKAGE_BROKEN)
+        every { extensionManager.update(first) } returns Job()
+        every { extensionManager.updatePackage(PACKAGE_BROKEN) } returns Job()
+
+        val viewModel = buildViewModel()
+        advanceUntilIdle()
+
+        viewModel.update(first)
+        viewModel.updateNotLoaded(PACKAGE_BROKEN)
+        viewModel.updateAll()
+
+        verify(exactly = 1) { extensionManager.update(first) }
+        verify(exactly = 1) { extensionManager.updatePackage(PACKAGE_BROKEN) }
     }
 
     @Test

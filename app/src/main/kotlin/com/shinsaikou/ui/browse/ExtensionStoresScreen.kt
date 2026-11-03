@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
@@ -11,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -60,6 +62,8 @@ fun ExtensionStoresScreen(pendingUrl: String? = null) {
             val message = when (event) {
                 is ExtensionStoresViewModel.Event.Snackbar -> resources.getString(event.messageRes)
                 is ExtensionStoresViewModel.Event.SnackbarError -> RepoErrorText.of(resources, event.error)
+                is ExtensionStoresViewModel.Event.RefreshFailed ->
+                    resources.getString(R.string.ext_refresh_failed, RepoErrorText.of(resources, event.error))
             }
             snackbarHostState.showSnackbar(message)
         }
@@ -104,6 +108,12 @@ fun ExtensionStoresScreen(pendingUrl: String? = null) {
                         detail = row.indexUrl,
                         trailing = stringResource(R.string.action_remove),
                         onTrailing = { viewModel.askRemove(row) },
+                        // While a repository just added has its extensions read.
+                        trailingIcon = if (row.indexUrl in state.refreshing) {
+                            { CircularProgressIndicator(modifier = Modifier.size(24.dp)) }
+                        } else {
+                            null
+                        },
                     )
                 }
             }

@@ -215,6 +215,30 @@ class GlobalSearchViewModelTest {
     }
 
     @Test
+    fun `the Local source is asked after every extension source but the pinned ones`() = runTest(testDispatcher) {
+        every { sourceManager.getCatalogueSources() } returns flowOf(
+            listOf(
+                catalogueSource(1L, "Zulu", "en"),
+                catalogueSource(SourceIds.LOCAL, "Local", "other"),
+                catalogueSource(2L, "Alpha", "fr"),
+                catalogueSource(3L, "Pinned", "fr"),
+            ),
+        )
+        sourcePreferences.enabledLanguages.set(setOf("en", "fr"))
+        sourcePreferences.pinnedSources.set(setOf("3"))
+        // Even the last used source, which otherwise leads the unpinned ones.
+        sourcePreferences.lastUsedSource.set(SourceIds.LOCAL)
+        coEvery { getSourceMangaPage.await(any(), any(), any()) } returns emptyResultPage()
+
+        val viewModel = viewModel()
+        viewModel.setQuery("one piece")
+        viewModel.submitSearch()
+        advanceUntilIdle()
+
+        viewModel.state.value.groups.map { it.sourceId } shouldContainExactly listOf(3L, 1L, 2L, SourceIds.LOCAL)
+    }
+
+    @Test
     fun `Pinned asks only the pinned sources, and the choice is remembered`() = runTest(testDispatcher) {
         every { sourceManager.getCatalogueSources() } returns
             flowOf(listOf(catalogueSource(1L, "Alpha", "en"), catalogueSource(2L, "Beta", "en")))

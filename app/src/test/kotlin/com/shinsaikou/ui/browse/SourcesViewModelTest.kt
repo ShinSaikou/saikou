@@ -190,6 +190,28 @@ class SourcesViewModelTest {
         }
 
     @Test
+    fun `the Local source is listed after every extension source, pinned or not`() = runTest(testDispatcher) {
+        sourcePreferences.enabledLanguages.set(setOf("en"))
+        sourcesFlow.value = listOf(
+            catalogueSource(1L, "Kappa", "en"),
+            catalogueSource(SourceIds.LOCAL, "Local source", "other"),
+            catalogueSource(2L, "Mu", "en"),
+            catalogueSource(3L, "Alpha", "en"),
+        )
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        viewModel.ids() shouldContainExactly listOf(3L, 1L, 2L, SourceIds.LOCAL)
+
+        // Pinned, it is last among the pinned sources.
+        viewModel.togglePin(SourceIds.LOCAL)
+        viewModel.togglePin(2L)
+        advanceUntilIdle()
+
+        viewModel.ids() shouldContainExactly listOf(2L, SourceIds.LOCAL, 3L, 1L)
+    }
+
+    @Test
     fun `no section label is drawn while nothing listed is pinned`() = runTest(testDispatcher) {
         sourcePreferences.enabledLanguages.set(setOf("en"))
         // A pin on a source the list does not show, one of another language here, draws no label.

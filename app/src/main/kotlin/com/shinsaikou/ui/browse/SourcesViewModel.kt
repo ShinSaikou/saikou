@@ -40,7 +40,8 @@ import kotlinx.coroutines.launch
  * reference to an extension's class loader alive after the extension is gone.
  *
  * Pinned sources come first under their own label, as upstream's list puts them in a "Pinned" group
- * above the rest; Saikou has no language groups, so the rest sit under one label of their own. The
+ * above the rest; Saikou has no language groups, so the rest sit under one label of their own. Each
+ * group reads by name with the Local source last ([localSourceLast]). The
  * last used source (`lastUsedSource`, written when a source's listing opens) is listed once more
  * above both, under "Last used", as upstream's `GetEnabledSources` and `SourcesViewModel` list it
  * (phase 4 unit MP2).
@@ -168,6 +169,7 @@ class SourcesViewModel(
             .filter { it.matches(query) }
             .sortedWith(
                 compareByDescending<CatalogueSource> { it.id.toString() in pinned }
+                    .then(localSourceLast())
                     .thenBy { it.name.lowercase() },
             )
             .map {

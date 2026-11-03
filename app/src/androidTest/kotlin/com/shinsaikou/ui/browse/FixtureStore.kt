@@ -62,16 +62,35 @@ class FixtureStore(private val graph: AppGraph) {
      * keeping what an index fetch will overwrite.
      */
     suspend fun add() {
-        firstRequest = allServed().size
-        val preferences = graph.extensionsPreferences
-        keptLastIndexRefresh = preferences.lastIndexRefresh.takeIf { it.isSet() }?.get()
-        keptUpdatesCount = preferences.extensionUpdatesCount.takeIf { it.isSet() }?.get()
+        keep()
         if (graph.extensionStoreRepository.get(INDEX_URL) != null) return
         val store = graph.addExtensionStore.await(ADDRESS).getOrElse { error ->
             throw AssertionError("the fixture store at $ADDRESS was not added; is browse_fixture_server.py running?", error)
         }
         addedTheStore = true
         assertEquals("the fixture store's row address", INDEX_URL, store.indexUrl)
+    }
+
+    /**
+     * [add]'s bookkeeping for a test that adds the store itself, by typing [ADDRESS] on the stores
+     * screen: what an index fetch will overwrite is kept, and [restore] removes the store. A fixture
+     * store left configured is removed first, through the calls behind that screen's remove, so the
+     * screen's add is the one that lists it.
+     */
+    suspend fun expectTheScreensAdd() {
+        if (graph.extensionStoreRepository.get(INDEX_URL) != null) {
+            graph.extensionStoreRepository.remove(INDEX_URL)
+            graph.extensionManager.forgetStore(INDEX_URL)
+        }
+        keep()
+        addedTheStore = true
+    }
+
+    private suspend fun keep() {
+        firstRequest = allServed().size
+        val preferences = graph.extensionsPreferences
+        keptLastIndexRefresh = preferences.lastIndexRefresh.takeIf { it.isSet() }?.get()
+        keptUpdatesCount = preferences.extensionUpdatesCount.takeIf { it.isSet() }?.get()
     }
 
     /** The fixture extension as the store's index lists it, after a fetch of every configured index. */

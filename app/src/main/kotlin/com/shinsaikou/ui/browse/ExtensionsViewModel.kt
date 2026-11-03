@@ -110,6 +110,8 @@ class ExtensionsViewModel(
     data class State(
         val isInitialized: Boolean = false,
         val isRefreshing: Boolean = false,
+        /** A repository just added is having its extensions read ([ExtensionManager.refreshStore]). */
+        val isRefreshingStore: Boolean = false,
         val storeCount: Long = 0,
         val groups: List<Pair<ExtensionGroup, List<ExtensionUi>>> = emptyList(),
         val installSteps: Map<String, InstallStep> = emptyMap(),
@@ -180,11 +182,24 @@ class ExtensionsViewModel(
                     mutableState.update { current ->
                         projected.copy(
                             isRefreshing = current.isRefreshing,
+                            isRefreshingStore = current.isRefreshingStore,
                             refreshError = current.refreshError,
                             dialog = current.dialog,
                         )
                     }
                 }
+        }
+        // A repository added on its own screen is read by the manager, which outlives that screen,
+        // so its loading state and its failure are shown here as a refresh's would be.
+        viewModelScope.launch {
+            extensionManager.refreshingStores.collect { stores ->
+                mutableState.update { it.copy(isRefreshingStore = stores.isNotEmpty()) }
+            }
+        }
+        viewModelScope.launch {
+            extensionManager.storeRefreshFailures.collect { error ->
+                mutableState.update { it.copy(refreshError = error) }
+            }
         }
         refreshIfNothingAvailable()
     }
@@ -242,12 +257,14 @@ class ExtensionsViewModel(
     }
 
     fun install(available: Extension.Available) {
+        if (isInstalling(available.packageName)) return
         val target = extensionManager.availableExtensions.value
             .firstOrNull { it.packageName == available.packageName } ?: return
         installJobs[target.packageName] = extensionManager.install(target)
     }
 
     fun update(installed: Extension.Installed) {
+        if (isInstalling(installed.packageName)) return
         val target = extensionManager.installedExtensions.value
             .firstOrNull { it.packageName == installed.packageName } ?: return
         installJobs[target.packageName] = extensionManager.update(target)
@@ -255,9 +272,17 @@ class ExtensionsViewModel(
 
     /** Updates a package on disk that did not load, while the manager still lists an update for it. */
     fun updateNotLoaded(packageName: String) {
+        if (isInstalling(packageName)) return
         if (packageName !in extensionManager.notLoadedUpdates.value) return
         installJobs[packageName] = extensionManager.updatePackage(packageName)
     }
+
+    /**
+     * Whether the package's install or update job is still running. A second one for the same
+     * package would take its place in [installJobs], so Cancel would stop only the newer one while
+     * the first download went on writing its steps.
+     */
+    private fun isInstalling(packageName: String): Boolean = installJobs[packageName]?.isActive == true
 
     /** Every pending update at once, loaded or not, whatever the search query is currently hiding. */
     fun updateAll() {
@@ -359,10 +384,11 @@ class ExtensionsViewModel(
             .filter { environment.showNsfw || !it.isNsfw }
             .sortedBy { it.name.lowercase() }
             .map { ext -> ExtensionUi.Update(ext, available.firstOrNull { it.packageName == ext.packageName }) }
+        // Obsolete first, as upstream sorts them, so one no repository lists any more is seen.
         val installedRows = manager.installed
             .filterNot { it.packageName in updatePackages }
             .filter { environment.showNsfw || !it.isNsfw }
-            .sortedBy { it.name.lowercase() }
+            .sortedWith(compareBy<Extension.Installed> { !it.isObsolete }.thenBy { it.name.lowercase() })
             .map { ext ->
                 val newer = available.firstOrNull { it.packageName == ext.packageName }
                     ?.takeIf { it.versionCode > ext.versionCode || it.libVersion > ext.libVersion }

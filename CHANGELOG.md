@@ -45,6 +45,20 @@ release may change behaviour.
   long press on any of them shows its name. On Library the update errors button now sits first, so
   the others stay put when it appears. History's **Clear** text button is an icon now, and still
   asks before it clears.
+- The Extensions page of Browse looks like Mihon's. Updates pending comes first, with its
+  **Update all** button in the heading, then Installed, then what you can install under a heading
+  per language. Each row shows the extension's icon, its name, and one line with its language,
+  version and any warning (18+, obsolete or untrusted) in red. Install, Update, Trust and the
+  settings of an installed extension are icon buttons at the end of the row. While an extension
+  downloads or installs, a ring turns around its icon and the row's button cancels it.
+- On the Extensions page the search and the language filter are in the top bar, and the extension
+  repositories are in its menu. Its search button searches the extensions; Global Search is on the
+  Sources page. Long press an installed extension to uninstall it; the menu on each row is gone.
+- The Local source is listed after every extension's sources on the Sources page and in Global
+  Search, instead of among them by name.
+- Adding an extension repository lists its extensions on the Extensions page right away, without
+  pulling to refresh, and removing one takes them off the same way. The repository's row shows a
+  spinner while its extensions load.
 
 ### Fixed
 

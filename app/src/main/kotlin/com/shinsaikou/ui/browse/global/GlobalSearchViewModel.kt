@@ -11,6 +11,7 @@ import com.shinsaikou.source.CatalogueSource
 import com.shinsaikou.source.SourceManager
 import com.shinsaikou.source.model.FilterList
 import com.shinsaikou.ui.browse.isInEnabledLanguage
+import com.shinsaikou.ui.browse.localSourceLast
 import com.shinsaikou.ui.browse.matureSourceIds
 import com.shinsaikou.ui.util.languageName
 import com.shinsaikou.ui.util.withCurrent
@@ -351,18 +352,18 @@ class GlobalSearchViewModel(
     }
 
     /**
-     * The sources list's own order: pinned first, then the last used one, then by language with
-     * English first, then by name. Groups read in the order the owner already knows from Browse,
-     * which is the whole point of not inventing a second ordering here.
+     * The sources list's own order: pinned first, then the Local source after every extension source
+     * ([localSourceLast]), then the last used one, then by language with English first, then by
+     * name. Groups read in the order the owner already knows from Browse, which is the whole point
+     * of not inventing a second ordering here.
      */
     private fun sourceOrder(pinned: Set<String>, lastUsed: Long): Comparator<CatalogueSource> =
-        compareBy<CatalogueSource>(
-            { if (it.id.toString() in pinned) 0 else 1 },
-            { if (it.id == lastUsed) 0 else 1 },
-            { if (it.lang == LANGUAGE_EN) 0 else 1 },
-            { languageName(it.lang) },
-            { it.name.lowercase() },
-        )
+        compareBy<CatalogueSource> { if (it.id.toString() in pinned) 0 else 1 }
+            .then(localSourceLast())
+            .thenBy { if (it.id == lastUsed) 0 else 1 }
+            .thenBy { if (it.lang == LANGUAGE_EN) 0 else 1 }
+            .thenBy { languageName(it.lang) }
+            .thenBy { it.name.lowercase() }
 
     @AssistedFactory
     @ManualViewModelAssistedFactoryKey
