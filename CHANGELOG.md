@@ -16,6 +16,12 @@ release may change behaviour.
   words in every source, so an entry you do not have yet is one tap away, even while the library is
   empty. It is offered for plain words only, not for a search by genre, author or another field.
 - Tap an entry's title or author to search every source for it. A long press still copies it.
+- A **Hide NSFW entries** button in the History bar. While it is on, History leaves out the entries
+  whose source comes from an installed extension marked NSFW, search results included. Entries from
+  the Local source, or from a source with no installed extension, always stay. **Clear all** still
+  clears every entry, hidden ones too.
+- **Open random entry** in the Library's menu opens a random entry from the category on screen,
+  after filters and search.
 
 ### Changed
 
@@ -32,6 +38,13 @@ release may change behaviour.
   been copied and checked.
 - Each row of the More tab has an icon, so Downloaded only, Download queue, Categories, Backup,
   Settings and the rest can be told apart at a glance.
+- The app is called Shin Saikou on the phone, so searching the phone for the name the website uses
+  finds it.
+- The buttons at the top of Library, Updates, History and Browse follow one order: search first,
+  then the switches that change what the list shows, then the tab's own action, then the menu. A
+  long press on any of them shows its name. On Library the update errors button now sits first, so
+  the others stay put when it appears. History's **Clear** text button is an icon now, and still
+  asks before it clears.
 
 ### Fixed
 

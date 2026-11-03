@@ -12,7 +12,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.NoAdultContent
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -45,6 +47,8 @@ import com.shinsaikou.ui.components.MangaCover
 import com.shinsaikou.ui.components.ScreenTopBar
 import com.shinsaikou.ui.components.SearchField
 import com.shinsaikou.ui.components.SaikouSnackbarHost
+import com.shinsaikou.ui.components.TopBarAction
+import com.shinsaikou.ui.components.TopBarToggleAction
 import com.shinsaikou.ui.components.selectionTopBarColors
 import dev.zacsweers.metrox.viewmodel.metroViewModel
 import eu.kanade.presentation.components.relativeDateText
@@ -115,22 +119,32 @@ fun HistoryScreen() {
                     title = stringResource(R.string.history_title),
                     scrollBehavior = scrollBehavior,
                     actions = {
-                        IconButton(onClick = { if (searchOpen) closeSearch() else searchOpen = true }) {
-                            if (searchOpen) {
-                                Icon(
-                                    Icons.Outlined.Close,
-                                    contentDescription = stringResource(R.string.action_close),
-                                )
-                            } else {
-                                Icon(
-                                    Icons.Outlined.Search,
-                                    contentDescription = stringResource(R.string.action_search),
-                                )
-                            }
+                        if (searchOpen) {
+                            TopBarAction(
+                                label = stringResource(R.string.action_close),
+                                icon = Icons.Outlined.Close,
+                                onClick = ::closeSearch,
+                            )
+                        } else {
+                            TopBarAction(
+                                label = stringResource(R.string.action_search),
+                                icon = Icons.Outlined.Search,
+                                onClick = { searchOpen = true },
+                            )
                         }
-                        TextButton(onClick = viewModel::askClearAll) {
-                            Text(stringResource(R.string.action_clear))
-                        }
+                        TopBarToggleAction(
+                            label = stringResource(
+                                if (state.hideNsfw) R.string.history_show_nsfw else R.string.history_hide_nsfw,
+                            ),
+                            icon = Icons.Outlined.NoAdultContent,
+                            checked = state.hideNsfw,
+                            onCheckedChange = viewModel::setHideNsfw,
+                        )
+                        TopBarAction(
+                            label = stringResource(R.string.action_clear_all),
+                            icon = Icons.Outlined.DeleteSweep,
+                            onClick = viewModel::askClearAll,
+                        )
                     },
                 )
             }
@@ -152,10 +166,11 @@ fun HistoryScreen() {
             when {
                 state.loading -> LoadingScreen(Modifier.weight(1f))
                 state.items.isEmpty() -> EmptyScreen(
-                    stringRes = if (state.query.isBlank()) {
-                        R.string.history_empty
-                    } else {
-                        R.string.empty_search_results
+                    stringRes = when {
+                        // Said first, or a history of nothing but NSFW reads as never having read.
+                        state.hiddenCount > 0 -> R.string.history_empty_nsfw_hidden
+                        state.query.isBlank() -> R.string.history_empty
+                        else -> R.string.empty_search_results
                     },
                     modifier = Modifier.weight(1f),
                 )

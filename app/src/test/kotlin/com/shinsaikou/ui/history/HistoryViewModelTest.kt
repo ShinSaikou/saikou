@@ -3,7 +3,11 @@ package com.shinsaikou.ui.history
 import app.cash.turbine.test
 import com.shinsaikou.domain.chapter.interactor.GetScanlatorPriority
 import com.shinsaikou.domain.preferences.UiPreferences
+import com.shinsaikou.extensions.ExtensionManager
+import com.shinsaikou.extensions.model.Extension
 import com.shinsaikou.i18n.R
+import com.shinsaikou.source.CatalogueSource
+import com.shinsaikou.source.SourceIds
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
@@ -31,6 +35,8 @@ import tachiyomi.domain.history.interactor.RemoveHistory
 import tachiyomi.domain.history.model.HistoryWithRelations
 import tachiyomi.domain.history.repository.HistoryRepository
 import tachiyomi.domain.manga.model.MangaCover
+import java.io.File
+import java.util.Date
 import com.shinsaikou.core.common.coroutines.Dispatchers as AppDispatchers
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -43,6 +49,14 @@ class HistoryViewModelTest {
         coEvery { await(any()) } returns emptyMap()
     }
     private val uiPreferences = UiPreferences(InMemoryPreferenceStore())
+    private val installedFlow = MutableStateFlow<List<Extension.Installed>>(emptyList())
+
+    /** Loaded already unless a test says otherwise, as it is once the app has started. */
+    private val initializedFlow = MutableStateFlow(true)
+    private val extensionManager = mockk<ExtensionManager> {
+        every { installedExtensions } returns installedFlow
+        every { isInitialized } returns initializedFlow
+    }
 
     @BeforeEach
     fun setUp() {
@@ -59,6 +73,7 @@ class HistoryViewModelTest {
         title: String = "Fixture Manga",
         mangaId: Long = 100L,
         chapterId: Long = 10L,
+        sourceId: Long = 1L,
     ) = HistoryWithRelations(
         id = id,
         chapterId = chapterId,
@@ -70,7 +85,7 @@ class HistoryViewModelTest {
         readDuration = 0L,
         coverData = MangaCover(
             mangaId = 100L,
-            sourceId = 1L,
+            sourceId = sourceId,
             isMangaFavorite = false,
             url = null,
             lastModified = 0L,
@@ -83,6 +98,7 @@ class HistoryViewModelTest {
         getNextChapters = getNextChapters,
         getScanlatorPriority = getScanlatorPriority,
         uiPreferences = uiPreferences,
+        extensionManager = extensionManager,
         dispatchers = AppDispatchers(io = testDispatcher, default = testDispatcher, main = testDispatcher),
     )
 
@@ -476,5 +492,208 @@ class HistoryViewModelTest {
         coVerify(exactly = 0) { historyRepository.resetHistory(any()) }
         coVerify(exactly = 0) { historyRepository.resetHistoryByMangaId(any()) }
         vm.state.value.dialog shouldBe null
+    }
+
+    private fun source(sourceId: Long): CatalogueSource = mockk { every { id } returns sourceId }
+
+    private fun installedExtension(isNsfw: Boolean, vararg sourceIds: Long) = Extension.Installed(
+        packageName = "dev.example.fixture${sourceIds.first()}",
+        name = "Fixture Extension",
+        versionName = "1.0",
+        versionCode = 1L,
+        libVersion = 1.6,
+        lang = "en",
+        isNsfw = isNsfw,
+        sources = sourceIds.map(::source),
+        extFile = File("fixture.ext"),
+    )
+
+    @Test
+    fun `hide NSFW is off by default and shows every row`() = runTest(testDispatcher) {
+        installedFlow.value = listOf(installedExtension(isNsfw = true, MATURE_SOURCE))
+        val rows = listOf(historyRow(id = 1L, sourceId = MATURE_SOURCE), historyRow(id = 2L, sourceId = PLAIN_SOURCE))
+        every { historyRepository.getHistory(any()) } returns flowOf(rows)
+
+        val vm = viewModel()
+        advanceUntilIdle()
+
+        uiPreferences.historyHideNsfw.get() shouldBe false
+        vm.state.value.hideNsfw shouldBe false
+        vm.state.value.items shouldContainExactly rows
+        vm.state.value.hiddenCount shouldBe 0
+    }
+
+    @Test
+    fun `hide NSFW leaves out the rows of an NSFW extension's sources and keeps the rest`() = runTest(testDispatcher) {
+        installedFlow.value = listOf(
+            installedExtension(isNsfw = true, MATURE_SOURCE, OTHER_MATURE_SOURCE),
+            installedExtension(isNsfw = false, PLAIN_SOURCE),
+        )
+        val mature = historyRow(id = 1L, sourceId = MATURE_SOURCE)
+        val plain = historyRow(id = 2L, sourceId = PLAIN_SOURCE)
+        val otherMature = historyRow(id = 3L, sourceId = OTHER_MATURE_SOURCE)
+        // The Local source and a source no installed extension provides: nothing says what they hold.
+        val local = historyRow(id = 4L, sourceId = SourceIds.LOCAL)
+        val uninstalled = historyRow(id = 5L, sourceId = UNINSTALLED_SOURCE)
+        val rows = listOf(mature, plain, otherMature, local, uninstalled)
+        every { historyRepository.getHistory(any()) } returns flowOf(rows)
+
+        val vm = viewModel()
+        advanceUntilIdle()
+        vm.setHideNsfw(true)
+        advanceUntilIdle()
+
+        uiPreferences.historyHideNsfw.get() shouldBe true
+        vm.state.value.hideNsfw shouldBe true
+        vm.state.value.items shouldContainExactly listOf(plain, local, uninstalled)
+        vm.state.value.hiddenCount shouldBe 2
+
+        vm.setHideNsfw(false)
+        advanceUntilIdle()
+
+        vm.state.value.items shouldContainExactly rows
+        vm.state.value.hiddenCount shouldBe 0
+    }
+
+    @Test
+    fun `hide NSFW applies to search results too`() = runTest(testDispatcher) {
+        installedFlow.value = listOf(installedExtension(isNsfw = true, MATURE_SOURCE))
+        uiPreferences.historyHideNsfw.set(true)
+        val mature = historyRow(id = 1L, title = "Fixture Match", sourceId = MATURE_SOURCE)
+        val plain = historyRow(id = 2L, title = "Fixture Match Too", sourceId = PLAIN_SOURCE)
+        every { historyRepository.getHistory("") } returns flowOf(emptyList())
+        every { historyRepository.getHistory("fixture match") } returns flowOf(listOf(mature, plain))
+
+        val vm = viewModel()
+        advanceUntilIdle()
+        vm.search("Fixture Match")
+        advanceUntilIdle()
+
+        vm.state.value.items shouldContainExactly listOf(plain)
+        vm.state.value.hiddenCount shouldBe 1
+    }
+
+    @Test
+    fun `an NSFW extension installed later hides its rows then`() = runTest(testDispatcher) {
+        uiPreferences.historyHideNsfw.set(true)
+        val row = historyRow(id = 1L, sourceId = MATURE_SOURCE)
+        every { historyRepository.getHistory(any()) } returns flowOf(listOf(row))
+
+        val vm = viewModel()
+        advanceUntilIdle()
+        vm.state.value.items shouldContainExactly listOf(row)
+
+        installedFlow.value = listOf(installedExtension(isNsfw = true, MATURE_SOURCE))
+        advanceUntilIdle()
+
+        vm.state.value.items shouldBe emptyList()
+        vm.state.value.hiddenCount shouldBe 1
+    }
+
+    @Test
+    fun `hide NSFW shows no rows until the extensions have loaded`() = runTest(testDispatcher) {
+        // Before the first load the installed list is empty, so filtering against it would show
+        // every NSFW row for a moment.
+        initializedFlow.value = false
+        uiPreferences.historyHideNsfw.set(true)
+        val rows = listOf(historyRow(id = 1L, sourceId = MATURE_SOURCE), historyRow(id = 2L, sourceId = PLAIN_SOURCE))
+        every { historyRepository.getHistory(any()) } returns flowOf(rows)
+
+        val vm = viewModel()
+        advanceUntilIdle()
+
+        vm.state.value.loading shouldBe true
+        vm.state.value.items shouldBe emptyList()
+        vm.state.value.hideNsfw shouldBe true
+    }
+
+    @Test
+    fun `hide NSFW filters the rows once the extensions have loaded`() = runTest(testDispatcher) {
+        initializedFlow.value = false
+        uiPreferences.historyHideNsfw.set(true)
+        val plain = historyRow(id = 2L, sourceId = PLAIN_SOURCE)
+        val rows = listOf(historyRow(id = 1L, sourceId = MATURE_SOURCE), plain)
+        every { historyRepository.getHistory(any()) } returns flowOf(rows)
+
+        val vm = viewModel()
+        advanceUntilIdle()
+        vm.state.value.loading shouldBe true
+
+        // The manager publishes the list before it turns the flag.
+        installedFlow.value = listOf(installedExtension(isNsfw = true, MATURE_SOURCE))
+        initializedFlow.value = true
+        advanceUntilIdle()
+
+        vm.state.value.loading shouldBe false
+        vm.state.value.items shouldContainExactly listOf(plain)
+        vm.state.value.hiddenCount shouldBe 1
+    }
+
+    @Test
+    fun `with hide NSFW off the rows do not wait for the extensions`() = runTest(testDispatcher) {
+        initializedFlow.value = false
+        val rows = listOf(historyRow(id = 1L, sourceId = MATURE_SOURCE), historyRow(id = 2L, sourceId = PLAIN_SOURCE))
+        every { historyRepository.getHistory(any()) } returns flowOf(rows)
+
+        val vm = viewModel()
+        advanceUntilIdle()
+
+        vm.state.value.loading shouldBe false
+        vm.state.value.items shouldContainExactly rows
+        vm.state.value.hiddenCount shouldBe 0
+    }
+
+    @Test
+    fun `hiding a selected row drops it from the selection`() = runTest(testDispatcher) {
+        installedFlow.value = listOf(installedExtension(isNsfw = true, MATURE_SOURCE))
+        val rows = listOf(historyRow(id = 1L, sourceId = MATURE_SOURCE), historyRow(id = 2L, sourceId = PLAIN_SOURCE))
+        every { historyRepository.getHistory(any()) } returns flowOf(rows)
+
+        val vm = viewModel()
+        advanceUntilIdle()
+        vm.selectAll()
+        vm.setHideNsfw(true)
+        advanceUntilIdle()
+
+        vm.state.value.selection shouldBe setOf(2L)
+        vm.state.value.allSelected shouldBe true
+    }
+
+    @Test
+    fun `clear all still clears the hidden rows`() = runTest(testDispatcher) {
+        installedFlow.value = listOf(installedExtension(isNsfw = true, MATURE_SOURCE))
+        uiPreferences.historyHideNsfw.set(true)
+        val row = historyRow(id = 1L, sourceId = MATURE_SOURCE)
+        every { historyRepository.getHistory(any()) } returns flowOf(listOf(row))
+
+        val vm = viewModel()
+        advanceUntilIdle()
+        vm.clearAll()
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { historyRepository.deleteAllHistory() }
+        coVerify(exactly = 0) { historyRepository.resetHistoryByMangaId(any()) }
+    }
+
+    @Test
+    fun `the day headers come from the shown rows, so a hidden day has none`() {
+        val day = Date(1_800_000_000_000L)
+        val earlier = Date(1_800_000_000_000L - 3 * 24 * 60 * 60 * 1000L)
+        val rows = listOf(
+            historyRow(id = 1L, sourceId = PLAIN_SOURCE).copy(readAt = day),
+            historyRow(id = 2L, sourceId = MATURE_SOURCE).copy(readAt = earlier),
+        )
+
+        val models = historyUiModels(withoutMatureSources(rows, setOf(MATURE_SOURCE)))
+
+        models.filterIsInstance<HistoryUiModel.Header>().size shouldBe 1
+        models.filterIsInstance<HistoryUiModel.Item>().map { it.history.id } shouldContainExactly listOf(1L)
+    }
+
+    private companion object {
+        const val PLAIN_SOURCE = 11L
+        const val MATURE_SOURCE = 21L
+        const val OTHER_MATURE_SOURCE = 22L
+        const val UNINSTALLED_SOURCE = 31L
     }
 }

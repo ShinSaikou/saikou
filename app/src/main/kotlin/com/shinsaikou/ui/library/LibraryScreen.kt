@@ -11,15 +11,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.FilterList
-import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LocalContentColor
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,6 +32,9 @@ import com.shinsaikou.navigation.SettingsSection
 import com.shinsaikou.presentation.core.util.isLandscape
 import com.shinsaikou.presentation.core.util.isTabletUi
 import com.shinsaikou.ui.components.SearchTopBar
+import com.shinsaikou.ui.components.TopBarAction
+import com.shinsaikou.ui.components.TopBarMenuItem
+import com.shinsaikou.ui.components.TopBarOverflow
 import com.shinsaikou.ui.components.SaikouSnackbarHost
 import com.shinsaikou.ui.components.UpdateErrorAction
 import dev.zacsweers.metrox.viewmodel.metroViewModel
@@ -192,7 +187,7 @@ fun LibraryScreen(searchRequest: String? = null, onSearchRequestConsumed: () -> 
                 )
             } else {
                 // Upstream's library bar: the search opens in the bar itself, in place of the title, and
-                // the actions after it stay put.
+                // the actions after it stay put. The update errors come first, as they come and go.
                 SearchTopBar(
                     title = toolbarTitle(state),
                     searchQuery = searchQuery.takeIf { searchOpen },
@@ -202,29 +197,30 @@ fun LibraryScreen(searchRequest: String? = null, onSearchRequestConsumed: () -> 
                     },
                     placeholder = stringResource(R.string.library_search_hint),
                     scrollBehavior = scrollBehavior,
-                    actions = {
+                    statusAction = {
                         UpdateErrorAction(
                             count = state.updateErrorCount,
                             onClick = viewModel::showUpdateErrors,
                         )
-                        IconButton(onClick = viewModel::showSettingsSheet) {
-                            Icon(
-                                Icons.Outlined.FilterList,
-                                contentDescription = stringResource(R.string.action_filter),
-                                // A filter that is on and invisible is how a library comes to look
-                                // half missing, so the icon itself says one is applied.
-                                tint = if (state.hasActiveFilters) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    LocalContentColor.current
-                                },
-                            )
-                        }
+                    },
+                    actions = {
+                        // A filter that is on and invisible is how a library comes to look half
+                        // missing, so the icon itself says one is applied.
+                        TopBarAction(
+                            label = stringResource(R.string.action_filter),
+                            icon = Icons.Outlined.FilterList,
+                            onClick = viewModel::showSettingsSheet,
+                            highlighted = state.hasActiveFilters,
+                        )
                         LibraryOverflowMenu(
                             updating = state.updating,
                             onUpdateLibrary = viewModel::updateNow,
                             onUpdateCategory = viewModel::updateCategory,
                             onStopUpdate = viewModel::stopUpdate,
+                            // From what the page shows, after filter and search, as upstream picks it.
+                            onOpenRandom = state.visibleItems
+                                .takeIf { it.isNotEmpty() }
+                                ?.let { items -> { openManga(items.random().id) } },
                         )
                     },
                 )
@@ -429,12 +425,13 @@ private fun toolbarTitle(state: LibraryViewModel.State): String {
 }
 
 /**
- * The bar's overflow, laid out as upstream's library overflow is: Update library, then Update
- * category. A text button in the bar changed width when it turned into Stop, which moved every
- * icon beside it mid run.
+ * The bar's overflow, laid out as upstream's library overflow is: Update library, Update category,
+ * then Open random entry. A text button in the bar changed width when it turned into Stop, which
+ * moved every icon beside it mid run.
  *
- * While a run is going the menu offers Stop update in their place, as starting a second run would
- * only answer that one is already going. The notification's Cancel stops it too.
+ * While a run is going the menu offers Stop update in place of the two updates, as starting a second
+ * run would only answer that one is already going. The notification's Cancel stops it too.
+ * [onOpenRandom] is null while the page shows nothing to pick from, and the item is left out.
  */
 @Composable
 private fun LibraryOverflowMenu(
@@ -442,38 +439,19 @@ private fun LibraryOverflowMenu(
     onUpdateLibrary: () -> Unit,
     onUpdateCategory: () -> Unit,
     onStopUpdate: () -> Unit,
+    onOpenRandom: (() -> Unit)?,
 ) {
-    var menuOpen by remember { mutableStateOf(false) }
-    IconButton(onClick = { menuOpen = true }) {
-        Icon(
-            Icons.Outlined.MoreVert,
-            contentDescription = stringResource(R.string.action_menu_overflow_description),
-        )
-    }
-    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-        if (updating) {
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.action_stop_update)) },
-                onClick = {
-                    menuOpen = false
-                    onStopUpdate()
-                },
-            )
-        } else {
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.action_update_library)) },
-                onClick = {
-                    menuOpen = false
-                    onUpdateLibrary()
-                },
-            )
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.action_update_category)) },
-                onClick = {
-                    menuOpen = false
-                    onUpdateCategory()
-                },
-            )
-        }
-    }
+    TopBarOverflow(
+        items = buildList {
+            if (updating) {
+                add(TopBarMenuItem(stringResource(R.string.action_stop_update), onStopUpdate))
+            } else {
+                add(TopBarMenuItem(stringResource(R.string.action_update_library), onUpdateLibrary))
+                add(TopBarMenuItem(stringResource(R.string.action_update_category), onUpdateCategory))
+            }
+            if (onOpenRandom != null) {
+                add(TopBarMenuItem(stringResource(R.string.action_open_random_manga), onOpenRandom))
+            }
+        },
+    )
 }

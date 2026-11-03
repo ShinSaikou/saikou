@@ -57,7 +57,7 @@ enum class TabletUiMode {
     NEVER,
 }
 
-/** Theme and formatting settings. Every key is upstream's. */
+/** Theme and formatting settings, and History's NSFW switch. Every key but [historyHideNsfw]'s is upstream's. */
 @SingleIn(AppScope::class)
 @Inject
 class UiPreferences(preferenceStore: PreferenceStore) {
@@ -81,6 +81,12 @@ class UiPreferences(preferenceStore: PreferenceStore) {
     val tabletUiMode: Preference<TabletUiMode> = preferenceStore.getEnum("tablet_ui_mode", TabletUiMode.AUTOMATIC)
 
     val imagesInDescription: Preference<Boolean> = preferenceStore.getBoolean("pref_render_images_description", true)
+
+    /**
+     * History leaves out the entries whose source an installed NSFW extension provides. Saikou's own
+     * key: upstream's History has no such switch.
+     */
+    val historyHideNsfw: Preference<Boolean> = preferenceStore.getBoolean("pref_history_hide_nsfw", false)
 
     companion object {
         /**

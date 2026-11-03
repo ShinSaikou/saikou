@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name" translatable="false">Saikou</string>
+    <string name="app_name" translatable="false">Shin Saikou</string>
 
     <string name="label_library">Library</string>
     <string name="label_updates">Updates</string>

@@ -9,8 +9,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -31,15 +29,19 @@ import tachiyomi.presentation.core.i18n.stringResource
  * failures. One entry point, one notice, one list; the two screens differ only in what they host the list in.
  */
 
-/** The top bar entry point to the last run's failures. Absent, not disabled, when there are none. */
+/**
+ * The top bar entry point to the last run's failures. Absent, not disabled, when there are none, so
+ * it is the first of a bar's actions: the steady ones after it never move when it appears.
+ */
 @Composable
 fun UpdateErrorAction(count: Int, onClick: () -> Unit) {
     if (count <= 0) return
-    val description = stringResource(R.string.update_errors_count_format, count)
     BadgedBox(badge = { Badge { Text(count.toString()) } }) {
-        IconButton(onClick = onClick) {
-            Icon(Icons.Outlined.ErrorOutline, contentDescription = description)
-        }
+        TopBarAction(
+            label = stringResource(R.string.update_errors_count_format, count),
+            icon = Icons.Outlined.ErrorOutline,
+            onClick = onClick,
+        )
     }
 }
 

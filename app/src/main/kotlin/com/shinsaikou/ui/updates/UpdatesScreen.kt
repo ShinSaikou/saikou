@@ -64,6 +64,7 @@ import com.shinsaikou.ui.components.ListRowTitle
 import com.shinsaikou.ui.components.MangaCover
 import com.shinsaikou.ui.components.ScreenTopBar
 import com.shinsaikou.ui.components.SaikouSnackbarHost
+import com.shinsaikou.ui.components.TopBarAction
 import com.shinsaikou.ui.components.UpdateErrorAction
 import com.shinsaikou.ui.components.UpdateErrorList
 import com.shinsaikou.ui.components.UpdateErrorSiteStoppedNotice
@@ -147,19 +148,14 @@ fun UpdatesScreen(showErrorsOnArrival: Boolean = false, onErrorsShown: () -> Uni
                     scrollBehavior = scrollBehavior,
                     actions = {
                         UpdateErrorAction(count = state.updateErrorCount, onClick = viewModel::showErrors)
-                        IconButton(onClick = viewModel::showFilterDialog) {
-                            Icon(
-                                Icons.Outlined.FilterList,
-                                contentDescription = stringResource(R.string.action_filter),
-                                // The bar has no room for a label, so the tint carries whether a
-                                // filter is on, lit for the four tri-states as upstream's icon is.
-                                tint = if (state.hasActiveFilters) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    LocalContentColor.current
-                                },
-                            )
-                        }
+                        // The bar has no room for a label, so the tint carries whether a filter is
+                        // on, lit for the four tri-states as upstream's icon is.
+                        TopBarAction(
+                            label = stringResource(R.string.action_filter),
+                            icon = Icons.Outlined.FilterList,
+                            onClick = viewModel::showFilterDialog,
+                            highlighted = state.hasActiveFilters,
+                        )
                     },
                 )
             }

@@ -33,6 +33,7 @@
     <string name="action_update_library">Update library</string>
     <string name="action_update_category">Update category</string>
     <string name="action_stop_update">Stop update</string>
+    <string name="action_open_random_manga">Open random entry</string>
     <string name="action_stop">Stop</string>
     <string name="action_load_more">Load more</string>
     <string name="action_mark_as_unread">Mark as unread</string>
@@ -150,6 +151,12 @@
     <string name="history_removed">Entry removed from history</string>
     <!-- Resume on a history row whose chapter is finished and is the last one -->
     <string name="history_no_next_chapter">There\'s no next chapter yet</string>
+    <!-- The History bar's switch, named for what a tap does. An entry is NSFW when an installed
+         extension flagged NSFW provides its source. -->
+    <string name="history_hide_nsfw">Hide NSFW entries</string>
+    <string name="history_show_nsfw">Show NSFW entries</string>
+    <!-- The empty History while the switch has hidden every entry there was to show -->
+    <string name="history_empty_nsfw_hidden">NSFW entries are hidden.</string>
 
     <!-- Manga detail -->
     <string name="manga_title_fallback">Entry</string>

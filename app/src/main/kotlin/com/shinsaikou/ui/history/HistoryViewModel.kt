@@ -6,8 +6,10 @@ import androidx.lifecycle.viewModelScope
 import com.shinsaikou.core.common.coroutines.Dispatchers
 import com.shinsaikou.domain.chapter.interactor.GetScanlatorPriority
 import com.shinsaikou.domain.preferences.UiPreferences
+import com.shinsaikou.extensions.ExtensionManager
 import com.shinsaikou.i18n.R
 import com.shinsaikou.presentation.core.viewmodel.StateViewModel
+import com.shinsaikou.ui.browse.matureSourceIds
 import com.shinsaikou.ui.util.withCurrent
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
@@ -37,6 +39,12 @@ import tachiyomi.domain.history.model.HistoryWithRelations
  * The list holds one row per entry, its latest read chapter, so removing a row removes the entry's
  * whole history: removing only that chapter's would bring the entry straight back with the chapter
  * read before it. Selection is keyed by the row id, which is one to one with the entry.
+ *
+ * While the hide NSFW switch is on, the rows whose source an installed NSFW extension provides are
+ * left out of [State.items], search results included, so everything that reads the list (the day
+ * headers, the selection, Select all) sees only what is shown. Clear all still clears every row.
+ * Until the first extension load has finished the switch shows no rows at all, only the loading
+ * state, since which sources are NSFW is not known yet.
  */
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModel>())
 @ViewModelKey(HistoryViewModel::class)
@@ -47,6 +55,7 @@ class HistoryViewModel(
     private val getNextChapters: GetNextChapters,
     private val getScanlatorPriority: GetScanlatorPriority,
     private val uiPreferences: UiPreferences,
+    private val extensionManager: ExtensionManager,
     private val dispatchers: Dispatchers,
 ) : StateViewModel<HistoryViewModel.State>(State()) {
 
@@ -60,6 +69,10 @@ class HistoryViewModel(
         val relativeTime: Boolean = true,
         /** The stored date format, `app_date_format`, for the day headers. */
         val dateFormat: String = "",
+        /** The bar's switch, `pref_history_hide_nsfw`. */
+        val hideNsfw: Boolean = false,
+        /** How many rows the query answered that [hideNsfw] leaves out of [items]. */
+        val hiddenCount: Int = 0,
     ) {
         val selectionMode: Boolean
             get() = selection.isNotEmpty()
@@ -97,18 +110,43 @@ class HistoryViewModel(
 
     init {
         viewModelScope.launch {
-            queryFlow
-                .flatMapLatest { query -> getHistory.subscribe(query) }
+            combine(
+                queryFlow.flatMapLatest { query -> getHistory.subscribe(query) },
+                uiPreferences.historyHideNsfw.withCurrent(),
+                extensionManager.isInitialized,
+                extensionManager.installedExtensions,
+            ) { all, hideNsfw, _, _ ->
+                // While hiding, the rows wait for the first extension load: before it the installed
+                // list is empty, and filtering against that would show every NSFW row until it
+                // lands. Null rows keep the tab loading. The flag is read before the list, as the
+                // extensions tab does, because the combine can pair a true flag with the list from
+                // before the load; the manager publishes the list first. A load that fails still
+                // turns the flag, with nothing installed, so every source then counts as one no
+                // installed extension provides and its rows stay, as the switch documents: nothing
+                // says what they hold.
+                when {
+                    !hideNsfw -> Triple(all, false, 0)
+                    !extensionManager.isInitialized.value -> Triple(null, true, 0)
+                    else -> {
+                        val installed = extensionManager.installedExtensions.value
+                        val rows = withoutMatureSources(all, matureSourceIds(installed))
+                        Triple(rows, true, all.size - rows.size)
+                    }
+                }
+            }
                 .flowOn(dispatchers.io)
-                .collect { rows ->
+                .collect { (shown, hideNsfw, hiddenCount) ->
+                    val rows = shown.orEmpty()
                     val visibleIds = rows.mapTo(mutableSetOf()) { it.id }
                     mutableState.update { current ->
                         val selection = current.selection intersect visibleIds
                         current.copy(
-                            loading = false,
+                            loading = shown == null,
                             items = rows,
-                            // A removal, or a narrower search, takes rows off screen. Keeping them
-                            // selected would leave the bar counting rows nobody can see.
+                            hideNsfw = hideNsfw,
+                            hiddenCount = hiddenCount,
+                            // A removal, a narrower search or the NSFW switch takes rows off screen.
+                            // Keeping them selected would leave the bar counting rows nobody can see.
                             selection = selection,
                             // And a confirm naming a count the selection no longer has, or an entry
                             // the list no longer shows, would be asking about nothing, so it closes.
@@ -135,6 +173,10 @@ class HistoryViewModel(
         // The history view matches against a lower-cased title, so an upper-case letter typed
         // here would otherwise match nothing.
         queryFlow.value = query.lowercase()
+    }
+
+    fun setHideNsfw(hide: Boolean) {
+        uiPreferences.historyHideNsfw.set(hide)
     }
 
     /** A long press opens selection mode, a tap inside it lands here too. */
@@ -236,3 +278,14 @@ class HistoryViewModel(
         }
     }
 }
+
+/**
+ * [rows] without the ones whose source is in [matureSources] ([matureSourceIds]). The Local source
+ * and a source no installed extension provides are never in that set, so their rows always stay:
+ * nothing says what they hold.
+ */
+internal fun withoutMatureSources(
+    rows: List<HistoryWithRelations>,
+    matureSources: Set<Long>,
+): List<HistoryWithRelations> =
+    if (matureSources.isEmpty()) rows else rows.filterNot { it.coverData.sourceId in matureSources }

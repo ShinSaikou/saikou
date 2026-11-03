@@ -45,6 +45,7 @@ import com.shinsaikou.ui.components.ScreenTopBar
 import com.shinsaikou.ui.components.SearchField
 import com.shinsaikou.ui.components.SectionLabel
 import com.shinsaikou.ui.components.SaikouSnackbarHost
+import com.shinsaikou.ui.components.TopBarAction
 import com.shinsaikou.ui.migration.sources.MIGRATION_GUIDE_URL
 import com.shinsaikou.ui.migration.sources.MigrateSourcesBody
 import dev.zacsweers.metrox.viewmodel.metroViewModel
@@ -100,42 +101,38 @@ fun BrowseScreen(initialPage: BrowsePage, extensionsQuery: String? = null) {
                     // this is the only way into it and the owner should not have to guess which of
                     // the two pages is holding it.
                     actions = {
-                        IconButton(onClick = { navigator.open(Route.GlobalSearch()) }) {
-                            Icon(
-                                Icons.Outlined.Search,
-                                contentDescription = stringResource(R.string.action_global_search),
-                            )
-                        }
+                        TopBarAction(
+                            label = stringResource(R.string.action_global_search),
+                            icon = Icons.Outlined.Search,
+                            onClick = { navigator.open(Route.GlobalSearch()) },
+                        )
                         // Upstream's Filter action on the Sources page only, after global search as
                         // upstream's Sources tab orders its two (phase 5 unit BF).
                         if (page == BrowsePage.SOURCES) {
-                            IconButton(onClick = { navigator.open(Route.SourcesFilter) }) {
-                                Icon(
-                                    Icons.Outlined.FilterList,
-                                    contentDescription = stringResource(R.string.action_filter),
-                                )
-                            }
+                            TopBarAction(
+                                label = stringResource(R.string.action_filter),
+                                icon = Icons.Outlined.FilterList,
+                                onClick = { navigator.open(Route.SourcesFilter) },
+                            )
                         }
                         // Upstream's Filter action on the Extensions page, opening the extension
                         // filter (phase 5 unit BX). Upstream keeps it in the tab's overflow before
                         // "Extension stores"; this bar shows icons, and the stores stay in the
                         // page's own header.
                         if (page == BrowsePage.EXTENSIONS) {
-                            IconButton(onClick = { navigator.open(Route.ExtensionFilter) }) {
-                                Icon(
-                                    Icons.Outlined.FilterList,
-                                    contentDescription = stringResource(R.string.action_filter),
-                                )
-                            }
+                            TopBarAction(
+                                label = stringResource(R.string.action_filter),
+                                icon = Icons.Outlined.FilterList,
+                                onClick = { navigator.open(Route.ExtensionFilter) },
+                            )
                         }
                         // Upstream's help action on the Migrate page only, after global search.
                         if (page == BrowsePage.MIGRATE) {
-                            IconButton(onClick = { navigator.openUrl(MIGRATION_GUIDE_URL) }) {
-                                Icon(
-                                    Icons.AutoMirrored.Outlined.HelpOutline,
-                                    contentDescription = stringResource(R.string.migration_help_guide),
-                                )
-                            }
+                            TopBarAction(
+                                label = stringResource(R.string.migration_help_guide),
+                                icon = Icons.AutoMirrored.Outlined.HelpOutline,
+                                onClick = { navigator.openUrl(MIGRATION_GUIDE_URL) },
+                            )
                         }
                     },
                 )
