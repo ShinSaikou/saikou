@@ -13,6 +13,7 @@ import com.shinsaikou.core.common.preferences.SecurityPreferences
 import com.shinsaikou.domain.download.model.DownloadManifestEntry
 import com.shinsaikou.domain.download.repository.DownloadManifestRepository
 import com.shinsaikou.domain.library.interactor.RebuildLibraryCounts
+import com.shinsaikou.domain.manga.interactor.ClearCustomIntervals
 import com.shinsaikou.domain.preferences.BackupPreferences
 import com.shinsaikou.domain.preferences.DownloadPreferences
 import com.shinsaikou.domain.preferences.ExtensionsPreferences
@@ -97,6 +98,8 @@ class SettingsViewModel(
     private val getCategories: GetCategories,
     /** Upstream's per-category sort row puts every category back on the library's sort when it goes off. */
     private val resetCategoryFlags: ResetCategoryFlags,
+    /** The Experimental custom interval switch going off puts every entry back on its estimate. */
+    private val clearCustomIntervals: ClearCustomIntervals,
     /** The Data section's row for downloads not in the library counts through it (phase 4 unit ST). */
     private val orphanDownloads: OrphanDownloads,
     /** Upstream's Advanced rows (phase 4 unit ST): reset per-series reader settings, revoke trust. */
@@ -233,6 +236,20 @@ class SettingsViewModel(
         viewModelScope.launch(dispatchers.io) {
             libraryPreferences.autoUpdateDeviceRestrictions.set(restrictions)
             libraryUpdateScheduler.setup()
+        }
+    }
+
+    /**
+     * The Experimental section promises that turning a switch off puts things back as they were,
+     * so the custom interval going off takes every chosen interval with it. Runs after the row's
+     * write. Not cancellable, as the other bulk writes here are: leaving the section clears this
+     * view model, and stopping there would leave some entries on a chosen interval.
+     */
+    fun onCustomUpdateIntervalToggled() {
+        if (!libraryPreferences.customUpdateInterval.get()) {
+            viewModelScope.launch {
+                withContext(NonCancellable + dispatchers.io) { clearCustomIntervals.await() }
+            }
         }
     }
 

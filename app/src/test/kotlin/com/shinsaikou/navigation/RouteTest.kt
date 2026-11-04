@@ -78,6 +78,12 @@ class RouteTest {
     }
 
     @Test
+    fun `the upcoming route round trips and is a destination of its own, not a tab`() {
+        roundTrip(Route.Upcoming.serializer(), Route.Upcoming) shouldBe Route.Upcoming
+        tabDestinations.contains<Route>(Route.Upcoming) shouldBe false
+    }
+
+    @Test
     fun `the copy summary route round trips`() {
         roundTrip(Route.AdoptionSummary.serializer(), Route.AdoptionSummary) shouldBe Route.AdoptionSummary
     }
@@ -305,6 +311,7 @@ class RouteTest {
     private val allRoutes: List<Route> = listOf(
         Route.Library,
         Route.Updates,
+        Route.Upcoming,
         Route.History,
         Route.Browse(),
         Route.More,
@@ -340,6 +347,7 @@ class RouteTest {
     private fun name(route: Route): String = when (route) {
         Route.Library -> Route.Library::class.qualifiedName!!
         Route.Updates -> Route.Updates::class.qualifiedName!!
+        Route.Upcoming -> Route.Upcoming::class.qualifiedName!!
         Route.History -> Route.History::class.qualifiedName!!
         is Route.Browse -> Route.Browse::class.qualifiedName!!
         Route.More -> Route.More::class.qualifiedName!!

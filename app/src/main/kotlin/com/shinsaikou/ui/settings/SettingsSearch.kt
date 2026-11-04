@@ -281,6 +281,7 @@ internal val settingsSearchIndex: List<SettingsSearchEntry> = buildList {
     }
     section(SettingsSection.EXPERIMENTAL) {
         row(R.string.settings_experimental_parallel_pages, R.string.settings_experimental_parallel_pages_summary)
+        row(R.string.settings_experimental_custom_interval, R.string.settings_experimental_custom_interval_summary)
     }
 }
 

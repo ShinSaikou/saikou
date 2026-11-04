@@ -12,6 +12,10 @@ sealed interface Route {
     @Serializable
     data object Updates : Tab
 
+    /** The releases predicted for the library, day by day, from the Updates bar. */
+    @Serializable
+    data object Upcoming : Route
+
     @Serializable
     data object History : Tab
 

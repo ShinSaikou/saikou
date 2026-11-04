@@ -87,6 +87,7 @@ import com.shinsaikou.ui.stats.StatsScreen
 import com.shinsaikou.ui.storage.ClearDatabaseScreen
 import com.shinsaikou.ui.storage.StorageDownloadsScreen
 import com.shinsaikou.ui.tracking.TrackerCompareScreen
+import com.shinsaikou.ui.upcoming.UpcomingScreen
 import com.shinsaikou.ui.updates.UpdatesScreen
 import com.shinsaikou.ui.webview.WebViewScreen
 import eu.kanade.presentation.theme.SaikouTheme
@@ -342,6 +343,7 @@ private fun AppScaffold(
                 }
                 composable<Route.Categories> { CategoriesScreen() }
                 composable<Route.Statistics> { StatsScreen() }
+                composable<Route.Upcoming> { UpcomingScreen() }
                 composable<Route.Settings> { backStackEntry ->
                     val route = backStackEntry.toRoute<Route.Settings>()
                     SettingsScreen(requestedSection = route.section, requestedHighlight = route.highlightKey)

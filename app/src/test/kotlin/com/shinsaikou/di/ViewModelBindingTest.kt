@@ -101,7 +101,7 @@ class ViewModelBindingTest {
     }
 
     @Test
-    fun `the scan finds all twenty-nine known view models, so a shrunken scan cannot pass vacuously`() {
+    fun `the scan finds all thirty known view models, so a shrunken scan cannot pass vacuously`() {
         val expected = setOf(
             // More > About: the latest release's APKs and the bug report.
             "src/main/kotlin/com/shinsaikou/ui/about/AboutViewModel.kt",
@@ -145,6 +145,8 @@ class ViewModelBindingTest {
             "src/main/kotlin/com/shinsaikou/ui/storage/StorageDownloadsViewModel.kt",
             // The Storage location picker (unit storage-location).
             "src/main/kotlin/com/shinsaikou/ui/storage/StorageLocationViewModel.kt",
+            // The upcoming releases screen.
+            "src/main/kotlin/com/shinsaikou/ui/upcoming/UpcomingViewModel.kt",
             "src/main/kotlin/com/shinsaikou/ui/updates/UpdatesViewModel.kt",
         )
 

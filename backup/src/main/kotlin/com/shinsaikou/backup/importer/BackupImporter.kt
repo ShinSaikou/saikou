@@ -567,7 +567,9 @@ class BackupImporter(
         val dbManga = writer.findManga(manga.url, resolvedSource)
 
         val mangaId: Long
+        val restored: Manga
         if (dbManga == null) {
+            restored = manga
             val now = Clock.System.now().toEpochMilliseconds()
             mangaId = writer.insertManga(
                 manga.copy(dateAdded = if (manga.dateAdded == 0L) now else manga.dateAdded),
@@ -577,7 +579,8 @@ class BackupImporter(
             writer.markSyncing(mangaId)
             run.mangaInserted++
         } else {
-            writer.updateManga(mergeManga(dbManga, manga), isSyncing = true)
+            restored = mergeManga(dbManga, manga)
+            writer.updateManga(restored, isSyncing = true)
             // A tombstone loses to an explicit library entry. This follows the update rather than
             // preceding it, because the update binds every column and would write it back. A
             // library add over a live non-favourite row takes the same call, which stamps the
@@ -608,8 +611,10 @@ class BackupImporter(
             }
         }
 
+        // The merged row: a file has no interval, last update or next update, so its own zeros
+        // would drop an interval the owner chose and restart the prediction from today.
         updateManga.awaitUpdateFetchInterval(
-            manga = manga.copy(id = mangaId),
+            manga = restored.copy(id = mangaId),
             timeZone = context.timeZone,
             dateTime = context.dateTime,
             window = context.fetchWindow,

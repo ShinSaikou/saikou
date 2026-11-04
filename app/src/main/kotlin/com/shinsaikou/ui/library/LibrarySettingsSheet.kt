@@ -90,9 +90,10 @@ internal fun LibrarySettingsSheet(
 }
 
 /**
- * The six toggles, each cycling ignore, include, exclude, then upstream's tracker rows for the
+ * The toggles, each cycling ignore, include, exclude, then upstream's tracker rows for the
  * signed-in trackers (phase 3 unit T3): one row, "Tracked", for one tracker, else a heading and a
- * row per tracker.
+ * row per tracker. The custom interval row shows only while its experimental switch is on, the one
+ * way an entry can have a custom interval.
  *
  * The downloaded row is disabled while the app-wide downloaded-only switch is on, and shows as
  * included, because that switch forces the filter. Leaving the row live would let the owner turn
@@ -130,11 +131,13 @@ private fun FilterTab(
         state = state.filters.completed,
         onClick = { onFilter(LibraryViewModel.LibraryFilter.COMPLETED, it) },
     )
-    TriStateItem(
-        label = stringResource(R.string.library_filter_interval_custom),
-        state = state.filters.intervalCustom,
-        onClick = { onFilter(LibraryViewModel.LibraryFilter.INTERVAL_CUSTOM, it) },
-    )
+    if (state.customUpdateInterval) {
+        TriStateItem(
+            label = stringResource(R.string.library_filter_interval_custom),
+            state = state.filters.intervalCustom,
+            onClick = { onFilter(LibraryViewModel.LibraryFilter.INTERVAL_CUSTOM, it) },
+        )
+    }
     val trackers = state.signedInTrackers
     if (trackers.size > 1) HeadingItem(R.string.action_filter_tracked)
     trackers.forEach { tracker ->

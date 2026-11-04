@@ -80,6 +80,15 @@ class UpdateManga(
         return mangaRepository.update(fetchInterval.toMangaUpdate(manga, dateTime, timeZone, window))
     }
 
+    /**
+     * The owner's [days] between checks, stored negative as upstream stores a chosen interval, or
+     * 0 to hand the entry back to the estimate. The next check moves as
+     * [awaitUpdateFetchInterval] moves it.
+     */
+    suspend fun awaitUpdateCustomInterval(manga: Manga, days: Int): Boolean {
+        return awaitUpdateFetchInterval(manga.copy(fetchInterval = -days))
+    }
+
     suspend fun awaitUpdateLastUpdate(mangaId: Long): Boolean {
         return mangaRepository.update(
             MangaUpdate(id = mangaId, lastUpdate = Clock.System.now().toEpochMilliseconds()),

@@ -517,6 +517,7 @@ class LibraryViewModelTest {
     @Test
     fun `the custom interval filter keeps the entries with an interval the owner set`() =
         runTest(testDispatcher) {
+            libraryPreferences.customUpdateInterval.set(true)
             assertFilterKeeps(
                 preference = libraryPreferences.filterIntervalCustom,
                 // A negative fetch interval is how the domain records one the owner chose.
@@ -524,6 +525,64 @@ class LibraryViewModelTest {
                 other = fixtureItem(id = 2L, title = "Forest of Silence", fetchInterval = 7),
             )
         }
+
+    @Test
+    fun `a stored custom interval filter is forced off while the experimental switch is off`() =
+        runTest(testDispatcher) {
+            feed(
+                listOf(
+                    fixtureItem(id = 1L, title = "Wandering Cartographer", fetchInterval = -7),
+                    fixtureItem(id = 2L, title = "Forest of Silence", fetchInterval = 7),
+                ),
+            )
+            libraryPreferences.filterIntervalCustom.set(TriState.ENABLED_IS)
+
+            val viewModel = viewModel()
+            advanceUntilIdle()
+
+            viewModel.state.value.filters.intervalCustom shouldBe TriState.DISABLED
+            viewModel.state.value.hasActiveFilters shouldBe false
+            viewModel.state.value.visibleItems.map { it.id }.toSet() shouldBe setOf(1L, 2L)
+        }
+
+    @Test
+    fun `turning the experimental switch on honours the stored custom interval filter without a new emission`() =
+        runTest(testDispatcher) {
+            feed(
+                listOf(
+                    fixtureItem(id = 1L, title = "Wandering Cartographer", fetchInterval = -7),
+                    fixtureItem(id = 2L, title = "Forest of Silence", fetchInterval = 7),
+                ),
+            )
+            libraryPreferences.filterIntervalCustom.set(TriState.ENABLED_IS)
+            val viewModel = viewModel()
+            advanceUntilIdle()
+
+            libraryPreferences.customUpdateInterval.set(true)
+            advanceUntilIdle()
+
+            viewModel.state.value.filters.intervalCustom shouldBe TriState.ENABLED_IS
+            viewModel.state.value.visibleItems.map { it.id } shouldContainExactly listOf(1L)
+
+            libraryPreferences.customUpdateInterval.set(false)
+            advanceUntilIdle()
+
+            viewModel.state.value.filters.intervalCustom shouldBe TriState.DISABLED
+            viewModel.state.value.visibleItems.map { it.id }.toSet() shouldBe setOf(1L, 2L)
+        }
+
+    @Test
+    fun `the state's custom update interval follows the preference`() = runTest(testDispatcher) {
+        feed(listOf(fixtureItem(id = 1L, title = "Wandering Cartographer")))
+        val viewModel = viewModel()
+        advanceUntilIdle()
+        viewModel.state.value.customUpdateInterval shouldBe false
+
+        libraryPreferences.customUpdateInterval.set(true)
+        advanceUntilIdle()
+
+        viewModel.state.value.customUpdateInterval shouldBe true
+    }
 
     @Test
     fun `setFilter writes the preference the sheet named`() = runTest(testDispatcher) {

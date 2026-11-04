@@ -17,6 +17,7 @@ import androidx.compose.material.icons.outlined.BookmarkRemove
 import androidx.compose.material.icons.outlined.DoneAll
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.RemoveDone
@@ -155,6 +156,11 @@ fun UpdatesScreen(showErrorsOnArrival: Boolean = false, onErrorsShown: () -> Uni
                             icon = Icons.Outlined.FilterList,
                             onClick = viewModel::showFilterDialog,
                             highlighted = state.hasActiveFilters,
+                        )
+                        TopBarAction(
+                            label = stringResource(R.string.upcoming_title),
+                            icon = Icons.Outlined.CalendarMonth,
+                            onClick = { navigator.open(Route.Upcoming) },
                         )
                     },
                 )

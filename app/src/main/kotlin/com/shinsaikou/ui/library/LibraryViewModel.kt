@@ -198,6 +198,8 @@ class LibraryViewModel(
          * are offered only while there is one (phase 3 unit T3).
          */
         val signedInTrackers: List<SignedInTracker> = emptyList(),
+        /** The experimental per-entry interval, the only way an entry can match the filter for it. */
+        val customUpdateInterval: Boolean = false,
         val dialog: Dialog? = null,
     ) {
         /**
@@ -340,6 +342,7 @@ class LibraryViewModel(
                             showCategoryTabs = projection.showCategoryTabs,
                             showItemCount = projection.showItemCount,
                             signedInTrackers = projection.signedInTrackers,
+                            customUpdateInterval = projection.customUpdateInterval,
                         )
                     }
                     logcat(LogPriority.DEBUG) { "$PROJECTION_LOG state set at ${SystemClock.elapsedRealtime()}" }
@@ -787,6 +790,7 @@ class LibraryViewModel(
         val showCategoryTabs: Boolean,
         val showItemCount: Boolean,
         val signedInTrackers: List<SignedInTracker>,
+        val customUpdateInterval: Boolean,
     )
 
     /**
@@ -945,6 +949,7 @@ class LibraryViewModel(
             showCategoryTabs = libraryPreferences.categoryTabs.get(),
             showItemCount = libraryPreferences.categoryNumberOfItems.get(),
             signedInTrackers = tracking.trackers.map { SignedInTracker(it.id, it.name) },
+            customUpdateInterval = libraryPreferences.customUpdateInterval.get(),
         )
         logProjection(items.size, (System.nanoTime() - startedAt) / NANOS_PER_MILLI, filterNanos / NANOS_PER_MILLI)
         return projection
@@ -966,7 +971,9 @@ class LibraryViewModel(
     /**
      * `BasePreferences.downloadedOnly` forces the downloaded filter on, which is the whole meaning
      * of the switch: with nothing downloaded the library reads as empty, and that is the truthful
-     * answer to "only downloaded" rather than a switch that changes nothing.
+     * answer to "only downloaded" rather than a switch that changes nothing. The custom interval
+     * filter's row is hidden while its experimental switch is off, so a stored value does nothing
+     * then: a filter nobody can see would leave the library looking half missing.
      */
     private fun filters(downloadedOnly: Boolean) = LibraryFilters(
         downloaded = if (downloadedOnly) TriState.ENABLED_IS else libraryPreferences.filterDownloaded.get(),
@@ -974,7 +981,9 @@ class LibraryViewModel(
         started = libraryPreferences.filterStarted.get(),
         bookmarked = libraryPreferences.filterBookmarked.get(),
         completed = libraryPreferences.filterCompleted.get(),
-        intervalCustom = libraryPreferences.filterIntervalCustom.get(),
+        intervalCustom = libraryPreferences.filterIntervalCustom.get()
+            .takeIf { libraryPreferences.customUpdateInterval.get() }
+            ?: TriState.DISABLED,
     )
 
     private fun preferenceFor(filter: LibraryFilter) = when (filter) {
@@ -1012,6 +1021,7 @@ class LibraryViewModel(
         libraryPreferences.filterBookmarked.changes(),
         libraryPreferences.filterCompleted.changes(),
         libraryPreferences.filterIntervalCustom.changes(),
+        libraryPreferences.customUpdateInterval.changes(),
         libraryPreferences.sortingMode.changes(),
         libraryPreferences.randomSortSeed.changes(),
         libraryPreferences.manualSortEnabled.changes(),

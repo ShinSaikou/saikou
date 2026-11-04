@@ -581,7 +581,8 @@ class FlatLibraryUpdate(
      * Why [item] is not refreshed, or null when it is. Only the fetch-once rule applies to a
      * manual run; [restrictions] is empty there. An entry whose details were never fetched is
      * always refreshed: the status and update strategy the rules read come with those details, and
-     * a rule that skipped it would also keep it from ever getting them.
+     * a rule that skipped it would also keep it from ever getting them. The entry screen's
+     * `updateCadenceOf` reads the same rules in the same order, to say why an entry waits.
      */
     private fun skipReason(
         item: LibraryManga,

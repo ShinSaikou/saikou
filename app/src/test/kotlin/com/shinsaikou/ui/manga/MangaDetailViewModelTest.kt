@@ -27,6 +27,7 @@ import com.shinsaikou.domain.manga.model.ReadingMode
 import com.shinsaikou.domain.preferences.AutoTrackState
 import com.shinsaikou.domain.preferences.LibraryPreferences
 import com.shinsaikou.domain.preferences.LibraryPreferences.ChapterSwipeAction
+import com.shinsaikou.domain.preferences.LibraryUpdateRestrictions
 import com.shinsaikou.domain.preferences.ReaderPreferences
 import com.shinsaikou.domain.preferences.TrackPreferences
 import com.shinsaikou.domain.preferences.UiPreferences
@@ -41,6 +42,7 @@ import com.shinsaikou.source.StubSource
 import com.shinsaikou.source.model.ChapterInfo
 import com.shinsaikou.source.model.MangaInfo
 import com.shinsaikou.source.model.MangaUpdate
+import com.shinsaikou.source.model.UpdateStrategy
 import com.shinsaikou.sync.MapPreferenceStore
 import com.shinsaikou.tracking.FakeOAuthTracker
 import com.shinsaikou.tracking.TrackerManager
@@ -1845,6 +1847,188 @@ class MangaDetailViewModelTest {
 
         coVerify(exactly = 1) { setMangaDetailsOverride.awaitReset(manga.id) }
         (viewModel.state.value as MangaDetailViewModel.State.Success).dialog shouldBe null
+    }
+
+    @Test
+    fun `showUpdateInterval opens the update interval dialog`() = runTest(testDispatcher) {
+        val manga = fixtureManga()
+        stubSettledScreen(manga, listOf(fixtureChapter()))
+        val viewModel = viewModel(manga.id, fromSource = false)
+        advanceUntilIdle()
+
+        viewModel.showUpdateInterval()
+
+        (viewModel.state.value as MangaDetailViewModel.State.Success).dialog shouldBe
+            MangaDetailViewModel.Dialog.UpdateInterval
+    }
+
+    @Test
+    fun `setUpdateInterval writes the chosen days through UpdateManga for the shown entry`() =
+        runTest(testDispatcher) {
+            val manga = fixtureManga()
+            stubSettledScreen(manga, listOf(fixtureChapter()))
+            coEvery { updateManga.awaitUpdateCustomInterval(any(), any()) } returns true
+            val viewModel = viewModel(manga.id, fromSource = false)
+            advanceUntilIdle()
+
+            viewModel.setUpdateInterval(14)
+            advanceUntilIdle()
+
+            coVerify(exactly = 1) { updateManga.awaitUpdateCustomInterval(manga, 14) }
+        }
+
+    @Test
+    fun `setUpdateInterval with 0 hands the entry back to the estimate and leaves the dialog open`() =
+        runTest(testDispatcher) {
+            val manga = fixtureManga()
+            stubSettledScreen(manga, listOf(fixtureChapter()))
+            coEvery { updateManga.awaitUpdateCustomInterval(any(), any()) } returns true
+            val viewModel = viewModel(manga.id, fromSource = false)
+            advanceUntilIdle()
+            viewModel.showUpdateInterval()
+
+            viewModel.setUpdateInterval(0)
+            advanceUntilIdle()
+
+            coVerify(exactly = 1) { updateManga.awaitUpdateCustomInterval(manga, 0) }
+            (viewModel.state.value as MangaDetailViewModel.State.Success).dialog shouldBe
+                MangaDetailViewModel.Dialog.UpdateInterval
+        }
+
+    @Test
+    fun `the detail state carries the update settings and the chapter counts the cadence reads`() =
+        runTest(testDispatcher) {
+            val manga = fixtureManga()
+            stubSettledScreen(manga, listOf(fixtureChapter(id = 1L).copy(read = true), fixtureChapter(id = 2L)))
+            libraryPreferences.autoUpdateInterval.set(12)
+            libraryPreferences.autoUpdateMangaRestrictions.set(
+                setOf(LibraryUpdateRestrictions.MANGA_OUTSIDE_RELEASE_PERIOD),
+            )
+            libraryPreferences.customUpdateInterval.set(true)
+
+            val viewModel = viewModel(manga.id, fromSource = false)
+            advanceUntilIdle()
+
+            val success = viewModel.state.value as MangaDetailViewModel.State.Success
+            success.chapterTotal shouldBe 2
+            success.chapterRead shouldBe 1
+            success.automaticUpdates shouldBe true
+            success.customUpdateInterval shouldBe true
+            success.updateRestrictions shouldBe setOf(LibraryUpdateRestrictions.MANGA_OUTSIDE_RELEASE_PERIOD)
+        }
+
+    @Test
+    fun `automatic updates read as off while the update interval hours are 0`() = runTest(testDispatcher) {
+        val manga = fixtureManga()
+        stubSettledScreen(manga, listOf(fixtureChapter()))
+        libraryPreferences.autoUpdateInterval.set(0)
+
+        val viewModel = viewModel(manga.id, fromSource = false)
+        advanceUntilIdle()
+
+        (viewModel.state.value as MangaDetailViewModel.State.Success).automaticUpdates shouldBe false
+    }
+
+    @Test
+    fun `the interval choice is offered with the switch and the release rule on`() = runTest(testDispatcher) {
+        val success = settledWithUpdateSettings(customInterval = true, releaseRule = true)
+
+        success.offersIntervalChoice shouldBe true
+    }
+
+    @Test
+    fun `the interval choice is not offered while the experimental switch is off`() = runTest(testDispatcher) {
+        val success = settledWithUpdateSettings(customInterval = false, releaseRule = true)
+
+        success.offersIntervalChoice shouldBe false
+    }
+
+    @Test
+    fun `the interval choice is not offered while the release rule is off`() = runTest(testDispatcher) {
+        val success = settledWithUpdateSettings(customInterval = true, releaseRule = false)
+
+        success.offersIntervalChoice shouldBe false
+    }
+
+    @Test
+    fun `the interval choice is not offered for an entry fetched once`() = runTest(testDispatcher) {
+        val success = settledWithUpdateSettings(customInterval = true, releaseRule = true, fetchOnce = true)
+
+        success.updateCadence shouldBe UpdateCadence.FetchOnce
+        success.offersIntervalChoice shouldBe false
+    }
+
+    @Test
+    fun `an entry fetched once with no chapters yet still offers the interval choice`() = runTest(testDispatcher) {
+        val success = settledWithUpdateSettings(customInterval = true, releaseRule = true, fetchOnce = true, chapters = 0)
+
+        success.offersIntervalChoice shouldBe true
+    }
+
+    @Test
+    fun `the interval choice is still offered with the switch off while the entry holds a chosen interval`() =
+        runTest(testDispatcher) {
+            val success = settledWithUpdateSettings(customInterval = false, releaseRule = true, fetchInterval = -7)
+
+            success.offersIntervalChoice shouldBe true
+        }
+
+    @Test
+    fun `the interval choice is not offered with the switch off and no chosen interval`() = runTest(testDispatcher) {
+        val success = settledWithUpdateSettings(customInterval = false, releaseRule = true, fetchInterval = 0)
+
+        success.offersIntervalChoice shouldBe false
+    }
+
+    @Test
+    fun `the interval choice is not offered with the switch off and an estimated interval`() = runTest(testDispatcher) {
+        val success = settledWithUpdateSettings(customInterval = false, releaseRule = true, fetchInterval = 7)
+
+        success.offersIntervalChoice shouldBe false
+    }
+
+    @Test
+    fun `a chosen interval with the switch off is not offered while the release rule is off`() =
+        runTest(testDispatcher) {
+            val success = settledWithUpdateSettings(customInterval = false, releaseRule = false, fetchInterval = -7)
+
+            success.offersIntervalChoice shouldBe false
+        }
+
+    @Test
+    fun `a chosen interval with the switch off is not offered for an entry fetched once`() =
+        runTest(testDispatcher) {
+            val success = settledWithUpdateSettings(
+                customInterval = false,
+                releaseRule = true,
+                fetchOnce = true,
+                fetchInterval = -7,
+            )
+
+            success.updateCadence shouldBe UpdateCadence.FetchOnce
+            success.offersIntervalChoice shouldBe false
+        }
+
+    private suspend fun TestScope.settledWithUpdateSettings(
+        customInterval: Boolean,
+        releaseRule: Boolean,
+        fetchOnce: Boolean = false,
+        chapters: Int = 1,
+        fetchInterval: Int = 0,
+    ): MangaDetailViewModel.State.Success {
+        val manga = fixtureManga().copy(
+            fetchInterval = fetchInterval,
+            updateStrategy = if (fetchOnce) UpdateStrategy.ONLY_FETCH_ONCE else UpdateStrategy.ALWAYS_UPDATE,
+        )
+        stubSettledScreen(manga, (1..chapters).map { fixtureChapter(id = it.toLong()) })
+        libraryPreferences.autoUpdateMangaRestrictions.set(
+            if (releaseRule) setOf(LibraryUpdateRestrictions.MANGA_OUTSIDE_RELEASE_PERIOD) else emptySet(),
+        )
+        libraryPreferences.customUpdateInterval.set(customInterval)
+
+        val viewModel = viewModel(manga.id, fromSource = false)
+        advanceUntilIdle()
+        return viewModel.state.value as MangaDetailViewModel.State.Success
     }
 
     /**

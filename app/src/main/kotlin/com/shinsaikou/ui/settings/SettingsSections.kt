@@ -1861,6 +1861,12 @@ private fun ExperimentalSection(viewModel: SettingsViewModel) {
         pref = viewModel.readerPreferences.parallelPageLoading,
         detailRes = R.string.settings_experimental_parallel_pages_summary,
     )
+    CheckboxRow(
+        labelRes = R.string.settings_experimental_custom_interval,
+        pref = viewModel.libraryPreferences.customUpdateInterval,
+        detailRes = R.string.settings_experimental_custom_interval_summary,
+        onToggled = viewModel::onCustomUpdateIntervalToggled,
+    )
 }
 
 /**

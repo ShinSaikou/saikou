@@ -117,6 +117,7 @@ class SettingsRowsTest {
         },
         getCategories = mockk<GetCategories> { every { subscribe() } returns flowOf(emptyList()) },
         resetCategoryFlags = resetCategoryFlags,
+        clearCustomIntervals = mockk(relaxed = true),
         orphanDownloads = mockk<OrphanDownloads>(relaxed = true),
         resetViewerFlags = mockk<ResetViewerFlags>(relaxed = true),
         rebuildLibraryCounts = mockk<RebuildLibraryCounts>(relaxed = true),

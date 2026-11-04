@@ -120,6 +120,53 @@
     <string name="library_reorder_handle">Drag to reorder</string>
 
     <!-- Updates -->
+    <!-- The entry's update interval button, and the dialog it opens. -->
+    <string name="update_interval_title">Update interval</string>
+    <string name="update_interval_label_fetch_once">Not checked by updates</string>
+    <string name="update_interval_label_completed">Skipped, completed</string>
+    <string name="update_interval_label_unread">Skipped while unread</string>
+    <string name="update_interval_label_not_started">Skipped until started</string>
+    <string name="update_interval_label_every_update">Checked every update</string>
+    <plurals name="update_interval_label_custom">
+        <item quantity="one">Every day</item>
+        <item quantity="other">Every %d days</item>
+    </plurals>
+    <string name="update_interval_label_none">No release predicted</string>
+    <string name="update_interval_label_next_today">Next check today</string>
+    <plurals name="update_interval_label_next">
+        <item quantity="one">Next check tomorrow</item>
+        <item quantity="other">Next check in %d days</item>
+    </plurals>
+    <string name="update_interval_label_release_today">Next release today</string>
+    <plurals name="update_interval_label_release">
+        <item quantity="one">Next release tomorrow</item>
+        <item quantity="other">Next release in %d days</item>
+    </plurals>
+    <plurals name="update_interval_days">
+        <item quantity="one">%d day</item>
+        <item quantity="other">%d days</item>
+    </plurals>
+    <string name="update_interval_body_fetch_once">This entry is only fetched once, so library updates do not check it.</string>
+    <string name="update_interval_body_completed_skipped">Automatic updates skip completed entries, so this entry is not checked.</string>
+    <string name="update_interval_body_unread">Automatic updates skip entries with unread chapters, so this entry waits until you read them.</string>
+    <string name="update_interval_body_not_started">Automatic updates skip entries you have not started, so this entry waits until you read a chapter.</string>
+    <string name="update_interval_body_every_update">Predict next release time is off in Settings > Library, so every automatic update checks this entry.</string>
+    <string name="update_interval_body_custom">You set this entry to be checked every %1$s.</string>
+    <string name="update_interval_body_completed">This entry is completed, so no release is predicted.</string>
+    <string name="update_interval_body_none">No release is predicted yet. A prediction comes from this entry\'s release dates after a library update.</string>
+    <string name="update_interval_body_estimated">New chapters are predicted about every %1$s, from this entry\'s release dates.</string>
+    <string name="update_interval_next_check">Next check: %1$s</string>
+    <string name="update_interval_next_release">Next release: %1$s</string>
+    <string name="update_interval_automatic_off">Automatic updates are off, so this entry is checked when you update the library.</string>
+    <string name="update_interval_refresh_note">Refreshing this entry always checks it.</string>
+    <string name="update_interval_choice_heading">Check every</string>
+    <string name="update_interval_choice_automatic">Automatic</string>
+    <string name="upcoming_title">Upcoming</string>
+    <string name="upcoming_empty">No releases are predicted yet. Predictions come from each entry\'s release dates after a library update.</string>
+    <plurals name="upcoming_entry_count">
+        <item quantity="one">%1$d entry</item>
+        <item quantity="other">%1$d entries</item>
+    </plurals>
     <string name="updates_title">Updates</string>
     <string name="updates_empty">New chapters from library updates appear here.</string>
     <!-- The day headers' words are upstream's relativeDateText strings, and a fold's count is upstream's
@@ -404,6 +451,8 @@
     <string name="settings_experimental_note">These change how the app works in ways that may not suit every source or device. Each one is off until you turn it on, and turning it off again puts things back as they were.</string>
     <string name="settings_experimental_parallel_pages">Load pages in parallel</string>
     <string name="settings_experimental_parallel_pages_summary">An online chapter fetches up to three pages at a time instead of one, so the pages ahead are ready sooner. A source that limits how often it may be asked can answer more slowly or refuse a page, which then shows its retry button. It applies to chapters opened after the change.</string>
+    <string name="settings_experimental_custom_interval">Custom update interval per entry</string>
+    <string name="settings_experimental_custom_interval_summary">Lets you set how many days apart an entry is checked, from its Update interval dialog, instead of the estimate from its release dates. The library\'s Custom update interval filter finds those entries. The setting stays on this device and is not in backups. Turning this off puts every entry back on its estimate.</string>
     <string name="settings_theme">Theme</string>
     <string name="settings_theme_mode">Light and dark</string>
     <string name="settings_tablet_ui">Two pane layout</string>

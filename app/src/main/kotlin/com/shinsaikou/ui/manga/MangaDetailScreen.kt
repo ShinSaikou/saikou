@@ -361,6 +361,7 @@ fun MangaDetailScreen(
                                     success,
                                     viewModel::toggleFavorite,
                                     viewModel::openTracking,
+                                    viewModel::showUpdateInterval,
                                     viewModel::toggleDescription,
                                     viewModel::showCover,
                                     viewModel::showNotes,
@@ -390,6 +391,7 @@ fun MangaDetailScreen(
                                 success,
                                 viewModel::toggleFavorite,
                                 viewModel::openTracking,
+                                viewModel::showUpdateInterval,
                                 viewModel::toggleDescription,
                                 viewModel::showCover,
                                 viewModel::showNotes,
@@ -441,6 +443,7 @@ fun MangaDetailScreen(
         onSaveDetails = viewModel::saveDetails,
         onResetDetails = viewModel::resetDetails,
         onSaveNotes = viewModel::saveNotes,
+        onSetUpdateInterval = viewModel::setUpdateInterval,
         onShareCover = viewModel::shareCover,
         onSaveCover = viewModel::saveCover,
         onSetCustomCover = viewModel::setCustomCover,
@@ -579,6 +582,7 @@ private fun MangaDialogs(
     onSaveDetails: (title: String, description: String) -> Unit,
     onResetDetails: () -> Unit,
     onSaveNotes: (String) -> Unit,
+    onSetUpdateInterval: (Int) -> Unit,
     onShareCover: () -> Unit,
     onSaveCover: () -> Unit,
     onSetCustomCover: (Uri) -> Unit,
@@ -678,6 +682,15 @@ private fun MangaDialogs(
             notes = state.manga.notes,
             onDismissRequest = onDismissRequest,
             onSave = onSaveNotes,
+        )
+        MangaDetailViewModel.Dialog.UpdateInterval -> UpdateIntervalDialog(
+            cadence = state.updateCadence,
+            chosenDays = state.manga.fetchInterval.takeIf { it < 0 }?.let { -it },
+            offerChoice = state.offersIntervalChoice,
+            relativeTime = state.relativeTime,
+            dateFormat = state.dateFormat,
+            onChoose = onSetUpdateInterval,
+            onDismissRequest = onDismissRequest,
         )
         is MangaDetailViewModel.Dialog.Cover -> {
             // Upstream's picker: any image the system offers, handed back as a content URI.
@@ -920,6 +933,7 @@ private fun MangaHeader(
     state: MangaDetailViewModel.State.Success,
     onToggleFavorite: () -> Unit,
     onTracking: () -> Unit,
+    onUpdateInterval: () -> Unit,
     onToggleDescription: () -> Unit,
     onCoverClick: () -> Unit,
     onNotesClick: () -> Unit,
@@ -942,6 +956,7 @@ private fun MangaHeader(
                 )
             }
             if (state.tracking.offered) TrackingButton(count = state.tracking.count, onClick = onTracking)
+            if (manga.favorite) UpdateIntervalButton(cadence = state.updateCadence, onClick = onUpdateInterval)
         }
         MangaDescription(
             description = manga.displayDescription?.takeIf { it.isNotBlank() },

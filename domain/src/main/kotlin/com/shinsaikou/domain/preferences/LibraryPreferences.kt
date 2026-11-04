@@ -68,6 +68,15 @@ class LibraryPreferences(private val preferenceStore: PreferenceStore) {
         ),
     )
 
+    /**
+     * Experimental: an entry's update interval dialog offers a chosen number of days, and the
+     * library offers the filter that finds those entries. App state, so a backup neither carries it
+     * nor turns it off: the switch going off is what clears the chosen intervals, and neither the
+     * intervals nor the switch travel with a backup.
+     */
+    val customUpdateInterval: Preference<Boolean> =
+        preferenceStore.getBoolean(Preference.appStateKey("library_custom_update_interval"), false)
+
     val autoUpdateMetadata: Preference<Boolean> = preferenceStore.getBoolean("auto_update_metadata", false)
 
     val showContinueReadingButton: Preference<Boolean> =

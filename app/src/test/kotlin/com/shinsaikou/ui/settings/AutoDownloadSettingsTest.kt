@@ -7,6 +7,7 @@ import com.shinsaikou.i18n.R
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
+import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.InMemoryPreferenceStore
 
 /**
@@ -30,6 +31,12 @@ class AutoDownloadSettingsTest {
     fun `skip duplicate read chapters is upstream's key and starts off`() {
         downloadPreferences.downloadNewUnreadChaptersOnly.key() shouldBe "download_new_unread_chapters_only"
         downloadPreferences.downloadNewUnreadChaptersOnly.get() shouldBe false
+    }
+
+    @Test
+    fun `the custom update interval switch is app state, so a backup never carries it, and starts off`() {
+        Preference.isAppState(libraryPreferences.customUpdateInterval.key()) shouldBe true
+        libraryPreferences.customUpdateInterval.get() shouldBe false
     }
 
     @Test

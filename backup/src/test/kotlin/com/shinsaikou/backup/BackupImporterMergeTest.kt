@@ -11,14 +11,22 @@ import eu.kanade.tachiyomi.data.backup.models.BackupHistory
 import eu.kanade.tachiyomi.data.backup.models.BackupManga
 import eu.kanade.tachiyomi.data.backup.models.BackupTracking
 import eu.kanade.tachiyomi.data.backup.restore.RestoreOptions
+import io.kotest.matchers.longs.shouldBeGreaterThan
 import io.kotest.matchers.longs.shouldBeGreaterThanOrEqual
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import kotlinx.coroutines.test.runTest
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.atStartOfDayIn
+import kotlinx.datetime.minus
+import kotlinx.datetime.toLocalDateTime
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
 
 /**
  * A restore is allowed to add. It is not allowed to take away. Every case here is a backup that is
@@ -350,6 +358,71 @@ class BackupImporterMergeTest {
         }
     }
 
+    /**
+     * A file has no interval, last update or next update, so the fetch interval is recomputed from
+     * the merged row. The owner's chosen interval (stored negative) and the cycle it sits on survive.
+     */
+    @Test
+    fun `a merge restore keeps a chosen negative interval and does not re-base its next update to today`() = runTest {
+        BackupTestEnvironment(tempDir).use { env ->
+            val zone = TimeZone.currentSystemDefault()
+            val today = Clock.System.now().toLocalDateTime(zone).date
+            // Eleven days into a 7 day cycle, so the next check is the cycle end at day 14, three days from now.
+            // The last update is a calendar day start, as the recompute reads it, so DST cannot skew it.
+            val lastDay = today.minus(11, DateTimeUnit.DAY).atStartOfDayIn(zone)
+            val lastUpdate = lastDay.toEpochMilliseconds()
+            val nextUpdate = (lastDay + 14.days).toEpochMilliseconds()
+            seedManga(
+                env,
+                favorite = true,
+                version = 0L,
+                lastUpdate = lastUpdate,
+                nextUpdate = nextUpdate,
+                calculateInterval = -7L,
+            )
+
+            env.importer.import(fileOf(env, backupWith()), RestoreOptions()) {}
+
+            val stored = env.handler.awaitOne { mangasQueries.getMangaById(1L, ::mapManga) }
+            stored.fetchInterval shouldBe -7
+            stored.lastUpdate shouldBe lastUpdate
+            stored.nextUpdate shouldBe nextUpdate
+        }
+    }
+
+    @Test
+    fun `a merge restore over an estimated interval keeps the estimate`() = runTest {
+        BackupTestEnvironment(tempDir).use { env ->
+            val zone = TimeZone.currentSystemDefault()
+            val today = Clock.System.now().toLocalDateTime(zone).date.atStartOfDayIn(zone)
+            seedManga(
+                env,
+                favorite = true,
+                version = 0L,
+                lastUpdate = today.toEpochMilliseconds(),
+                nextUpdate = (today + 7.days).toEpochMilliseconds(),
+                calculateInterval = 7L,
+            )
+
+            env.importer.import(fileOf(env, backupWith()), RestoreOptions()) {}
+
+            val stored = env.handler.awaitOne { mangasQueries.getMangaById(1L, ::mapManga) }
+            stored.fetchInterval shouldBe 7
+            stored.nextUpdate shouldBe (today + 7.days).toEpochMilliseconds()
+        }
+    }
+
+    @Test
+    fun `a fresh insert gets an estimated interval and a next update`() = runTest {
+        BackupTestEnvironment(tempDir).use { env ->
+            env.importer.import(fileOf(env, backupWith()), RestoreOptions()) {}
+
+            val stored = env.handler.awaitOne { mangasQueries.getMangaById(1L, ::mapManga) }
+            stored.fetchInterval shouldBe 7
+            stored.nextUpdate shouldBeGreaterThan 0L
+        }
+    }
+
     private fun regressed() = BackupChapter(
         url = "$url/ch/1",
         name = "Chapter 1",
@@ -468,6 +541,9 @@ class BackupImporterMergeTest {
         version: Long,
         author: String = "Database author",
         deletedAt: Long? = null,
+        lastUpdate: Long = 0L,
+        nextUpdate: Long = 0L,
+        calculateInterval: Long = 0L,
     ) {
         env.handler.await {
             mangasQueries.insert(
@@ -481,15 +557,15 @@ class BackupImporterMergeTest {
                 status = 1L,
                 thumbnailUrl = null,
                 favorite = favorite,
-                lastUpdate = 0L,
-                nextUpdate = 0L,
+                lastUpdate = lastUpdate,
+                nextUpdate = nextUpdate,
                 initialized = true,
                 viewer = 0L,
                 chapterFlags = 0L,
                 coverLastModified = 0L,
                 dateAdded = 1L,
                 updateStrategy = com.shinsaikou.source.model.UpdateStrategy.ALWAYS_UPDATE,
-                calculateInterval = 0L,
+                calculateInterval = calculateInterval,
                 lastModifiedAt = 0L,
                 version = version,
                 notes = "",

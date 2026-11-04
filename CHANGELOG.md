@@ -9,6 +9,14 @@ release may change behaviour.
 
 ### Added
 
+- An update interval button on every library entry says when the entry is next checked, or why it
+  is not: unread chapters, not started, completed, or only fetched once. With automatic updates off
+  it shows the predicted next release. Tap it for the details.
+- **Upcoming** in the Updates bar lists the releases predicted for your library, day by day. Tap an
+  entry to open it.
+- **Custom update interval per entry** in Settings > Experimental, off by default, lets an entry's
+  Update interval dialog set how many days apart it is checked. The setting stays on the device and
+  is not in backups, and turning it off puts every entry back on its estimate.
 - A search in Settings: tap the search button above the section list and type, and every matching
   setting is listed with the section it is in. Picking one opens that section scrolled to the
   setting, which flashes for a moment so it is easy to spot.
@@ -83,6 +91,10 @@ release may change behaviour.
 
 ### Fixed
 
+- Restoring a backup over entries already in the library no longer restarts each one's release
+  prediction from today.
+- The **Custom update interval** filter in the Library could never match anything. It now shows
+  only while the experimental setting that gives it entries to find is on.
 - The shortcuts on a long press of the app icon (Library, Updates, History, Browse) open the
   app again. They pointed at a package that does not exist, so tapping one did nothing.
 - Restoring a backup from another reader no longer lists the same extension store twice, one of

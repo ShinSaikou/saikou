@@ -1,12 +1,14 @@
 package com.shinsaikou.ui.settings
 
 import android.app.Activity
+import androidx.lifecycle.viewModelScope
 import com.shinsaikou.backup.export.BackupScheduler
 import com.shinsaikou.core.common.preferences.BasePreferences
 import com.shinsaikou.core.common.preferences.SecurityPreferences
 import com.shinsaikou.domain.download.model.DownloadManifestEntry
 import com.shinsaikou.domain.download.repository.DownloadManifestRepository
 import com.shinsaikou.domain.library.interactor.RebuildLibraryCounts
+import com.shinsaikou.domain.manga.interactor.ClearCustomIntervals
 import com.shinsaikou.domain.preferences.BackupPreferences
 import com.shinsaikou.domain.preferences.DownloadPreferences
 import com.shinsaikou.domain.preferences.ExtensionsPreferences
@@ -50,6 +52,8 @@ import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -121,6 +125,7 @@ class SettingsViewModelTest {
     private val getCategories = mockk<GetCategories> {
         every { subscribe() } returns flowOf(categories)
     }
+    private val clearCustomIntervals = mockk<ClearCustomIntervals>(relaxed = true)
     private val orphanDownloads = mockk<OrphanDownloads>()
     private val resetViewerFlags = mockk<ResetViewerFlags>()
     private val rebuildLibraryCounts = mockk<RebuildLibraryCounts>()
@@ -163,6 +168,7 @@ class SettingsViewModelTest {
         },
         getCategories = getCategories,
         resetCategoryFlags = mockk(relaxed = true),
+        clearCustomIntervals = clearCustomIntervals,
         orphanDownloads = orphanDownloads,
         resetViewerFlags = resetViewerFlags,
         rebuildLibraryCounts = rebuildLibraryCounts,
@@ -171,6 +177,46 @@ class SettingsViewModelTest {
         trackerManager = TrackerManager(trackers),
         dispatchers = AppDispatchers(io = testDispatcher, default = testDispatcher, main = testDispatcher),
     )
+
+    @Test
+    fun `the custom interval switch going off clears the chosen intervals once`() = runTest(testDispatcher) {
+        libraryPreferences.customUpdateInterval.set(false)
+
+        viewModel().onCustomUpdateIntervalToggled()
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { clearCustomIntervals.await() }
+    }
+
+    @Test
+    fun `the custom interval switch going on leaves the chosen intervals alone`() = runTest(testDispatcher) {
+        libraryPreferences.customUpdateInterval.set(true)
+
+        viewModel().onCustomUpdateIntervalToggled()
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { clearCustomIntervals.await() }
+    }
+
+    @Test
+    fun `a custom interval reset already running finishes after the view model scope is cancelled`() = runTest(testDispatcher) {
+        libraryPreferences.customUpdateInterval.set(false)
+        val gate = CompletableDeferred<Unit>()
+        var finished = false
+        coEvery { clearCustomIntervals.await() } coAnswers {
+            gate.await()
+            finished = true
+        }
+
+        val viewModel = viewModel()
+        viewModel.onCustomUpdateIntervalToggled()
+        advanceUntilIdle()
+        viewModel.viewModelScope.cancel()
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        finished shouldBe true
+    }
 
     @Test
     fun `setAutoUpdateInterval writes the preference and then reschedules the library update worker`() = runTest(testDispatcher) {

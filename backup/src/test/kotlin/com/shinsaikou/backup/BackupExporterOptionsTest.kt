@@ -95,6 +95,14 @@ class BackupExporterOptionsTest {
     }
 
     @Test
+    fun `the custom update interval switch is in no export even when it is on`() = runTest {
+        env.libraryPreferences.customUpdateInterval.set(true)
+        val key = env.libraryPreferences.customUpdateInterval.key()
+
+        env.export(BackupOptions(privateSettings = true)).backupPreferences.none { it.key == key } shouldBe true
+    }
+
+    @Test
     fun `the system category is never exported and categories travel as orders`() = runTest {
         val backup = env.export(BackupOptions())
 

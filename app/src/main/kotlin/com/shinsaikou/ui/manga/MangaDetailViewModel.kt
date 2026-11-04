@@ -23,6 +23,7 @@ import com.shinsaikou.domain.manga.model.ReaderOrientation
 import com.shinsaikou.domain.manga.model.ReadingMode
 import com.shinsaikou.domain.preferences.LibraryPreferences
 import com.shinsaikou.domain.preferences.LibraryPreferences.ChapterSwipeAction
+import com.shinsaikou.domain.preferences.LibraryUpdateRestrictions
 import com.shinsaikou.domain.preferences.AutoTrackState
 import com.shinsaikou.domain.preferences.ReaderPreferences
 import com.shinsaikou.domain.preferences.TrackPreferences
@@ -197,7 +198,29 @@ class MangaDetailViewModel(
             val relativeTime: Boolean = true,
             /** The stored date format, `app_date_format`, for the rows' upload dates. */
             val dateFormat: String = "",
+            /** How many chapters the entry has before the list's filters, and how many are read. */
+            val chapterTotal: Int = 0,
+            val chapterRead: Int = 0,
+            /** The smart update rules, `LibraryPreferences.autoUpdateMangaRestrictions`. */
+            val updateRestrictions: Set<String> = emptySet(),
+            /** Whether automatic updates run at all, which the rules and a next check depend on. */
+            val automaticUpdates: Boolean = false,
+            /** The experimental switch that lets the update interval dialog set a number of days. */
+            val customUpdateInterval: Boolean = false,
         ) : State {
+            /** What the entry's update interval button and dialog say. */
+            val updateCadence: UpdateCadence
+                get() = updateCadenceOf(manga, updateRestrictions, automaticUpdates, chapterTotal, chapterRead)
+
+            /**
+             * The interval is one more thing to set only where a check depends on it. The switch
+             * going off clears the library's entries only, so one added back afterwards can still
+             * hold a chosen interval; the choice stays for it, or Automatic could not be reached.
+             */
+            val offersIntervalChoice: Boolean
+                get() = (customUpdateInterval || manga.fetchInterval < 0) &&
+                    LibraryUpdateRestrictions.MANGA_OUTSIDE_RELEASE_PERIOD in updateRestrictions &&
+                    updateCadence != UpdateCadence.FetchOnce
             /** A Local-source entry is on disk by definition and the download queue refuses it. */
             val isLocal: Boolean
                 get() = manga.source == SourceIds.LOCAL
@@ -344,6 +367,9 @@ class MangaDetailViewModel(
          */
         data object Notes : Dialog
 
+        /** Why and when the entry is checked, with the interval choice while that is on. */
+        data object UpdateInterval : Dialog
+
         /**
          * The cover viewer (phase 5 unit ED): [editable] while a cover can be set (a library or
          * Local entry), [customCover] while the entry has a custom cover file to delete.
@@ -425,6 +451,9 @@ class MangaDetailViewModel(
     /** The two date settings as last seen, `relativeTime` then `dateFormat`, copied in like [queued]. */
     private var dateSettings: Pair<Boolean, String> = true to ""
 
+    /** The settings the update interval button reads as last seen, copied in like [queued]. */
+    private var updateSettings = UpdateSettings()
+
     /**
      * The entry's chapters as the last projection read them, before the chapter list's filters:
      * Upstream's `allChapters`, which the download menu draws from when `skipFiltered` is off.
@@ -455,6 +484,12 @@ class MangaDetailViewModel(
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private fun <T> Flow<T>.whileWatched(): Flow<T> = watched.flatMapLatest { if (it) this else emptyFlow() }
+
+    private data class UpdateSettings(
+        val restrictions: Set<String> = emptySet(),
+        val automatic: Boolean = false,
+        val customInterval: Boolean = false,
+    )
 
     /** Everything the projection reads that arrives as a flow. */
     private data class Inputs(
@@ -509,6 +544,28 @@ class MangaDetailViewModel(
                     val (relativeTime, dateFormat) = settings
                     mutableState.update {
                         if (it is State.Success) it.copy(relativeTime = relativeTime, dateFormat = dateFormat) else it
+                    }
+                }
+        }
+        viewModelScope.launch {
+            combine(
+                libraryPreferences.autoUpdateMangaRestrictions.withCurrent(),
+                libraryPreferences.autoUpdateInterval.withCurrent(),
+                libraryPreferences.customUpdateInterval.withCurrent(),
+            ) { restrictions, hours, customInterval -> UpdateSettings(restrictions, hours > 0, customInterval) }
+                .distinctUntilChanged()
+                .collect { settings ->
+                    updateSettings = settings
+                    mutableState.update {
+                        if (it is State.Success) {
+                            it.copy(
+                                updateRestrictions = settings.restrictions,
+                                automaticUpdates = settings.automatic,
+                                customUpdateInterval = settings.customInterval,
+                            )
+                        } else {
+                            it
+                        }
                     }
                 }
         }
@@ -595,6 +652,11 @@ class MangaDetailViewModel(
                 tracking = tracking,
                 relativeTime = dateSettings.first,
                 dateFormat = dateSettings.second,
+                chapterTotal = chapters.size,
+                chapterRead = chapters.count { it.read },
+                updateRestrictions = updateSettings.restrictions,
+                automaticUpdates = updateSettings.automatic,
+                customUpdateInterval = updateSettings.customInterval,
             )
         }
         if (!autoRefreshed && (fromSource || !manga.initialized || chapters.isEmpty()) && rowExists()) {
@@ -1204,6 +1266,17 @@ class MangaDetailViewModel(
 
     /** The overflow's Notes, and a tap on the notes under the description. */
     fun showNotes() = showDialog(Dialog.Notes)
+
+    fun showUpdateInterval() = showDialog(Dialog.UpdateInterval)
+
+    /**
+     * The chosen [days] between checks, or 0 for the estimate. The dialog stays open: the entry's
+     * flow brings back the new interval and next check for it to show.
+     */
+    fun setUpdateInterval(days: Int) {
+        val manga = (state.value as? State.Success)?.manga ?: return
+        viewModelScope.launch(dispatchers.io) { updateManga.awaitUpdateCustomInterval(manga, days) }
+    }
 
     /**
      * The notes dialog's Save, trimmed, so a note of only blank lines clears the notes. Text equal to
