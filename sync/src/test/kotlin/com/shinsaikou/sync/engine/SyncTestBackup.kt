@@ -28,6 +28,7 @@ import eu.kanade.tachiyomi.data.backup.models.BackupManga
 import eu.kanade.tachiyomi.data.backup.models.BackupSource
 import eu.kanade.tachiyomi.data.backup.models.BackupTracking
 import eu.kanade.tachiyomi.data.backup.restore.RestoreOptions
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -154,6 +155,7 @@ internal fun SyncTestDevice.restore(bytes: ByteArray, filesDir: File): ImportRep
         backupScheduler = mockk<BackupScheduler>(relaxed = true),
         syncRestorePreferences = restorePreferences,
         sourceExtensionInstaller = mockk<SourceExtensionInstaller>(),
+        reconcileMergedRead = mockk(relaxed = true),
         json = Json { ignoreUnknownKeys = true },
     )
     val options = RestoreOptions(

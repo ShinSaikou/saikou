@@ -99,6 +99,8 @@ class StatsViewModelTest {
         updateManga = mockk(),
         fetchInterval = fetchInterval,
         libraryPreferences = libraryPreferences,
+        getMergedGroups = mockk { coEvery { await() } returns emptyList() },
+        reconcileMergedRead = mockk(relaxed = true),
         autoDownload = mockk(),
         dispatchers = dispatchers,
         timeSource = TimeSource.Monotonic,

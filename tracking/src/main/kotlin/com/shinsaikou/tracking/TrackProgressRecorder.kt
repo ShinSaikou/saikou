@@ -1,5 +1,6 @@
 package com.shinsaikou.tracking
 
+import com.shinsaikou.domain.merged.interactor.GetMergedGroup
 import com.shinsaikou.domain.track.TrackProgress
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
@@ -23,6 +24,8 @@ import tachiyomi.domain.track.repository.TrackRepository
  *
  * With no tracker signed in it reads nothing and writes nothing, which is every finished chapter
  * until the owner signs in.
+ *
+ * A merged entry's tracks live on its main entry, so a member's chapter records against that row.
  */
 @Inject
 @ContributesBinding(AppScope::class)
@@ -31,6 +34,7 @@ class TrackProgressRecorder(
     private val trackerManager: TrackerManager,
     private val store: DelayedTrackingStore,
     private val scheduler: DelayedTrackingScheduler,
+    private val getMergedGroup: GetMergedGroup,
 ) : TrackProgress {
 
     override suspend fun wouldRecord(mangaId: Long, chapterNumber: Double): Boolean =
@@ -39,10 +43,11 @@ class TrackProgressRecorder(
     override suspend fun record(mangaId: Long, chapterNumber: Double): Int {
         val tracks = pushable(mangaId, chapterNumber)
         if (tracks.isEmpty()) return 0
+        val owner = mainOf(mangaId)
         var sendable = false
         try {
             tracks.forEach { (track, tracker) ->
-                store.add(mangaId, track.trackerId, track.remoteId, chapterNumber)
+                store.add(owner, track.trackerId, track.remoteId, chapterNumber)
                 if (!tracker.isAuthExpired) sendable = true
             }
         } finally {
@@ -54,9 +59,11 @@ class TrackProgressRecorder(
 
     private suspend fun pushable(mangaId: Long, chapterNumber: Double): List<Pair<Track, Tracker>> {
         if (trackerManager.trackers.none { it.isLoggedIn }) return emptyList()
-        return trackRepository.getTracksByMangaId(mangaId).mapNotNull { track ->
+        return trackRepository.getTracksByMangaId(mainOf(mangaId)).mapNotNull { track ->
             val tracker = trackerManager.get(track.trackerId) ?: return@mapNotNull null
             (track to tracker).takeIf { tracker.isLoggedIn && chapterNumber > track.lastChapterRead }
         }
     }
+
+    private suspend fun mainOf(mangaId: Long): Long = getMergedGroup.await(mangaId)?.mainMangaId ?: mangaId
 }

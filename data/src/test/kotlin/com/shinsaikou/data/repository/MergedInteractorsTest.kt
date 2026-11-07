@@ -3,6 +3,7 @@ package com.shinsaikou.data.repository
 import app.cash.turbine.test
 import com.shinsaikou.data.merged.MergedGroupRepositoryImpl
 import com.shinsaikou.domain.database.TransactionRunner
+import com.shinsaikou.domain.merged.interactor.CarryMergedTracks
 import com.shinsaikou.domain.merged.interactor.GetMergedGroup
 import com.shinsaikou.domain.merged.interactor.GetMergedGroups
 import com.shinsaikou.domain.merged.interactor.MergeEntries
@@ -25,6 +26,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import tachiyomi.core.common.preference.InMemoryPreferenceStore
+import tachiyomi.data.track.TrackRepositoryImpl
 
 /**
  * The merged entry interactors (R163) over the real repository and database: what each does to the
@@ -38,9 +40,10 @@ class MergedInteractorsTest : RepositoryTest() {
     private val preferences = LibraryPreferences(InMemoryPreferenceStore())
     private val getGroup by lazy { GetMergedGroup(repository, preferences) }
     private val reconcile by lazy { ReconcileMergedRead(repository, preferences) }
-    private val merge by lazy { MergeEntries(repository, getGroup, reconcile, preferences, InlineTransactions) }
-    private val remove by lazy { RemoveMergedMember(repository, getGroup, InlineTransactions) }
-    private val setMain by lazy { SetMergedMain(repository, getGroup) }
+    private val carryTracks by lazy { CarryMergedTracks(TrackRepositoryImpl(handler)) }
+    private val merge by lazy { MergeEntries(repository, getGroup, reconcile, carryTracks, preferences, InlineTransactions) }
+    private val remove by lazy { RemoveMergedMember(repository, getGroup, carryTracks, InlineTransactions) }
+    private val setMain by lazy { SetMergedMain(repository, getGroup, carryTracks, InlineTransactions) }
     private val setOrder by lazy { SetMergedOrder(repository, getGroup) }
     private val setShowAll by lazy { SetMergedShowAll(repository, getGroup) }
     private val setCheckUpdates by lazy { SetMergedCheckUpdates(repository, getGroup) }
@@ -501,5 +504,78 @@ class MergedInteractorsTest : RepositoryTest() {
 
         members(2) shouldContainExactly listOf(9, 2, 3)
         group(2)!!.mainMangaId shouldBe 9
+    }
+
+    // ---- Tracks follow the main entry (R163) ----
+
+    private fun track(mangaId: Long, trackerId: Long, remoteId: Long, read: Double = 0.0) = exec(
+        """
+        INSERT INTO manga_sync(manga_id, sync_id, remote_id, title, last_chapter_read, total_chapters, status, score,
+            remote_url, start_date, finish_date)
+        VALUES ($mangaId, $trackerId, $remoteId, 'T', $read, 0, 1, 0, '', 0, 0)
+        """,
+    )
+
+    private fun tracksOf(mangaId: Long): String? = scalar(
+        "SELECT group_concat(sync_id || ':' || remote_id || ':' || last_chapter_read) FROM " +
+            "(SELECT * FROM manga_sync WHERE manga_id = $mangaId ORDER BY sync_id)",
+    )
+
+    @Test
+    fun `a merge gives the main entry the tracks it lacks and keeps the member's own`() = runTest {
+        track(2, trackerId = 7, remoteId = 70)
+
+        merge.await(1, listOf(1, 2))
+
+        tracksOf(1) shouldBe "7:70:0.0"
+        tracksOf(2) shouldBe "7:70:0.0"
+    }
+
+    @Test
+    fun `a merge leaves the main entry bound where it was, and moves a same-entry row that is further along`() = runTest {
+        track(1, trackerId = 7, remoteId = 70, read = 3.0)
+        track(2, trackerId = 7, remoteId = 99, read = 50.0)
+        track(3, trackerId = 7, remoteId = 70, read = 9.0)
+
+        merge.await(1, listOf(1, 2))
+        tracksOf(1) shouldBe "7:70:3.0"
+
+        merge.await(1, listOf(1, 3))
+        tracksOf(1) shouldBe "7:70:9.0"
+    }
+
+    @Test
+    fun `a new main entry takes the group's tracks, and a different remote entry is rebound to the group's`() = runTest {
+        merge.await(1, listOf(1, 2))
+        track(1, trackerId = 7, remoteId = 70, read = 4.0)
+        track(2, trackerId = 7, remoteId = 80)
+        track(2, trackerId = 8, remoteId = 81)
+
+        setMain.await(2)
+
+        tracksOf(2) shouldBe "7:70:4.0,8:81:0.0"
+        tracksOf(1) shouldBe "7:70:4.0"
+    }
+
+    @Test
+    fun `removing the main entry hands its tracks to the member that becomes main`() = runTest {
+        merge.await(1, listOf(1, 2, 3))
+        track(1, trackerId = 7, remoteId = 70, read = 4.0)
+
+        remove.await(1)
+
+        group(2)?.mainMangaId shouldBe 2
+        tracksOf(2) shouldBe "7:70:4.0"
+    }
+
+    @Test
+    fun `removing a member that is not the main entry moves no track`() = runTest {
+        merge.await(1, listOf(1, 2, 3))
+        track(1, trackerId = 7, remoteId = 70)
+
+        remove.await(3)
+
+        tracksOf(3).shouldBeNull()
+        tracksOf(2).shouldBeNull()
     }
 }

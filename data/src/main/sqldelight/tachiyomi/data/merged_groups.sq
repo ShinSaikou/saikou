@@ -118,6 +118,31 @@ WHERE M.group_id = (
 ) AND A.favorite = 1 AND A.deleted_at IS NULL
 ORDER BY M.position;
 
+-- The Library's counts of every group, over its live members: the inner query is one row per
+-- recognised number, and per chapter with no recognised number, so the outer one counts each once,
+-- and a number counts as read, bookmarked or downloaded while any copy is. A chapter of an excluded
+-- scanlator is left out, as library_summary leaves it out. It reads the members' chapters and nothing
+-- else, so a library's cost is the chapters of its merged titles, never its size.
+getGroupCounts:
+SELECT groupId, count(*) AS totalCount, sum(anyRead) AS readCount, sum(anyBookmark) AS bookmarkCount,
+    sum(anyDownload) AS downloadCount
+FROM (
+    SELECT M.group_id AS groupId, max(C.read) AS anyRead, max(C.bookmark) AS anyBookmark,
+        max(D._id IS NOT NULL OR A.source = :localSource) AS anyDownload
+    FROM merged_members M
+    CROSS JOIN mangas A ON A.source = M.member_source AND A.url = M.member_url
+    CROSS JOIN chapters C ON C.manga_id = A._id
+    LEFT JOIN downloads_manifest D ON D.chapter_id = C._id
+    WHERE A.favorite = 1 AND A.deleted_at IS NULL AND C.deleted_at IS NULL
+        AND NOT EXISTS (
+            SELECT 1
+            FROM excluded_scanlators ES
+            WHERE ES.manga_id = A._id AND ES.scanlator = C.scanlator
+        )
+    GROUP BY M.group_id, CASE WHEN C.chapter_number >= 0 THEN C.chapter_number ELSE -1 - C._id END
+)
+GROUP BY groupId;
+
 getGroupById:
 SELECT *
 FROM merged_groups

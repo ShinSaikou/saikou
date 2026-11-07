@@ -1,8 +1,15 @@
 package com.shinsaikou.ui.library
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.DoneAll
 import androidx.compose.material.icons.outlined.MoreVert
@@ -13,16 +20,20 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.shinsaikou.domain.preferences.LibraryPreferences
 import com.shinsaikou.i18n.R
@@ -66,6 +77,9 @@ import tachiyomi.presentation.core.i18n.stringResource
  * upstream's bottom menu, offered whenever the bar is, Local entries included.
  *
  * [onUpdate] runs a library update over the selected entries only, whatever their categories.
+ *
+ * [onMerge] opens the merge dialog, and is null unless Merged entries is on and two or more entries
+ * are selected.
  */
 @Composable
 internal fun LibrarySelectionBar(
@@ -81,6 +95,7 @@ internal fun LibrarySelectionBar(
     onDownload: ((DownloadAction) -> Unit)?,
     onMigrate: () -> Unit,
     onUpdate: () -> Unit,
+    onMerge: (() -> Unit)?,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     var downloadMenuOpen by remember { mutableStateOf(false) }
@@ -133,6 +148,15 @@ internal fun LibrarySelectionBar(
                         onMigrate()
                     },
                 )
+                if (onMerge != null) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.action_merge)) },
+                        onClick = {
+                            menuOpen = false
+                            onMerge()
+                        },
+                    )
+                }
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.action_remove_from_library)) },
                     onClick = {
@@ -189,6 +213,7 @@ internal fun LibraryDialogs(
     onDismissRequest: () -> Unit,
     onConfirmCategories: (List<CategoryCheck>) -> Unit,
     onConfirmRemove: () -> Unit,
+    onConfirmMerge: (Long) -> Unit,
     onFilter: (LibraryViewModel.LibraryFilter, TriState) -> Unit,
     onTrackerFilter: (Long, TriState) -> Unit,
     onSort: (LibrarySort.Type, LibrarySort.Direction) -> Unit,
@@ -218,13 +243,25 @@ internal fun LibraryDialogs(
         is LibraryViewModel.Dialog.RemoveSelected -> AlertDialog(
             onDismissRequest = onDismissRequest,
             title = { Text(stringResource(R.string.library_remove_selected_title)) },
-            text = { Text(stringResource(R.string.library_remove_selected_message_format, dialog.count)) },
+            text = {
+                val message = stringResource(R.string.library_remove_selected_message_format, dialog.count)
+                if (dialog.mergedTitles > 0) {
+                    Text("$message ${stringResource(R.string.merged_remove_selected_note)}")
+                } else {
+                    Text(message)
+                }
+            },
             confirmButton = {
                 TextButton(onClick = onConfirmRemove) { Text(stringResource(R.string.action_remove)) }
             },
             dismissButton = {
                 TextButton(onClick = onDismissRequest) { Text(stringResource(R.string.action_cancel)) }
             },
+        )
+        is LibraryViewModel.Dialog.MergeSelected -> MergeEntriesDialog(
+            entries = dialog.entries,
+            onDismissRequest = onDismissRequest,
+            onConfirm = onConfirmMerge,
         )
         is LibraryViewModel.Dialog.UpdateErrors -> AdaptiveSheet(
             onDismissRequest = onDismissRequest,
@@ -252,4 +289,60 @@ internal fun LibraryDialogs(
         }
         null -> Unit
     }
+}
+
+/**
+ * The library's Merge: the selected entries in the order they were selected, which becomes the
+ * order of their chapters, and a pick of the main entry, the one that stands for the title. The
+ * first selected is the main entry until another is picked.
+ */
+@Composable
+private fun MergeEntriesDialog(
+    entries: List<LibraryViewModel.MergeChoice>,
+    onDismissRequest: () -> Unit,
+    onConfirm: (Long) -> Unit,
+) {
+    var main by rememberSaveable(entries) { mutableLongStateOf(entries.first().mangaId) }
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        title = { Text(stringResource(R.string.merged_dialog_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.merged_dialog_message))
+                Column(modifier = Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState())) {
+                    entries.forEach { entry ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .selectable(
+                                    selected = entry.mangaId == main,
+                                    onClick = { main = entry.mangaId },
+                                    role = Role.RadioButton,
+                                )
+                                .defaultMinSize(minHeight = 48.dp)
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            RadioButton(selected = entry.mangaId == main, onClick = null)
+                            Column {
+                                Text(entry.title, style = MaterialTheme.typography.bodyLarge, maxLines = 2)
+                                Text(
+                                    entry.sourceName,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(main) }) { Text(stringResource(R.string.action_merge)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) { Text(stringResource(R.string.action_cancel)) }
+        },
+    )
 }

@@ -2,14 +2,18 @@ package com.shinsaikou.domain.manga.interactor
 
 import com.shinsaikou.core.common.coroutines.Dispatchers
 import com.shinsaikou.domain.chapter.interactor.SyncChaptersWithSource
+import com.shinsaikou.domain.merged.interactor.ReconcileMergedRead
 import com.shinsaikou.domain.preferences.LibraryPreferences
 import com.shinsaikou.domain.source.toChapterInfo
 import com.shinsaikou.domain.source.toMangaInfo
 import com.shinsaikou.source.Source
 import dev.zacsweers.metro.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import logcat.LogPriority
+import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.domain.manga.interactor.FetchInterval
 import tachiyomi.domain.manga.interactor.GetMangaWithChapters
@@ -31,6 +35,9 @@ import kotlin.time.Clock
  *
  * A failure is thrown. The new chapters are returned and handed to nothing: only the manga screen's
  * refresh the owner asked for gives them to auto-download (R97 item 3), and it does that itself.
+ *
+ * New chapters of a merged entry's member can be copies of a number already read, so a fetch that
+ * inserted any runs [ReconcileMergedRead].
  */
 @Inject
 class RefreshMangaFromSource(
@@ -39,6 +46,7 @@ class RefreshMangaFromSource(
     private val syncChaptersWithSource: SyncChaptersWithSource,
     private val fetchInterval: FetchInterval,
     private val libraryPreferences: LibraryPreferences,
+    private val reconcileMergedRead: ReconcileMergedRead,
     private val dispatchers: Dispatchers,
 ) {
 
@@ -80,15 +88,23 @@ class RefreshMangaFromSource(
         val chapters = checkNotNull(
             source.getMangaUpdate(current.toMangaInfo(), stored, fetchDetails = false, fetchChapters = true).chapters,
         )
-        Result(
+        val newChapters = syncChaptersWithSource.await(
+            rawSourceChapters = chapters,
             manga = current,
-            newChapters = syncChaptersWithSource.await(
-                rawSourceChapters = chapters,
-                manga = current,
-                manualFetch = manualFetch,
-                fetchWindow = window,
-            ),
+            manualFetch = manualFetch,
+            fetchWindow = window,
         )
+        // The chapters are in by now, so a failure here must not lose them for the caller.
+        if (newChapters.isNotEmpty()) {
+            try {
+                reconcileMergedRead.await(current.id)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                logcat(LogPriority.WARN, e) { "Could not reconcile the read marks of entry ${current.id}" }
+            }
+        }
+        Result(manga = current, newChapters = newChapters)
     }
 
     data class Result(val manga: Manga, val newChapters: List<Chapter>)

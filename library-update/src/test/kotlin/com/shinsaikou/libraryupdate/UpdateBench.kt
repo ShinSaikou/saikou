@@ -85,6 +85,8 @@ internal class UpdateBench(
         updateManga = mockk(relaxed = true),
         fetchInterval = fetchInterval,
         libraryPreferences = preferences,
+        getMergedGroups = mockk { coEvery { await() } returns emptyList() },
+        reconcileMergedRead = mockk(relaxed = true),
         autoDownload = mockk(relaxed = true),
         dispatchers = Dispatchers(io = io, default = io, main = io),
         timeSource = time,

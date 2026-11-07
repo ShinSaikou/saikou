@@ -1,6 +1,8 @@
 package com.shinsaikou.domain.chapter.interactor
 
 import com.shinsaikou.domain.download.ReadChapterCleanup
+import com.shinsaikou.domain.merged.MergedChapters
+import com.shinsaikou.domain.merged.interactor.GetMergedChapters
 import com.shinsaikou.domain.merged.interactor.GetMergedGroup
 import com.shinsaikou.domain.preferences.DownloadPreferences
 import dev.zacsweers.metro.Inject
@@ -40,6 +42,7 @@ class SetReadStatus(
     private val downloadPreferences: DownloadPreferences,
     private val readChapterCleanup: ReadChapterCleanup,
     private val getMergedGroup: GetMergedGroup,
+    private val getMergedChapters: GetMergedChapters,
 ) {
 
     private fun toUpdate(chapter: Chapter, read: Boolean) = ChapterUpdate(
@@ -116,11 +119,19 @@ class SetReadStatus(
         chapters = chapterRepository.getChapterByMangaId(mangaId).toTypedArray(),
     )
 
-    /** Marks every chapter that sorts before [chapter] in the manga's own order. */
+    /**
+     * Marks every chapter that sorts before [chapter] in the manga's own order, or in the merged list
+     * when it belongs to a merged entry, whose order is the main entry's.
+     */
     suspend fun awaitAllBefore(chapter: Chapter, read: Boolean): Result = withNonCancellableContext {
-        val manga = mangaRepository.getMangaById(chapter.mangaId)
-        val sort = getChapterSort(manga, sortDescending = false)
-        val sorted = chapterRepository.getChapterByMangaId(manga.id).sortedWith(sort)
+        val group = getMergedGroup.await(chapter.mangaId)
+        val sorted = if (group == null) {
+            val manga = mangaRepository.getMangaById(chapter.mangaId)
+            chapterRepository.getChapterByMangaId(manga.id).sortedWith(getChapterSort(manga, sortDescending = false))
+        } else {
+            val main = mangaRepository.getMangaById(group.mainMangaId)
+            getMergedChapters.await(group).sortedWith(MergedChapters.sort(main, sortDescending = false))
+        }
         val index = sorted.indexOfFirst { it.id == chapter.id }
         if (index <= 0) {
             return@withNonCancellableContext Result.NoChapters

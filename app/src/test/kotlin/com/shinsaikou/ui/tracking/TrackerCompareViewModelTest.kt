@@ -202,7 +202,7 @@ class TrackerCompareViewModelTest {
             trackerId = tracker.id,
             trackerManager = TrackerManager(setOf(tracker)),
             compareTrackProgress = CompareTrackProgress(GetFavorites(mangaRepository), tracks, chapterRepository, historyRepository, store),
-            applyTrackChoice = ApplyTrackChoice(tracks, chapterRepository, mangaRepository, PassThroughTransactionRunner, store, removeTrack),
+            applyTrackChoice = ApplyTrackChoice(tracks, chapterRepository, mangaRepository, PassThroughTransactionRunner, store, removeTrack, mockk(relaxed = true)),
             syncScheduler = scheduler,
             syncRunRecord = record,
             workManager = workManager,

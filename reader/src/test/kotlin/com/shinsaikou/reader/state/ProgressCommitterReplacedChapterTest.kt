@@ -165,6 +165,7 @@ class ProgressCommitterReplacedChapterTest {
         trackProgress = mockk(relaxed = true),
         autoDownload = mockk(relaxed = true),
         readChapterCleanup = mockk(relaxed = true),
+        reconcileMergedRead = mockk(relaxed = true),
         chapterReplacements = replacements,
         dispatchers = Dispatchers(io = testDispatcher, default = testDispatcher, main = testDispatcher),
     )

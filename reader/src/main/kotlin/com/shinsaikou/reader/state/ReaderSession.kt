@@ -1,6 +1,7 @@
 package com.shinsaikou.reader.state
 
 import com.shinsaikou.domain.download.ReadChapterCleanup
+import com.shinsaikou.domain.merged.MergedChapters
 import com.shinsaikou.source.SourceIds
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.util.chapter.removeDuplicates
@@ -74,7 +75,10 @@ class ReaderSession(
          * off; empty is also an unranked title, which keeps upstream's rule.
          *
          * [owners] is the session's entries by id, which settle whether a chapter is a Local one. In
-         * a merged title that is per chapter; [manga] alone holds the filters.
+         * a merged title that is per chapter; [manga] alone holds the filters. Several owners sort
+         * as a merged list ([MergedChapters.sort]), and [chapterPass] is [ReaderEntries.chapterPass],
+         * which runs after the downloaded filter, so a number whose winning copy is not downloaded
+         * keeps the one that is. The tapped chapter stays through it too, see [mergedPass].
          */
         fun build(
             manga: Manga,
@@ -84,6 +88,7 @@ class ReaderSession(
             downloaded: Set<Long>,
             ranking: Map<String, Long>,
             owners: Map<Long, Manga> = mapOf(manga.id to manga),
+            chapterPass: (List<Chapter>) -> List<Chapter> = { it },
         ): ReaderSession {
             val isLocal = { chapter: Chapter -> (owners[chapter.mangaId] ?: manga).source == SourceIds.LOCAL }
             val initial = all.firstOrNull { it.id == initialChapterId }
@@ -104,7 +109,12 @@ class ReaderSession(
                 kept = kept + initial
             }
 
-            var sorted = kept.sortedWith(getChapterSort(manga, sortDescending = false))
+            val sort = if (owners.size > 1) {
+                MergedChapters.sort(manga, sortDescending = false)
+            } else {
+                getChapterSort(manga, sortDescending = false)
+            }
+            var sorted = kept.sortedWith(sort)
             // Upstream's filterDownloaded, which leaves a Local entry alone; the tapped chapter stays
             // here too, as it does through every other pass. Before the duplicate pass, where
             // upstream runs it after: a number whose preferred copy is not downloaded keeps its
@@ -113,10 +123,32 @@ class ReaderSession(
             if (prefs.downloadedOnly) {
                 sorted = sorted.filter { isLocal(it) || it.id in downloaded || it.id == initialChapterId }
             }
+            sorted = mergedPass(sorted, initial, chapterPass)
             if (prefs.skipDupe) {
                 sorted = sorted.removeDuplicates(initial, ranking)
             }
             return ReaderSession(manga, sorted.map(::ReaderChapter), owners)
+        }
+
+        /**
+         * [chapters] through [chapterPass], the tapped chapter always among them. A tapped chapter
+         * the pass hid takes its number from the winner, every row of its own entry with it, or the
+         * next chapter would be the same number again from another source.
+         */
+        private fun mergedPass(
+            chapters: List<Chapter>,
+            initial: Chapter,
+            chapterPass: (List<Chapter>) -> List<Chapter>,
+        ): List<Chapter> {
+            val kept = chapterPass(chapters).mapTo(HashSet()) { it.id }
+            if (initial.id in kept) return chapters.filter { it.id in kept }
+            return chapters.filter { chapter ->
+                if (initial.isRecognizedNumber && chapter.chapterNumber == initial.chapterNumber) {
+                    chapter.mangaId == initial.mangaId
+                } else {
+                    chapter.id in kept || chapter.id == initial.id
+                }
+            }
         }
 
         private fun isFilteredOut(manga: Manga, chapter: Chapter, isDownloaded: Boolean): Boolean {

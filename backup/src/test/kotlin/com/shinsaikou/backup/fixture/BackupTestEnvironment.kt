@@ -34,6 +34,8 @@ import eu.kanade.tachiyomi.data.backup.BackupFileValidator
 import eu.kanade.tachiyomi.data.backup.BackupHeader
 import eu.kanade.tachiyomi.data.backup.create.BackupOptions
 import eu.kanade.tachiyomi.data.backup.models.Backup
+import com.shinsaikou.domain.merged.interactor.ReconcileMergedRead
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
@@ -166,6 +168,9 @@ class BackupTestEnvironment(
 
     private val fetchInterval = FetchInterval(GetChaptersByMangaId(chapterRepository))
 
+    /** What the importer's merged read reconcile is asked to do; it writes nothing here. */
+    val reconcileMergedRead: ReconcileMergedRead = mockk(relaxed = true)
+
     val importer = BackupImporter(
         decoder = decoder,
         validator = validator,
@@ -185,6 +190,7 @@ class BackupTestEnvironment(
         backupScheduler = backupScheduler,
         syncRestorePreferences = syncRestorePreferences,
         sourceExtensionInstaller = sourceExtensionInstaller,
+        reconcileMergedRead = reconcileMergedRead,
         json = json,
     )
 

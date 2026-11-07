@@ -1,6 +1,7 @@
 package com.shinsaikou.domain.merged.repository
 
 import com.shinsaikou.domain.merged.model.MergedGroup
+import com.shinsaikou.domain.merged.model.MergedGroupCounts
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -18,6 +19,9 @@ interface MergedGroupRepository {
     suspend fun getLiveGroups(): List<MergedGroup>
 
     fun subscribeLiveGroups(): Flow<List<MergedGroup>>
+
+    /** Every group's counts by group id. A chapter of the Local source counts as downloaded. */
+    fun subscribeGroupCounts(): Flow<Map<Long, MergedGroupCounts>>
 
     /**
      * Makes [mangaIds] the first members of [mainId]'s group, in that order, creating the group or
@@ -40,6 +44,13 @@ interface MergedGroupRepository {
      * old row empty. Both rows take one clock (`design/plans/merged-entries.md` section 6).
      */
     suspend fun setMain(groupId: Long, mangaId: Long)
+
+    /**
+     * A migration: [newMangaId] takes [oldMangaId]'s place in whatever group holds it, its position,
+     * its `check_updates` and the main entry's role included, so the group outlives the old entry.
+     * An old entry in no group writes nothing. Logged, so the other devices follow.
+     */
+    suspend fun replaceMember(oldMangaId: Long, newMangaId: Long)
 
     suspend fun setShowAll(groupId: Long, showAll: Boolean)
 

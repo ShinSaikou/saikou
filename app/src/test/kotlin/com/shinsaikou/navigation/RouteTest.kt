@@ -341,6 +341,7 @@ class RouteTest {
         Route.MigrationConfig(mangaIds = listOf(1L)),
         Route.MigrationList(mangaIds = listOf(1L)),
         Route.MigrateSearch(mangaId = 1L),
+        Route.MergeSearch(mangaId = 1L),
         Route.Reader(mangaId = 1L, chapterId = 2L),
     )
 
@@ -377,6 +378,7 @@ class RouteTest {
         is Route.MigrationConfig -> Route.MigrationConfig::class.qualifiedName!!
         is Route.MigrationList -> Route.MigrationList::class.qualifiedName!!
         is Route.MigrateSearch -> Route.MigrateSearch::class.qualifiedName!!
+        is Route.MergeSearch -> Route.MergeSearch::class.qualifiedName!!
         is Route.Reader -> Route.Reader::class.qualifiedName!!
     }
 

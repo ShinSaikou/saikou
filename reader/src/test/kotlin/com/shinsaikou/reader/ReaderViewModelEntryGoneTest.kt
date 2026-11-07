@@ -219,6 +219,7 @@ class ReaderViewModelEntryGoneTest {
         trackProgress = mockk(relaxed = true),
         autoDownload = mockk(relaxed = true),
         readChapterCleanup = mockk(relaxed = true),
+        reconcileMergedRead = mockk(relaxed = true),
         // The chapter's row is still there when the insert's transaction looks it up.
         chapterReplacements = ChapterReplacements(
             mockk<ChapterRepository> { coEvery { getChapterById(any()) } answers { chapter(firstArg()) } },

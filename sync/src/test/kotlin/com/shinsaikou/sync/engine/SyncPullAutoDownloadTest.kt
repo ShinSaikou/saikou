@@ -24,6 +24,7 @@ import com.shinsaikou.sync.format.RemoteName
 import com.shinsaikou.sync.format.SyncLayout
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -88,7 +89,7 @@ class SyncPullAutoDownloadTest {
                 downloadPreferences,
                 GetCategories(CategoryRepositoryImpl(device.handler)),
             ),
-            getNextChapters = GetNextChapters(getChaptersByMangaId, getManga, mockk()),
+            getNextChapters = GetNextChapters(getChaptersByMangaId, getManga, mockk(), mockk { coEvery { await(any()) } returns null }, mockk()),
             getScanlatorPriority = GetScanlatorPriority(ScanlatorPriorityRepositoryImpl(device.handler)),
             getManga = getManga,
             chapterRepository = chapters,
@@ -97,6 +98,8 @@ class SyncPullAutoDownloadTest {
             queue = TableQueue(DownloadQueueRepositoryImpl(device.handler)),
             downloadPreferences = downloadPreferences,
             readerPreferences = ReaderPreferences(InMemoryPreferenceStore()),
+            getMergedGroup = mockk { coEvery { await(any()) } returns null },
+            getMergedChapters = mockk(),
         )
     }
 

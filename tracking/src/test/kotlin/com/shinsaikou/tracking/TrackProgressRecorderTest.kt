@@ -1,9 +1,12 @@
 package com.shinsaikou.tracking
 
+import com.shinsaikou.domain.merged.interactor.GetMergedGroup
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
+import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.mockk
 import io.mockk.spyk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
@@ -25,8 +28,10 @@ class TrackProgressRecorderTest {
         scheduled++
     }
 
+    private val notMerged = mockk<GetMergedGroup> { coEvery { await(any()) } returns null }
+
     private fun recorder(repository: FakeTrackRepository, vararg trackers: Tracker) =
-        TrackProgressRecorder(repository, TrackerManager(trackers.toSet()), store, scheduler)
+        TrackProgressRecorder(repository, TrackerManager(trackers.toSet()), store, scheduler, notMerged)
 
     @Test
     fun `a finished chapter above the track's number records the push and enqueues the worker`() = runTest {
@@ -119,7 +124,7 @@ class TrackProgressRecorderTest {
     fun `a store that refuses the write throws to the caller and asks for no worker`() = runTest {
         val refusing = DelayedTrackingStore(preferences) { _, _ -> throw IOException("fixture: commit refused") }
         val repository = FakeTrackRepository(track(id = 10, trackerId = 1))
-        val recorder = TrackProgressRecorder(repository, TrackerManager(setOf(FakeTracker(1))), refusing, scheduler)
+        val recorder = TrackProgressRecorder(repository, TrackerManager(setOf(FakeTracker(1))), refusing, scheduler, notMerged)
 
         shouldThrow<IOException> { recorder.record(MANGA_ID, 5.0) }
 
@@ -142,6 +147,7 @@ class TrackProgressRecorderTest {
             TrackerManager(setOf(FakeTracker(1), FakeTracker(2))),
             secondRefused,
             scheduler,
+            notMerged,
         )
 
         shouldThrow<IOException> { recorder.record(MANGA_ID, 5.0) }

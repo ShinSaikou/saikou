@@ -800,6 +800,7 @@ class SchemaTest {
             "merged_groups.sq:getAllMembers scans [merged_members]",
             // Every group, once: read from the members, which are few, in the index's own order, each
             // finding its entry by key. Merged entries cost what is merged, not the library.
+            "merged_groups.sq:getGroupCounts scans [merged_members]",
             "merged_groups.sq:getLiveMembers scans [merged_members]",
             "source_alias.sq:getAll scans [source_alias]",
             "sources.sq:findAll scans [sources]",

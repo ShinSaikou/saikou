@@ -4,6 +4,8 @@ import io.kotest.assertions.withClue
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import io.mockk.coEvery
+import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.track.model.Track
@@ -30,6 +32,7 @@ class RemoteProgressOfferTest {
             RecordingTransactionRunner(),
             store,
             RemoveTrack(repository, store),
+            mockk(relaxed = true),
         ),
     )
 

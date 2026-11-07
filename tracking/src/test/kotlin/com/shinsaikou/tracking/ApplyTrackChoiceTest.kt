@@ -1,5 +1,6 @@
 package com.shinsaikou.tracking
 
+import com.shinsaikou.domain.merged.interactor.ReconcileMergedRead
 import com.shinsaikou.tracking.DelayedTrackingStore.DelayedTrackingItem
 import com.shinsaikou.tracking.myanimelist.MyAnimeList
 import com.shinsaikou.tracking.myanimelist.MyAnimeListFixture
@@ -16,6 +17,9 @@ import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -80,6 +84,7 @@ class ApplyTrackChoiceTest {
         val fixture = MyAnimeListFixture(cacheDir, repository = rows, trackRepository = repository)
         val library = FakeLibrary(transactions, calls)
         val store = DelayedTrackingStore(fixture.preferences, fixture.preferences::write)
+        val reconcile = mockk<ReconcileMergedRead>(relaxed = true)
         val apply = ApplyTrackChoice(
             repository,
             library.chapterRepository,
@@ -87,6 +92,7 @@ class ApplyTrackChoiceTest {
             transactions,
             store,
             RemoveTrack(repository, store),
+            reconcile,
         )
 
         /** The owner's list by remote id; an id absent is off the list, one in [gone] answers 404. */
@@ -213,6 +219,67 @@ class ApplyTrackChoiceTest {
         run.results shouldBe listOf(ApplyResult.Done(marked = 10, listed = 10))
         h.library.chapters.filter { !it.read }.map { it.chapterNumber }.sorted() shouldBe listOf(30.0, 49.5, 50.5)
         h.puts.shouldBeEmpty()
+    }
+
+    // ---- A merged entry's marks are one copy's (R163): the row's reconcile follows them ----
+
+    @Test
+    fun `mark as read that marked chapters reconciles the merged read marks of the entry`() {
+        val h = Harness()
+        h.entry(1, readThrough = 45.0, remote = Remote(chapters = 50))
+
+        h.run(ApplyRow(h.shown(1), CompareChoice.MARK_READ)).results shouldBe listOf(ApplyResult.Done(5, 5))
+
+        coVerify(exactly = 1) { h.reconcile.await(1L) }
+    }
+
+    @Test
+    fun `a row that marked nothing reconciles nothing`() {
+        val h = Harness()
+        h.entry(1, readThrough = 50.0, remote = Remote(chapters = 45))
+        h.entry(2, readThrough = 45.0, remote = Remote(chapters = 50))
+
+        h.run(ApplyRow(h.shown(1), CompareChoice.UPDATE_REMOTE), ApplyRow(h.shown(2), CompareChoice.DONT_CHANGE))
+
+        coVerify(exactly = 0) { h.reconcile.await(any<Long>()) }
+    }
+
+    @Test
+    fun `a row that read changed since marked nothing and reconciles nothing`() {
+        val h = Harness()
+        h.entry(1, readThrough = 45.0, remote = Remote(chapters = 50))
+        val entry = h.shown(1)
+        h.service[1001] = Remote(chapters = 47)
+
+        h.run(ApplyRow(entry, CompareChoice.MARK_READ)).results shouldBe listOf(ApplyResult.ChangedSince)
+
+        coVerify(exactly = 0) { h.reconcile.await(any<Long>()) }
+    }
+
+    @Test
+    fun `each row that marked reconciles its own entry`() {
+        val h = Harness()
+        h.entry(1, readThrough = 45.0, remote = Remote(chapters = 50))
+        h.entry(2, readThrough = 45.0, remote = Remote(chapters = 50))
+
+        h.run(ApplyRow(h.shown(1), CompareChoice.MARK_READ), ApplyRow(h.shown(2), CompareChoice.MARK_READ))
+
+        coVerify(exactly = 1) { h.reconcile.await(1L) }
+        coVerify(exactly = 1) { h.reconcile.await(2L) }
+    }
+
+    @Test
+    fun `a failing reconcile is logged, the row stays done and the run goes on`() {
+        val h = Harness()
+        h.entry(1, readThrough = 45.0, remote = Remote(chapters = 50))
+        h.entry(2, readThrough = 45.0, remote = Remote(chapters = 50))
+        coEvery { h.reconcile.await(1L) } throws IllegalStateException("db busy")
+
+        val run = h.run(ApplyRow(h.shown(1), CompareChoice.MARK_READ), ApplyRow(h.shown(2), CompareChoice.MARK_READ))
+
+        run.results shouldBe listOf(ApplyResult.Done(5, 5), ApplyResult.Done(5, 5))
+        run.stop.shouldBeNull()
+        coVerify(exactly = 1) { h.reconcile.await(2L) }
     }
 
     @Test

@@ -35,4 +35,10 @@ class ReconcileMergedRead(
             .filter { group -> group.id in groupIds || group.members.any { it.mangaId in mangaIds } }
             .forEach { repository.reconcileRead(it.id) }
     }
+
+    /** Every live group, for a restore: it writes `read` on the members of groups already here. */
+    suspend fun awaitAll() {
+        if (!libraryPreferences.mergedEntries.get()) return
+        repository.getLiveGroups().forEach { repository.reconcileRead(it.id) }
+    }
 }

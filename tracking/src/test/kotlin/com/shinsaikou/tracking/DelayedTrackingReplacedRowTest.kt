@@ -3,6 +3,8 @@ package com.shinsaikou.tracking
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import io.mockk.coEvery
+import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
@@ -31,7 +33,7 @@ class DelayedTrackingReplacedRowTest {
     private val scheduler = DelayedTrackingScheduler { scheduled++ }
 
     private fun recorder(repository: ReplacingTrackRepository, tracker: Tracker) =
-        TrackProgressRecorder(repository, TrackerManager(setOf(tracker)), store, scheduler)
+        TrackProgressRecorder(repository, TrackerManager(setOf(tracker)), store, scheduler, mockk { coEvery { await(any()) } returns null })
 
     private fun update(repository: ReplacingTrackRepository, tracker: Tracker) =
         DelayedTrackingUpdate(store, repository, TrackerManager(setOf(tracker)), FakeSignInNotifier())

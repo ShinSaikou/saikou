@@ -1,5 +1,9 @@
 package com.shinsaikou.ui.browse.global
 
+import com.shinsaikou.domain.manga.interactor.UpdateManga
+import com.shinsaikou.domain.merged.interactor.AddMergedEntry
+import com.shinsaikou.domain.merged.interactor.MergeEntries
+import com.shinsaikou.domain.preferences.LibraryPreferences
 import com.shinsaikou.domain.preferences.SourcePreferences
 import com.shinsaikou.domain.source.interactor.BrowseMode
 import com.shinsaikou.domain.source.interactor.BrowsePage
@@ -17,6 +21,7 @@ import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
+import io.mockk.coVerifyOrder
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
@@ -28,6 +33,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
+import tachiyomi.domain.category.interactor.GetCategories
+import tachiyomi.domain.category.interactor.SetMangaCategories
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -67,6 +74,8 @@ class GlobalSearchViewModelTest {
     private val extensionManager = mockk<ExtensionManager> {
         every { installedExtensions } returns MutableStateFlow<List<Extension.Installed>>(emptyList())
     }
+    private val addMergedEntry = mockk<AddMergedEntry>(relaxed = true)
+    private val mergeEntries = mockk<MergeEntries>(relaxed = true)
     private val favoriteIds = MutableStateFlow(emptySet<Long>())
     private val mangaRepository = mockk<MangaRepository> {
         every { getFavoriteIdsAsFlow() } returns favoriteIds
@@ -574,6 +583,186 @@ class GlobalSearchViewModelTest {
             viewModel.state.value.migrateTarget shouldBe null
         }
 
+    // ---- Merge with... (R163) ----
+
+    private val mergeInto = Manga.create().copy(id = ENTRY_ID, source = ENTRY_SOURCE_ID, url = "/m/entry", title = "Harbor Lantern", favorite = true)
+
+    @Test
+    fun `merge mode searches the entry's title at once over the sources Global Search asks`() = runTest(testDispatcher) {
+        every { sourceManager.getCatalogueSources() } returns
+            flowOf(listOf(catalogueSource(1L, "English Source", "en"), catalogueSource(2L, "French Source", "fr")))
+        sourcePreferences.enabledLanguages.set(setOf("en"))
+        coEvery { getManga.await(ENTRY_ID) } returns mergeInto
+        coEvery { getSourceMangaPage.await(any(), any(), any()) } returns emptyResultPage()
+
+        val viewModel = viewModel(mergingMangaId = ENTRY_ID)
+        advanceUntilIdle()
+
+        viewModel.state.value.query shouldBe "Harbor Lantern"
+        viewModel.state.value.mergingInto shouldBe mergeInto
+        viewModel.state.value.migratingFrom shouldBe null
+        viewModel.state.value.groups.map { it.sourceId } shouldContainExactly listOf(1L)
+        coVerify(exactly = 1) {
+            getSourceMangaPage.await(1L, match { it is BrowseMode.Search && it.query == "Harbor Lantern" }, 1)
+        }
+    }
+
+    @Test
+    fun `merge mode for an entry that is gone searches nothing`() = runTest(testDispatcher) {
+        every { sourceManager.getCatalogueSources() } returns flowOf(listOf(catalogueSource(1L, "English Source", "en")))
+        coEvery { getManga.await(ENTRY_ID) } returns null
+
+        val viewModel = viewModel(mergingMangaId = ENTRY_ID)
+        advanceUntilIdle()
+
+        viewModel.state.value.mergingInto shouldBe null
+        coVerify(exactly = 0) { getSourceMangaPage.await(any(), any(), any()) }
+    }
+
+    @Test
+    fun `a result picked in merge mode asks first, naming its source, and dismissing closes it`() = runTest(testDispatcher) {
+        every { sourceManager.getCatalogueSources() } returns flowOf(listOf(catalogueSource(0L, "Source Zero", "en")))
+        coEvery { getManga.await(ENTRY_ID) } returns mergeInto
+        coEvery { getSourceMangaPage.await(any(), any(), any()) } returns
+            BrowsePage(mangas = listOf(manga(40)), hasNextPage = false, page = 1)
+        val viewModel = viewModel(mergingMangaId = ENTRY_ID)
+        advanceUntilIdle()
+
+        viewModel.showMergeDialog(manga(40))
+
+        viewModel.state.value.mergeTarget shouldBe manga(40)
+        viewModel.state.value.mergeTargetSource shouldBe "Source Zero"
+        coVerify(exactly = 0) { mergeEntries.await(any(), any()) }
+
+        viewModel.dismissMergeDialog()
+        viewModel.state.value.mergeTarget shouldBe null
+    }
+
+    @Test
+    fun `the entry itself is no result to merge with`() = runTest(testDispatcher) {
+        every { sourceManager.getCatalogueSources() } returns flowOf(emptyList())
+        coEvery { getManga.await(ENTRY_ID) } returns mergeInto
+        val viewModel = viewModel(mergingMangaId = ENTRY_ID)
+        advanceUntilIdle()
+
+        viewModel.showMergeDialog(mergeInto)
+
+        viewModel.state.value.mergeTarget shouldBe null
+    }
+
+    @Test
+    fun `confirming adds both entries and merges them with the search's entry as main, then returns to the entry`() =
+        runTest(testDispatcher) {
+            every { sourceManager.getCatalogueSources() } returns flowOf(emptyList())
+            coEvery { getManga.await(ENTRY_ID) } returns mergeInto
+            val viewModel = viewModel(mergingMangaId = ENTRY_ID)
+            advanceUntilIdle()
+            viewModel.showMergeDialog(manga(40))
+            var merged = 0
+            var failed = 0
+
+            viewModel.confirmMerge(onMerged = { merged++ }, onFailed = { failed++ })
+            advanceUntilIdle()
+
+            coVerifyOrder {
+                addMergedEntry.await(mergeInto)
+                addMergedEntry.await(manga(40))
+                mergeEntries.await(ENTRY_ID, listOf(ENTRY_ID, 40L))
+            }
+            merged shouldBe 1
+            failed shouldBe 0
+            viewModel.state.value.mergeTarget shouldBe null
+        }
+
+    @Test
+    fun `a target and an entry that are not in the library yet are added to it, and one that is stays as it is`() =
+        runTest(testDispatcher) {
+            val updateManga = mockk<UpdateManga>(relaxed = true)
+            val add = AddMergedEntry(updateManga, mockk(relaxed = true), mockk<GetCategories>(relaxed = true), mockk<SetMangaCategories>(relaxed = true), LibraryPreferences(InMemoryPreferenceStore()))
+            every { sourceManager.getCatalogueSources() } returns flowOf(emptyList())
+            val notYetFavourite = mergeInto.copy(favorite = false)
+            coEvery { getManga.await(ENTRY_ID) } returns notYetFavourite
+            val viewModel = viewModel(mergingMangaId = ENTRY_ID, addMergedEntry = add)
+            advanceUntilIdle()
+            viewModel.showMergeDialog(manga(40))
+            viewModel.confirmMerge(onMerged = {}, onFailed = {})
+            advanceUntilIdle()
+
+            coVerify(exactly = 1) { updateManga.awaitUpdateFavorite(ENTRY_ID, true) }
+            coVerify(exactly = 1) { updateManga.awaitUpdateFavorite(40L, true) }
+
+            // The same again with both in the library already: nothing is flipped, so no date added resets.
+            val inLibrary = mockk<UpdateManga>(relaxed = true)
+            val addAgain = AddMergedEntry(inLibrary, mockk(relaxed = true), mockk<GetCategories>(relaxed = true), mockk<SetMangaCategories>(relaxed = true), LibraryPreferences(InMemoryPreferenceStore()))
+            coEvery { getManga.await(ENTRY_ID) } returns mergeInto
+            val second = viewModel(mergingMangaId = ENTRY_ID, addMergedEntry = addAgain)
+            advanceUntilIdle()
+            second.showMergeDialog(manga(41).copy(favorite = true))
+            second.confirmMerge(onMerged = {}, onFailed = {})
+            advanceUntilIdle()
+
+            coVerify(exactly = 0) { inLibrary.awaitUpdateFavorite(any(), any()) }
+        }
+
+    @Test
+    fun `a failure before the merge is reported, nothing is merged, and what was added stays`() = runTest(testDispatcher) {
+        every { sourceManager.getCatalogueSources() } returns flowOf(emptyList())
+        coEvery { getManga.await(ENTRY_ID) } returns mergeInto
+        coEvery { addMergedEntry.await(manga(40)) } throws java.io.IOException("disk full")
+        val viewModel = viewModel(mergingMangaId = ENTRY_ID)
+        advanceUntilIdle()
+        viewModel.showMergeDialog(manga(40))
+        var merged = 0
+        var failed = 0
+
+        viewModel.confirmMerge(onMerged = { merged++ }, onFailed = { failed++ })
+        advanceUntilIdle()
+
+        merged shouldBe 0
+        failed shouldBe 1
+        coVerify(exactly = 1) { addMergedEntry.await(mergeInto) }
+        coVerify(exactly = 0) { mergeEntries.await(any(), any()) }
+    }
+
+    @Test
+    fun `a merge that throws is reported and does not return to the entry`() = runTest(testDispatcher) {
+        every { sourceManager.getCatalogueSources() } returns flowOf(emptyList())
+        coEvery { getManga.await(ENTRY_ID) } returns mergeInto
+        coEvery { mergeEntries.await(any(), any()) } throws IllegalStateException("main is not a member")
+        val viewModel = viewModel(mergingMangaId = ENTRY_ID)
+        advanceUntilIdle()
+        viewModel.showMergeDialog(manga(40))
+        var merged = 0
+        var failed = 0
+
+        viewModel.confirmMerge(onMerged = { merged++ }, onFailed = { failed++ })
+        advanceUntilIdle()
+
+        merged shouldBe 0
+        failed shouldBe 1
+    }
+
+    @Test
+    fun `confirming with no result picked, or outside merge mode, does nothing`() = runTest(testDispatcher) {
+        every { sourceManager.getCatalogueSources() } returns flowOf(emptyList())
+        coEvery { getManga.await(ENTRY_ID) } returns mergeInto
+        var called = 0
+
+        val merging = viewModel(mergingMangaId = ENTRY_ID)
+        advanceUntilIdle()
+        merging.confirmMerge(onMerged = { called++ }, onFailed = { called++ })
+
+        val plain = viewModel()
+        advanceUntilIdle()
+        plain.showMergeDialog(manga(40))
+        plain.confirmMerge(onMerged = { called++ }, onFailed = { called++ })
+        advanceUntilIdle()
+
+        called shouldBe 0
+        coVerify(exactly = 0) { addMergedEntry.await(any()) }
+        coVerify(exactly = 0) { mergeEntries.await(any(), any()) }
+    }
+
     /**
      * The app's registry, over [providers], collecting on the test's scheduler. Its scope is not
      * the test's background scope, whose work `advanceUntilIdle` does not wait for; it is cancelled
@@ -628,14 +817,19 @@ class GlobalSearchViewModelTest {
         initialQuery: String? = null,
         sourceManager: SourceManager = this.sourceManager,
         migratingMangaId: Long? = null,
+        mergingMangaId: Long? = null,
+        addMergedEntry: AddMergedEntry = this.addMergedEntry,
     ) = GlobalSearchViewModel(
         initialQuery = initialQuery,
         migratingMangaId = migratingMangaId,
+        mergingMangaId = mergingMangaId,
         getManga = getManga,
         getSourceMangaPage = getSourceMangaPage,
         sourceManager = sourceManager,
         sourcePreferences = sourcePreferences,
         extensionManager = extensionManager,
+        addMergedEntry = addMergedEntry,
+        mergeEntries = mergeEntries,
         mangaRepository = mangaRepository,
         dispatchers = AppDispatchers(io = testDispatcher, default = testDispatcher, main = testDispatcher),
     )

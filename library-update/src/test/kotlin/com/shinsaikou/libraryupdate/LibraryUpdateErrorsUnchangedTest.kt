@@ -131,6 +131,8 @@ class LibraryUpdateErrorsUnchangedTest {
             updateManga = mockk(relaxed = true),
             fetchInterval = mockk<FetchInterval> { every { getWindow(any(), any()) } returns (0L to 1_000L) },
             libraryPreferences = preferences,
+            getMergedGroups = mockk { coEvery { await() } returns emptyList() },
+            reconcileMergedRead = mockk(relaxed = true),
             autoDownload = mockk(relaxed = true),
             dispatchers = Dispatchers(
                 io = kotlinx.coroutines.Dispatchers.IO,

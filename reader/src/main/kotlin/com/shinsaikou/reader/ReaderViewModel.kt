@@ -58,6 +58,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
@@ -65,6 +66,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.flow.withIndex
 import kotlinx.coroutines.isActive
@@ -313,6 +315,7 @@ class ReaderViewModel @AssistedInject constructor(
                         downloaded = downloaded,
                         ranking = ranking,
                         owners = entries.associateBy { it.id },
+                        chapterPass = readerEntries.chapterPass(entries),
                     )
                     // The handle's page belongs to the chapter it was saved with, so a fallback
                     // to the chapter the reader was started on resumes that chapter instead.
@@ -348,7 +351,7 @@ class ReaderViewModel @AssistedInject constructor(
                     send(ReaderEvent.SessionFailed(error, message))
                 }
             loaded.getOrNull()?.let {
-                observeChanges(it.manga.id)
+                observeChanges(it.manga.id, it.session.entryIds - it.manga.id)
                 observeNotes()
             }
         }
@@ -418,9 +421,17 @@ class ReaderViewModel @AssistedInject constructor(
      * drops the progress still waiting to be written, since the chapters went with the entry, and
      * the reader closes naming the failure through R77's queue and R67's resolver. Nothing after the
      * first null belongs to the session. The first answer is the row the session just loaded,
-     * unless it has already gone.
+     * unless it has already gone. The [others] of a merged title end the session the same way, and
+     * only that way: their rows decide no mode.
      */
-    private fun observeChanges(mangaId: Long) {
+    private fun observeChanges(mangaId: Long, others: Set<Long>) {
+        others.forEach { id ->
+            viewModelScope.launch {
+                getManga.subscribeOrNull(id).filter { it == null }.take(1).collect {
+                    send(ReaderEvent.SessionFailed(MangaNotFoundException(id)))
+                }
+            }
+        }
         viewModelScope.launch {
             getManga.subscribeOrNull(mangaId)
                 .transformWhile { manga ->

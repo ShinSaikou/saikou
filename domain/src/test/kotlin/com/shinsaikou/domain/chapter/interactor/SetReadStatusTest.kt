@@ -33,7 +33,7 @@ class SetReadStatusTest {
     private val downloadPreferences = DownloadPreferences(InMemoryPreferenceStore())
     private val cleanup = RecordingCleanup()
     private val getMergedGroup = mockk<GetMergedGroup> { coEvery { await(any()) } returns null }
-    private val setReadStatus = SetReadStatus(chapterRepository, mangaRepository, downloadPreferences, cleanup, getMergedGroup)
+    private val setReadStatus = SetReadStatus(chapterRepository, mangaRepository, downloadPreferences, cleanup, getMergedGroup, mockk())
 
     private fun chapter(number: Long, read: Boolean = false) = Chapter.create().copy(
         id = number,

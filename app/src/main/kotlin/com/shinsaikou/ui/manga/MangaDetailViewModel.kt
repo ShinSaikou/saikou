@@ -21,6 +21,19 @@ import com.shinsaikou.domain.manga.interactor.SetMangaViewerFlags
 import com.shinsaikou.domain.manga.interactor.UpdateManga
 import com.shinsaikou.domain.manga.model.ReaderOrientation
 import com.shinsaikou.domain.manga.model.ReadingMode
+import com.shinsaikou.domain.merged.MergedChapters
+import com.shinsaikou.domain.merged.interactor.AddMergedEntry
+import com.shinsaikou.domain.merged.interactor.GetMergedChapters
+import com.shinsaikou.domain.merged.interactor.GetMergedGroups
+import com.shinsaikou.domain.merged.interactor.MergeEntries
+import com.shinsaikou.domain.merged.interactor.ReconcileMergedRead
+import com.shinsaikou.domain.merged.interactor.RemoveMergedMember
+import com.shinsaikou.domain.merged.interactor.SetMergedCheckUpdates
+import com.shinsaikou.domain.merged.interactor.SetMergedMain
+import com.shinsaikou.domain.merged.interactor.SetMergedOrder
+import com.shinsaikou.domain.merged.interactor.SetMergedShowAll
+import com.shinsaikou.domain.merged.interactor.UnmergeEntries
+import com.shinsaikou.domain.merged.model.MergedGroup
 import com.shinsaikou.domain.preferences.LibraryPreferences
 import com.shinsaikou.domain.preferences.LibraryPreferences.ChapterSwipeAction
 import com.shinsaikou.domain.preferences.LibraryUpdateRestrictions
@@ -37,6 +50,7 @@ import com.shinsaikou.presentation.core.viewmodel.StateViewModel
 import com.shinsaikou.source.Source
 import com.shinsaikou.source.SourceIds
 import com.shinsaikou.source.SourceManager
+import com.shinsaikou.source.SourceNotInstalledException
 import com.shinsaikou.source.StubSource
 import com.shinsaikou.tracking.TrackerManager
 import com.shinsaikou.ui.chapter.ChapterDownload
@@ -57,9 +71,13 @@ import dev.zacsweers.metrox.viewmodel.ManualViewModelAssistedFactoryKey
 import eu.kanade.tachiyomi.util.chapter.removeDuplicates
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.dropWhile
@@ -68,8 +86,10 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -92,6 +112,7 @@ import tachiyomi.domain.manga.interactor.UpdateMangaNotes
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.manga.model.MangaUpdate
 import tachiyomi.domain.manga.model.applyFilter
+import tachiyomi.domain.track.model.Track
 import tachiyomi.domain.track.repository.TrackRepository
 
 /**
@@ -102,6 +123,13 @@ import tachiyomi.domain.track.repository.TrackRepository
  * a freshly added entry stayed at zero chapters and the reader was unreachable. Opening an entry
  * that has never been fetched, or arriving from a browse listing, now refreshes once; anything else
  * is the owner asking for one, either by pulling or through the app bar's Refresh item.
+ *
+ * [mangaId] can be any member of a merged entry (R163): a notification or History names the member,
+ * and the screen shows the title. So the group is watched for as long as the screen lives, and it
+ * can change under it. While there is a group, `State.Success.manga` is the main entry, which holds
+ * what belongs to the title (details, chapter flags, reading mode, tracks, the update interval), and
+ * a chapter's own entry ([State.Success.ownerOf]) is the one a download, a delete or a mark acts on.
+ * [mangaId] is only ever the way in: nothing that writes to the title may use it.
  */
 @AssistedInject
 class MangaDetailViewModel(
@@ -141,6 +169,17 @@ class MangaDetailViewModel(
     private val autoDownload: AutoDownload,
     private val trackerManager: TrackerManager,
     private val trackRepository: TrackRepository,
+    private val getMergedGroups: GetMergedGroups,
+    private val getMergedChapters: GetMergedChapters,
+    private val reconcileMergedRead: ReconcileMergedRead,
+    private val mergeEntries: MergeEntries,
+    private val addMergedEntry: AddMergedEntry,
+    private val setMergedOrder: SetMergedOrder,
+    private val setMergedMain: SetMergedMain,
+    private val setMergedCheckUpdates: SetMergedCheckUpdates,
+    private val setMergedShowAll: SetMergedShowAll,
+    private val removeMergedMember: RemoveMergedMember,
+    private val unmergeEntries: UnmergeEntries,
     private val dispatchers: Dispatchers,
 ) : StateViewModel<MangaDetailViewModel.State>(State.Loading) {
 
@@ -207,7 +246,26 @@ class MangaDetailViewModel(
             val automaticUpdates: Boolean = false,
             /** The experimental switch that lets the update interval dialog set a number of days. */
             val customUpdateInterval: Boolean = false,
+            /** The experimental switch that offers Merge with... and the duplicate question's Merge. */
+            val mergedEntries: Boolean = false,
+            /** The merged title this entry is part of, with [manga] its main entry; null for one alone. */
+            val merged: MergedTitle? = null,
+            /** The rows with a hidden copy whose files are on disk, which they badge. */
+            val hiddenDownloads: Set<Long> = emptySet(),
+            /** A merged title's chapters of the Local source, on disk by definition. */
+            val localChapters: Set<Long> = emptySet(),
         ) : State {
+            /** The entry [chapter] belongs to, whose source serves it. */
+            fun ownerOf(chapter: Chapter): Manga = merged?.owners?.get(chapter.mangaId) ?: manga
+
+            /** The list's order: a merged list has no one source's order to follow. */
+            fun chapterSort(sortDescending: Boolean = manga.sortDescending()): (Chapter, Chapter) -> Int =
+                if (merged == null) getChapterSort(manga, sortDescending) else MergedChapters.sort(manga, sortDescending)
+
+            /** The source a row names; only in a merged title, where a row can come from any. */
+            fun sourceNameOf(chapter: Chapter): String? =
+                merged?.sources?.firstOrNull { it.mangaId == chapter.mangaId }?.sourceName
+
             /** What the entry's update interval button and dialog say. */
             val updateCadence: UpdateCadence
                 get() = updateCadenceOf(manga, updateRestrictions, automaticUpdates, chapterTotal, chapterRead)
@@ -221,9 +279,12 @@ class MangaDetailViewModel(
                 get() = (customUpdateInterval || manga.fetchInterval < 0) &&
                     LibraryUpdateRestrictions.MANGA_OUTSIDE_RELEASE_PERIOD in updateRestrictions &&
                     updateCadence != UpdateCadence.FetchOnce
-            /** A Local-source entry is on disk by definition and the download queue refuses it. */
+            /**
+             * A Local-source entry is on disk by definition and the download queue refuses it. A
+             * merged title is one while every member is; a mix is per chapter ([localChapters]).
+             */
             val isLocal: Boolean
-                get() = manga.source == SourceIds.LOCAL
+                get() = merged?.owners?.values?.all { it.source == SourceIds.LOCAL } ?: (manga.source == SourceIds.LOCAL)
 
             /** The downloaded filter as it applies, which the More tab's switch can force on. */
             val downloadedFilter: TriState
@@ -255,7 +316,11 @@ class MangaDetailViewModel(
              * is None, because there is nothing to download or delete.
              */
             fun downloadOf(chapterId: Long): ChapterDownload =
-                if (isLocal) ChapterDownload.None else chapterDownloadOf(chapterId, downloaded, queued)
+                if (isLocal || chapterId in localChapters) {
+                    ChapterDownload.None
+                } else {
+                    chapterDownloadOf(chapterId, downloaded, queued)
+                }
 
             /**
              * Whether the rows draw their download control: not on a Local entry, whose chapters
@@ -288,7 +353,7 @@ class MangaDetailViewModel(
                         if (chapter.read) ChapterSwipe.MarkUnread else ChapterSwipe.MarkRead
                     ChapterSwipeAction.ToggleBookmark ->
                         if (chapter.bookmark) ChapterSwipe.RemoveBookmark else ChapterSwipe.Bookmark
-                    ChapterSwipeAction.Download -> if (isLocal) null else when (downloadOf(chapter.id)) {
+                    ChapterSwipeAction.Download -> if (isLocal || chapter.id in localChapters) null else when (downloadOf(chapter.id)) {
                         ChapterDownload.None, ChapterDownload.Failed -> ChapterSwipe.StartDownload
                         ChapterDownload.Queued, is ChapterDownload.Downloading -> ChapterSwipe.CancelDownload
                         ChapterDownload.Downloaded -> ChapterSwipe.DeleteDownload
@@ -308,6 +373,28 @@ class MangaDetailViewModel(
         val offered: Boolean = false,
         val anySignedIn: Boolean = false,
         val count: Int = 0,
+    )
+
+    /**
+     * A merged title as the screen shows it: [sources] in chapter order, the winning source first,
+     * and [owners] every entry by id, the main entry among them.
+     */
+    data class MergedTitle(
+        val showAll: Boolean,
+        val sources: List<MergedSource>,
+        val owners: Map<Long, Manga>,
+    ) {
+        val main: MergedSource? get() = sources.firstOrNull { it.isMain }
+    }
+
+    /** One row of the Merged sources sheet. */
+    data class MergedSource(
+        val mangaId: Long,
+        val sourceName: String,
+        val title: String,
+        val chapterCount: Int,
+        val checkUpdates: Boolean,
+        val isMain: Boolean,
     )
 
     /**
@@ -369,6 +456,12 @@ class MangaDetailViewModel(
 
         /** Why and when the entry is checked, with the interval choice while that is on. */
         data object UpdateInterval : Dialog
+
+        /** The Merged sources sheet, which reads the title off [State.Success.merged]. */
+        data object MergedSources : Dialog
+
+        /** Removing a merged title takes every source out of the library, so it asks first. */
+        data class RemoveMerged(val sources: Int) : Dialog
 
         /**
          * The cover viewer (phase 5 unit ED): [editable] while a cover can be set (a library or
@@ -448,6 +541,9 @@ class MangaDetailViewModel(
     /** The tracking button as last seen, collected on its own and copied in like [queued]. */
     private var tracking = Tracking(offered = trackerManager.trackers.any { it.isConfigured })
 
+    /** The experimental switch as last seen, copied in like [queued]. */
+    private var mergedEntries = false
+
     /** The two date settings as last seen, `relativeTime` then `dateFormat`, copied in like [queued]. */
     private var dateSettings: Pair<Boolean, String> = true to ""
 
@@ -459,6 +555,12 @@ class MangaDetailViewModel(
      * Upstream's `allChapters`, which the download menu draws from when `skipFiltered` is off.
      */
     private var allChapters: List<Chapter> = emptyList()
+
+    /** The group the read marks were last reconciled for, so one open runs it once. */
+    private var reconciledGroup: Long? = null
+
+    /** The never-fetched members this screen has asked for ([fetchNewMembers]). */
+    private val fetchedMembers = HashSet<Long>()
 
     /**
      * Whether the entry's flows are worth collecting: always until the screen first watches
@@ -491,7 +593,11 @@ class MangaDetailViewModel(
         val customInterval: Boolean = false,
     )
 
-    /** Everything the projection reads that arrives as a flow. */
+    /**
+     * Everything the projection reads that arrives as a flow. [manga] is the main entry when there
+     * is a [group], and [chapters] every member's, each copy included. [entries] is every entry with
+     * its own chapters, one for an entry on its own.
+     */
     private data class Inputs(
         val manga: Manga,
         val chapters: List<Chapter>,
@@ -500,7 +606,24 @@ class MangaDetailViewModel(
         val downloaded: Set<Long>,
         val downloadedOnly: Boolean,
         val ranking: List<ScanlatorPriority>,
+        val group: MergedGroup? = null,
+        val entries: List<Pair<Manga, List<Chapter>>> = emptyList(),
     )
+
+    /**
+     * The group this entry is in as it changes, null while it is in none or the switch is off, in
+     * which case [inputs] is exactly the flows of an entry on its own and no group query runs. A
+     * group's read marks are reconciled when the screen first sees it, so a path that missed the
+     * write heals itself.
+     */
+    private val mergedGroup: Flow<MergedGroup?> = getMergedGroups.subscribe(mangaId)
+        .onEach { group ->
+            if (group != null && group.id != reconciledGroup) {
+                reconciledGroup = group.id
+                withContext(dispatchers.io) { reconcileMergedRead.await(group.mainMangaId) }
+            }
+        }
+        .shareIn(viewModelScope, SharingStarted.WhileSubscribed(), replay = 1)
 
     init {
         viewModelScope.launch {
@@ -509,25 +632,16 @@ class MangaDetailViewModel(
             // as the process starts, when an installed extension still reads as missing, so it
             // waits for the registry first and shows its loading state meanwhile.
             sourceManager.isInitialized.first { it }
-            combine(
-                getMangaWithChapters.subscribe(mangaId, applyScanlatorFilter = true),
-                // The two scanlator collections travel together: combine takes five flows.
-                combine(getExcludedScanlators.subscribe(mangaId), getScanlatorPriority.subscribe(mangaId), ::Pair),
-                getAvailableScanlators.subscribe(mangaId),
-                downloadedChapters.subscribeByMangaId(mangaId),
-                basePreferences.downloadedOnly.withCurrent(),
-            ) { entry, (excluded, ranking), available, downloaded, downloadedOnly ->
-                entry?.let { (manga, chapters) ->
-                    Inputs(manga, chapters, excluded, available, downloaded, downloadedOnly, ranking)
-                }
-            }
+            projected()
                 .whileWatched()
                 .flowOn(dispatchers.io)
                 .collect { inputs -> if (inputs == null) mutableState.value = State.NotFound else project(inputs) }
         }
         viewModelScope.launch {
-            downloadQueue.subscribe()
-                .map { rows -> rows.filter { it.mangaId == mangaId }.associateBy { it.chapterId } }
+            combine(downloadQueue.subscribe(), mergedGroup) { rows, group ->
+                val ids = group?.members?.mapTo(HashSet()) { it.mangaId } ?: setOf(mangaId)
+                rows.filter { it.mangaId in ids }.associateBy { it.chapterId }
+            }
                 .distinctUntilChanged()
                 .whileWatched()
                 .flowOn(dispatchers.io)
@@ -569,9 +683,15 @@ class MangaDetailViewModel(
                     }
                 }
         }
+        viewModelScope.launch {
+            libraryPreferences.mergedEntries.withCurrent().collect { on ->
+                mergedEntries = on
+                mutableState.update { if (it is State.Success) it.copy(mergedEntries = on) else it }
+            }
+        }
         if (tracking.offered) {
             viewModelScope.launch {
-                combine(trackRepository.getTracksByMangaIdAsFlow(mangaId), trackerManager.loggedInTrackersFlow()) { tracks, signedIn ->
+                combine(titleTracks(), trackerManager.loggedInTrackersFlow()) { tracks, signedIn ->
                     val ids = signedIn.mapTo(mutableSetOf()) { it.id }
                     tracking.copy(anySignedIn = ids.isNotEmpty(), count = tracks.count { it.trackerId in ids })
                 }
@@ -585,8 +705,54 @@ class MangaDetailViewModel(
         }
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun projected(): Flow<Inputs?> = mergedGroup.flatMapLatest { inputs(it) }
+
+    /** The title's track rows: a merged title's are the main entry's. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun titleTracks(): Flow<List<Track>> = mergedGroup
+        .map { it?.mainMangaId ?: mangaId }
+        .distinctUntilChanged()
+        .flatMapLatest(trackRepository::getTracksByMangaIdAsFlow)
+
+    /**
+     * What the projection reads: one set of flows per entry, the main entry first. A member whose
+     * row or chapters are a tick behind drops out of one projection and comes back on the next.
+     */
+    private suspend fun inputs(group: MergedGroup?): Flow<Inputs?> {
+        val mainId = group?.mainMangaId ?: mangaId
+        val ids = listOf(mainId) + group?.members.orEmpty().map { it.mangaId }.filter { it != mainId }
+        return combine(
+            ids.perEntry { getMangaWithChapters.subscribe(it, applyScanlatorFilter = true) },
+            // The two scanlator collections travel together: combine takes five flows.
+            combine(ids.perEntry(getExcludedScanlators::subscribe), ids.perEntry(getScanlatorPriority::subscribe), ::Pair),
+            ids.perEntry(getAvailableScanlators::subscribe),
+            ids.perEntry(downloadedChapters::subscribeByMangaId),
+            basePreferences.downloadedOnly.withCurrent(),
+        ) { rows, (excluded, ranking), available, downloaded, downloadedOnly ->
+            val (manga, mainChapters) = rows.first() ?: return@combine null
+            val entries = rows.filterNotNull()
+            Inputs(
+                manga = manga,
+                chapters = if (group == null) mainChapters else entries.flatMap { it.second },
+                excludedScanlators = excluded.flatMapTo(LinkedHashSet()) { it },
+                availableScanlators = available.flatMapTo(LinkedHashSet()) { it },
+                downloaded = downloaded.flatMapTo(HashSet()) { it },
+                downloadedOnly = downloadedOnly,
+                ranking = ranking.flatten().distinctBy { it.scanlator },
+                group = group,
+                entries = entries,
+            )
+        }
+    }
+
+    /** One flow of [each] per id, as a list in the same order. */
+    private inline fun <reified T> List<Long>.perEntry(each: (Long) -> Flow<T>): Flow<List<T>> =
+        combine(map(each)) { it.toList() }
+
     private suspend fun project(inputs: Inputs) {
         val (manga, chapters, excludedScanlators, availableScanlators, downloaded, downloadedOnly, ranking) = inputs
+        val group = inputs.group
         // Upstream applies the chapter defaults on every open of an entry that is not in the library
         // (`MangaViewModel`'s init; phase 4 unit CS, challenge c2 g3 A item 3). The write re-emits
         // the entry, so the projection after this one shows it with them.
@@ -594,18 +760,23 @@ class MangaDetailViewModel(
             defaultsApplied = true
             if (!manga.favorite) withContext(dispatchers.io) { setMangaDefaultChapterFlags.await(manga) }
         }
-        allChapters = chapters
+        // One copy of each number. The list's own filters run first, the downloaded one above all,
+        // so a number whose winning copy is not downloaded keeps the one that is.
+        fun onePerNumber(list: List<Chapter>) = if (group == null) list else getMergedChapters.visible(list, group)
+        val shownChapters = onePerNumber(chapters)
+        allChapters = shownChapters
         val source = sourceManager.get(manga.source)
-        val sort = getChapterSort(manga)
-        val isLocal = manga.source == SourceIds.LOCAL
+        val sort = if (group == null) getChapterSort(manga) else MergedChapters.sort(manga)
+        val owners = inputs.entries.associate { (entry, _) -> entry.id to entry }
+        val isLocal = { chapter: Chapter -> (owners[chapter.mangaId] ?: manga).source == SourceIds.LOCAL }
         val downloadedFilter = if (downloadedOnly) TriState.ENABLED_IS else manga.downloadedFilter
-        val visible = chapters
-            .filter { chapter ->
+        val visible = onePerNumber(
+            chapters.filter { chapter ->
                 applyFilter(manga.unreadFilter) { !chapter.read } &&
                     applyFilter(manga.bookmarkedFilter) { chapter.bookmark } &&
-                    applyFilter(downloadedFilter) { isLocal || chapter.id in downloaded }
-            }
-            .sortedWith { a, b -> sort(a, b) }
+                    applyFilter(downloadedFilter) { isLocal(chapter) || chapter.id in downloaded }
+            },
+        ).sortedWith { a, b -> sort(a, b) }
         val visibleIds = visible.mapTo(mutableSetOf()) { it.id }
         // Everything this projection needs off the main thread is read before the state is touched,
         // so the carry-over below sees the state as it is at the moment of the write. Reading it
@@ -615,6 +786,7 @@ class MangaDetailViewModel(
         // The resume button opens the copy of the next number the title's ranking prefers, and the
         // first copy, as before, when the title is unranked (phase 4 unit SC).
         val rankOf = ranking.associate { it.scanlator to it.priority }
+        val merged = group?.let { mergedTitle(it, manga, inputs.entries) }
         val (nextUnread, defaultReadingMode, defaultOrientation) = withContext(dispatchers.io) {
             Triple(
                 getNextChapters.await(mangaId).removeDuplicates(null, rankOf).firstOrNull(),
@@ -627,8 +799,12 @@ class MangaDetailViewModel(
             State.Success(
                 manga = manga,
                 chapters = visible,
-                sourceName = source?.name,
-                sourceInstalled = source != null && source !is StubSource,
+                sourceName = merged?.main?.sourceName ?: source?.name,
+                sourceInstalled = if (group == null) {
+                    source != null && source !is StubSource
+                } else {
+                    group.members.any { getMergedChapters.isInstalled(it.source) }
+                },
                 availableScanlators = availableScanlators,
                 excludedScanlators = excludedScanlators,
                 scanlatorRanking = ranking.map { it.scanlator },
@@ -645,24 +821,66 @@ class MangaDetailViewModel(
                 // Both survive a re-projection; the selection loses only ids a filter change took
                 // off screen.
                 selection = previous?.selection.orEmpty().intersect(visibleIds),
-                dialog = previous?.dialog,
+                // The Merged sources sheet goes with the group it shows.
+                dialog = previous?.dialog.takeUnless { it == Dialog.MergedSources && merged == null },
                 downloaded = downloaded,
                 queued = queued,
                 downloadedOnly = downloadedOnly,
                 tracking = tracking,
                 relativeTime = dateSettings.first,
                 dateFormat = dateSettings.second,
-                chapterTotal = chapters.size,
-                chapterRead = chapters.count { it.read },
+                chapterTotal = shownChapters.size,
+                chapterRead = shownChapters.count { it.read },
                 updateRestrictions = updateSettings.restrictions,
                 automaticUpdates = updateSettings.automatic,
                 customUpdateInterval = updateSettings.customInterval,
+                mergedEntries = mergedEntries,
+                merged = merged,
+                hiddenDownloads = if (group == null) emptySet() else MergedChapters.withHiddenDownload(chapters, visible, downloaded),
+                localChapters = if (group == null) emptySet() else chapters.filter(isLocal).mapTo(HashSet()) { it.id },
             )
         }
         if (!autoRefreshed && (fromSource || !manga.initialized || chapters.isEmpty()) && rowExists()) {
             autoRefreshed = true
             startRefresh(manual = fromSource, ownerAsked = false)
+        } else if (group != null) {
+            fetchNewMembers(inputs.entries)
         }
+    }
+
+    /**
+     * A member that was never fetched has nothing to show, which is what a merge with a search
+     * result leaves: nothing else would fetch it until the next library update. Each is asked once
+     * per screen, and not while a refresh is running, which may be the one that fetches it.
+     */
+    private fun fetchNewMembers(entries: List<Pair<Manga, List<Chapter>>>) {
+        val current = state.value as? State.Success ?: return
+        if (current.refreshing) return
+        val unfetched = entries
+            .filter { (entry, chapters) -> !entry.initialized || chapters.isEmpty() }
+            .mapTo(HashSet()) { (entry, _) -> entry.id }
+        val fresh = unfetched - fetchedMembers
+        fetchedMembers += fresh
+        if (fresh.isNotEmpty()) startRefresh(manual = false, ownerAsked = false, only = fresh)
+    }
+
+    private fun mergedTitle(group: MergedGroup, main: Manga, entries: List<Pair<Manga, List<Chapter>>>): MergedTitle {
+        val rows = entries.associateBy { (entry, _) -> entry.id }
+        return MergedTitle(
+            showAll = group.showAll,
+            sources = group.members.mapNotNull { member ->
+                val (entry, chapters) = rows[member.mangaId] ?: return@mapNotNull null
+                MergedSource(
+                    mangaId = entry.id,
+                    sourceName = sourceManager.getOrStub(entry.source).name,
+                    title = entry.displayTitle,
+                    chapterCount = chapters.size,
+                    checkUpdates = member.checkUpdates,
+                    isMain = entry.id == main.id,
+                )
+            },
+            owners = rows.mapValues { (_, row) -> row.first },
+        )
     }
 
     /**
@@ -702,12 +920,24 @@ class MangaDetailViewModel(
      * [AutoDownload] (phase 3 unit AD), with the queue started as upstream's manual fetch does. The
      * automatic refresh on open downloads nothing, even arriving from a browse listing, where it
      * counts as manual for the fetch interval: upstream's first load is not a manual fetch either.
+     *
+     * A merged title refreshes every member, or the [only] ones named, side by side since each is
+     * another site, and a failed member is named without keeping the others from finishing.
      */
-    private fun startRefresh(manual: Boolean, ownerAsked: Boolean) {
+    private fun startRefresh(manual: Boolean, ownerAsked: Boolean, only: Set<Long>? = null) {
         val current = state.value as? State.Success ?: return
         if (current.refreshing) return
         mutableState.value = current.copy(refreshing = true)
         viewModelScope.launch {
+            val merged = current.merged
+            if (merged != null) {
+                try {
+                    refreshMembers(merged, manual, ownerAsked, only)
+                } finally {
+                    mutableState.update { if (it is State.Success) it.copy(refreshing = false) else it }
+                }
+                return@launch
+            }
             try {
                 val source = sourceManager.get(current.manga.source)
                 if (source == null || source is StubSource) {
@@ -741,6 +971,53 @@ class MangaDetailViewModel(
         }
     }
 
+    /** One member's fetch, as [startRefresh] does for an entry on its own; a failure is the member's. */
+    private suspend fun refreshMember(entry: Manga, manual: Boolean, ownerAsked: Boolean): Int {
+        val member = sourceManager.get(entry.source)
+            ?.takeIf { it !is StubSource }
+            ?: throw SourceNotInstalledException(entry.source)
+        val (manga, newChapters) = refreshMangaFromSource(
+            source = member,
+            manga = entry,
+            fetchDetails = true,
+            fetchChapters = true,
+            manualFetch = manual,
+        )
+        if (ownerAsked && newChapters.isNotEmpty()) queueNewChapters(manga, newChapters)
+        return newChapters.size
+    }
+
+    private suspend fun refreshMembers(merged: MergedTitle, manual: Boolean, ownerAsked: Boolean, only: Set<Long>?) {
+        val results = coroutineScope {
+            merged.sources
+                .filter { only == null || it.mangaId in only }
+                .mapNotNull { source -> merged.owners[source.mangaId]?.let { source to it } }
+                .map { (source, entry) ->
+                    async {
+                        try {
+                            source to Result.success(refreshMember(entry, manual, ownerAsked))
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Throwable) {
+                            source to Result.failure<Int>(e)
+                        }
+                    }
+                }
+                .awaitAll()
+        }
+        results.forEach { (source, result) ->
+            result.exceptionOrNull()?.let { e ->
+                eventChannel.send(Event.Snackbar(R.string.merged_refresh_failed_format, listOf(source.sourceName, e)))
+            }
+        }
+        val added = results.sumOf { (_, result) -> result.getOrDefault(0) }
+        when {
+            added > 0 -> eventChannel.send(Event.Snackbar(R.string.manga_new_chapters, listOf(added)))
+            manual && results.all { (_, result) -> result.isSuccess } ->
+                eventChannel.send(Event.Snackbar(R.string.manga_up_to_date))
+        }
+    }
+
     /** A failure here is logged: the chapters are in, and the refresh did what it was asked. */
     private suspend fun queueNewChapters(manga: Manga, chapters: List<Chapter>) {
         try {
@@ -770,6 +1047,10 @@ class MangaDetailViewModel(
     fun toggleFavorite() {
         val current = state.value as? State.Success ?: return
         val manga = current.manga
+        current.merged?.let { merged ->
+            showDialog(Dialog.RemoveMerged(merged.owners.size))
+            return
+        }
         viewModelScope.launch {
             if (manga.favorite) {
                 val categoryIds = withContext(dispatchers.io) { getCategories.await(manga.id) }
@@ -796,6 +1077,19 @@ class MangaDetailViewModel(
                 return@launch
             }
             add(manga)
+        }
+    }
+
+    /**
+     * [Dialog.RemoveMerged]'s Remove: every member leaves the library. No Undo, as a removal the
+     * library's selection asked about has none; the group's rows stay, so adding the entries back
+     * brings the title back.
+     */
+    fun confirmRemoveMerged() {
+        val owners = (state.value as? State.Success)?.merged?.owners?.keys.orEmpty()
+        dismissDialog()
+        viewModelScope.launch {
+            withContext(dispatchers.io) { owners.forEach { updateManga.awaitUpdateFavorite(it, false) } }
         }
     }
 
@@ -833,6 +1127,60 @@ class MangaDetailViewModel(
         val duplicates = (current.dialog as? Dialog.DuplicateManga)?.duplicates ?: return
         val duplicate = duplicates.firstOrNull { it.manga.id == duplicateId }?.manga ?: return
         showDialog(Dialog.Migrate(current = duplicate, target = current.manga))
+    }
+
+    /**
+     * "Merge" from the duplicate dialog: [duplicateId], the entry picked in the dialog and already
+     * in the library, stays main, and this one joins it after its chapters.
+     */
+    fun mergeWithDuplicate(duplicateId: Long) {
+        val manga = (state.value as? State.Success)?.manga ?: return
+        dismissDialog()
+        viewModelScope.launch {
+            try {
+                withContext(dispatchers.io) {
+                    addMergedEntry.await(manga)
+                    mergeEntries.await(duplicateId, listOf(duplicateId, manga.id))
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Could not merge entry ${manga.id} into entry $duplicateId" }
+                eventChannel.send(Event.Snackbar(R.string.merged_failed))
+                return@launch
+            }
+            eventChannel.send(Event.Snackbar(R.string.merged_done))
+        }
+    }
+
+    /** The source line of a merged title. */
+    fun showMergedSources() = showDialog(Dialog.MergedSources)
+
+    /** A drag dropped: [mangaIds] in the order the sheet now shows, the winning source first. */
+    fun setMergedSourceOrder(mangaIds: List<Long>) {
+        viewModelScope.launch(dispatchers.io) { setMergedOrder.await(mangaIds) }
+    }
+
+    fun useAsMain(mangaId: Long) {
+        viewModelScope.launch(dispatchers.io) { setMergedMain.await(mangaId) }
+    }
+
+    fun setSourceCheckUpdates(mangaId: Long, checkUpdates: Boolean) {
+        viewModelScope.launch(dispatchers.io) { setMergedCheckUpdates.await(mangaId, checkUpdates) }
+    }
+
+    fun removeMergedSource(mangaId: Long) {
+        viewModelScope.launch(dispatchers.io) { removeMergedMember.await(mangaId) }
+    }
+
+    fun setShowEveryCopy(showAll: Boolean) {
+        viewModelScope.launch(dispatchers.io) { setMergedShowAll.await(mangaId, showAll) }
+    }
+
+    /** Closes the sheet first: with the group gone there is nothing left for it to show. */
+    fun unmerge() {
+        dismissDialog()
+        viewModelScope.launch(dispatchers.io) { unmergeEntries.await(mangaId) }
     }
 
     /** The migrate dialog closed on a migration that threw; it has logged the cause. */
@@ -991,7 +1339,7 @@ class MangaDetailViewModel(
             ChapterSwipe.MarkRead -> markRead(chapter, read = true)
             ChapterSwipe.MarkUnread -> markRead(chapter, read = false)
             ChapterSwipe.Bookmark, ChapterSwipe.RemoveBookmark -> toggleChapterBookmark(chapter)
-            ChapterSwipe.StartDownload -> startDownloadNow(current.manga, chapter)
+            ChapterSwipe.StartDownload -> startDownloadNow(current.ownerOf(chapter), chapter)
             ChapterSwipe.CancelDownload -> cancelDownload(chapter)
             ChapterSwipe.DeleteDownload -> deleteDownload(chapter)
         }
@@ -1017,10 +1365,10 @@ class MangaDetailViewModel(
         if (!current.showsDownloadControl) return
         when (action) {
             ChapterDownloadAction.START -> viewModelScope.launch {
-                downloadQueue.enqueue(current.manga, listOf(chapter), autoStart = true)
+                downloadQueue.enqueue(current.ownerOf(chapter), listOf(chapter), autoStart = true)
                 promptToAddAfterDownload()
             }
-            ChapterDownloadAction.START_NOW -> startDownloadNow(current.manga, chapter)
+            ChapterDownloadAction.START_NOW -> startDownloadNow(current.ownerOf(chapter), chapter)
             ChapterDownloadAction.CANCEL -> cancelDownload(chapter)
             ChapterDownloadAction.DELETE -> deleteDownload(chapter)
         }
@@ -1135,7 +1483,7 @@ class MangaDetailViewModel(
         val current = state.value as? State.Success ?: return
         val selected = current.selectedChapters
         if (selected.isEmpty()) return
-        val sort = getChapterSort(current.manga, sortDescending = false)
+        val sort = current.chapterSort(sortDescending = false)
         val latest = selected.maxWithOrNull { a, b -> sort(a, b) } ?: return
         clearSelection()
         viewModelScope.launch { pushMarkedRead(setReadStatus.awaitAllBefore(latest, read = true)) }
@@ -1150,11 +1498,23 @@ class MangaDetailViewModel(
         val current = state.value as? State.Success ?: return
         val selected = current.selectedChapters
         if (selected.isEmpty() || current.isLocal) return
-        val sort = getChapterSort(current.manga, sortDescending = false)
+        val sort = current.chapterSort(sortDescending = false)
         clearSelection()
         viewModelScope.launch {
-            downloadQueue.enqueue(current.manga, selected.sortedWith { a, b -> sort(a, b) }, autoStart = true)
+            enqueue(current, selected.sortedWith { a, b -> sort(a, b) })
             promptToAddAfterDownload()
+        }
+    }
+
+    /** [chapters] queued in their order, under the entry each belongs to; a Local one has no queue. */
+    private suspend fun enqueue(current: State.Success, chapters: List<Chapter>) {
+        if (current.merged == null) {
+            downloadQueue.enqueue(current.manga, chapters, autoStart = true)
+            return
+        }
+        chapters.groupBy { it.mangaId }.forEach { (_, own) ->
+            val owner = current.ownerOf(own.first())
+            if (owner.source != SourceIds.LOCAL) downloadQueue.enqueue(owner, own, autoStart = true)
         }
     }
 
@@ -1173,7 +1533,7 @@ class MangaDetailViewModel(
         val pool = if (readerPreferences.skipFiltered.get()) current.chapters else allChapters
         val notDownloaded = pool.filter { it.id !in current.downloaded && it.id !in current.queued }
         val unread = notDownloaded.filter { !it.read }
-        val unreadSorted = unread.sortedWith(getChapterSort(current.manga))
+        val unreadSorted = unread.sortedWith(current.chapterSort())
             .let { if (current.manga.sortDescending()) it.reversed() else it }
         val chosen = when (action) {
             DownloadAction.NEXT_1_CHAPTER -> unreadSorted.take(1)
@@ -1185,7 +1545,7 @@ class MangaDetailViewModel(
         }
         if (chosen.isEmpty()) return
         viewModelScope.launch {
-            downloadQueue.enqueue(current.manga, chosen.sortedByDescending { it.sourceOrder }, autoStart = true)
+            enqueue(current, chosen.sortedByDescending { it.sourceOrder })
             promptToAddAfterDownload()
         }
     }
@@ -1436,30 +1796,37 @@ class MangaDetailViewModel(
      * The dialog closes before the write, for the reason [markSelectedRead] gives: the write
      * re-emits the chapter list, and a modal still sitting over a list that is changing under it
      * reads as a modal that did nothing.
+     *
+     * A merged title shows the union of its members' groups, so each member takes the whole answer:
+     * a group excluded or ranked is that for the title, whichever source has it.
      */
     fun confirmScanlators(excluded: Set<String>, ranking: RankingChange) {
-        if (state.value !is State.Success) return
+        val current = state.value as? State.Success ?: return
+        val ids = current.merged?.owners?.keys ?: setOf(mangaId)
         dismissDialog()
         viewModelScope.launch {
-            setExcludedScanlators.await(mangaId, excluded)
-            when (ranking) {
-                RankingChange.Keep -> Unit
-                RankingChange.Clear -> setScanlatorPriority.clear(mangaId)
-                is RankingChange.Write -> setScanlatorPriority.await(mangaId, ranking.order)
+            ids.forEach { id ->
+                setExcludedScanlators.await(id, excluded)
+                when (ranking) {
+                    RankingChange.Keep -> Unit
+                    RankingChange.Clear -> setScanlatorPriority.clear(id)
+                    is RankingChange.Write -> setScanlatorPriority.await(id, ranking.order)
+                }
             }
         }
     }
 
+    /** The title's: in a merged title the main entry's, whichever member the screen was opened on. */
     fun setReadingMode(mode: ReadingMode) {
-        if (state.value !is State.Success) return
+        val manga = (state.value as? State.Success)?.manga ?: return
         dismissDialog()
-        viewModelScope.launch { setMangaViewerFlags.awaitSetReadingMode(mangaId, mode) }
+        viewModelScope.launch { setMangaViewerFlags.awaitSetReadingMode(manga.id, mode) }
     }
 
     fun setOrientation(orientation: ReaderOrientation) {
-        if (state.value !is State.Success) return
+        val manga = (state.value as? State.Success)?.manga ?: return
         dismissDialog()
-        viewModelScope.launch { setMangaViewerFlags.awaitSetOrientation(mangaId, orientation) }
+        viewModelScope.launch { setMangaViewerFlags.awaitSetOrientation(manga.id, orientation) }
     }
 
     fun toggleDescription() {

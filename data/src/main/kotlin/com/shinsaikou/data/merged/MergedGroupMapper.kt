@@ -1,6 +1,7 @@
 package com.shinsaikou.data.merged
 
 import com.shinsaikou.domain.merged.model.MergedGroup
+import com.shinsaikou.domain.merged.model.MergedGroupCounts
 import com.shinsaikou.domain.merged.model.MergedMember
 
 /** One row of `getLiveMembers`: a member with a live favourite behind it, and its group. */
@@ -36,6 +37,16 @@ fun mapLiveMember(
         checkUpdates = checkUpdates,
     ),
 )
+
+/** The columns of `getGroupCounts` in declaration order; SQLDelight reads a `sum` as a nullable double. */
+fun mapGroupCounts(groupId: Long, total: Long, read: Double?, bookmarked: Double?, downloaded: Double?) =
+    MergedGroupCounts(
+        groupId = groupId,
+        total = total,
+        read = read?.toLong() ?: 0L,
+        bookmarked = bookmarked?.toLong() ?: 0L,
+        downloaded = downloaded?.toLong() ?: 0L,
+    )
 
 /**
  * The live groups among [rows]: those whose main entry is a live favourite with a member row of its

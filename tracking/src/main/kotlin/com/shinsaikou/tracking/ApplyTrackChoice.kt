@@ -1,6 +1,7 @@
 package com.shinsaikou.tracking
 
 import com.shinsaikou.domain.database.TransactionRunner
+import com.shinsaikou.domain.merged.interactor.ReconcileMergedRead
 import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
@@ -10,8 +11,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import logcat.LogPriority
 import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.lang.withNonCancellableContext
+import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.chapter.model.ChapterUpdate
 import tachiyomi.domain.chapter.repository.ChapterRepository
 import tachiyomi.domain.manga.repository.MangaRepository
@@ -39,7 +42,9 @@ import tachiyomi.domain.track.repository.TrackRepository
  * "Mark as read" marks forward only, among the chapters the owner was shown, through
  * [ChapterRepository.updateAll] with `read` alone: no history, no download deleted (a sync pull never
  * deletes, R99 item 7, and upstream's tracker path deletes nothing), no push (the service holds the
- * number already).
+ * number already). In a merged entry those marks are one copy's, so the row's reconcile
+ * ([ReconcileMergedRead]) follows it, outside the hold; a failed reconcile is logged, since the marks
+ * stand and the entry's next open heals it.
  *
  * Failures follow [CompareFailures]: a row-specific one fails its row and the run goes on; any other
  * stops the run, and the rows not reached are [ApplyResult.NotReached].
@@ -52,6 +57,7 @@ class ApplyTrackChoice(
     private val transactionRunner: TransactionRunner,
     private val store: DelayedTrackingStore,
     private val removeTrack: RemoveTrack,
+    private val reconcileMergedRead: ReconcileMergedRead,
 ) {
 
     /**
@@ -81,6 +87,7 @@ class ApplyTrackChoice(
                 break
             }
             results[index] = result
+            if (result is ApplyResult.Done && result.marked > 0) reconcile(row.entry)
             val failure = (result as? ApplyResult.Failed)?.failure
             if (failure is CompareFailure.Stop) {
                 stop = failure
@@ -88,6 +95,16 @@ class ApplyTrackChoice(
             }
         }
         ApplyRun(results, stop, wasCancelled)
+    }
+
+    private suspend fun reconcile(entry: ComparedEntry) {
+        try {
+            reconcileMergedRead.await(entry.manga.id)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logcat(LogPriority.WARN, e) { "Could not reconcile the merged read marks of entry ${entry.manga.id}" }
+        }
     }
 
     /** The row's result, or null when the caller cancelled while its read was on the wire. */

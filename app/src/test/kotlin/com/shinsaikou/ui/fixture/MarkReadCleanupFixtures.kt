@@ -38,4 +38,5 @@ internal fun deletingSetReadStatus(
     downloadPreferences = DownloadPreferences(InMemoryPreferenceStore()).apply { removeAfterMarkedAsRead.set(true) },
     readChapterCleanup = cleanup,
     getMergedGroup = mockk { coEvery { await(any()) } returns null },
+    getMergedChapters = mockk(),
 )

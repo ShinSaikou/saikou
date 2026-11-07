@@ -18,6 +18,7 @@ import com.shinsaikou.domain.library.interactor.SortLibrary
 import com.shinsaikou.domain.library.model.LibraryFilters
 import com.shinsaikou.domain.library.model.LibraryItem
 import com.shinsaikou.domain.manga.interactor.UpdateManga
+import com.shinsaikou.domain.merged.interactor.MergeEntries
 import com.shinsaikou.domain.preferences.LibraryPreferences
 import com.shinsaikou.downloads.DownloadQueue
 import com.shinsaikou.i18n.R
@@ -26,6 +27,7 @@ import com.shinsaikou.libraryupdate.LibraryUpdateScheduler
 import com.shinsaikou.libraryupdate.LibraryUpdateWorker
 import com.shinsaikou.presentation.core.viewmodel.StateViewModel
 import com.shinsaikou.source.CatalogueSource
+import com.shinsaikou.source.SourceIds
 import com.shinsaikou.source.SourceManager
 import com.shinsaikou.source.StubSource
 import com.shinsaikou.tracking.Tracker
@@ -44,6 +46,7 @@ import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import eu.kanade.tachiyomi.util.chapter.removeDuplicates
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.channels.Channel
@@ -123,6 +126,7 @@ class LibraryViewModel(
     private val trackerManager: TrackerManager,
     private val trackRepository: TrackRepository,
     private val setManualLibraryOrder: SetManualLibraryOrder,
+    private val mergeEntries: MergeEntries,
 ) : StateViewModel<LibraryViewModel.State>(State()) {
 
     /**
@@ -182,7 +186,9 @@ class LibraryViewModel(
         /**
          * Every library entry's category ids, taken from the unfiltered feed. The category picker
          * reads membership from here rather than from the rows because a selection made before a
-         * search survives the search, and the filtered list no longer holds those rows.
+         * search survives the search, and the filtered list no longer holds those rows. A merged
+         * title's other members are keys too, with the title's categories, so a pane left open on
+         * one when the main entry changes still reads as in the library.
          */
         val categoriesByManga: Map<Long, List<Long>> = emptyMap(),
         /**
@@ -200,6 +206,8 @@ class LibraryViewModel(
         val signedInTrackers: List<SignedInTracker> = emptyList(),
         /** The experimental per-entry interval, the only way an entry can match the filter for it. */
         val customUpdateInterval: Boolean = false,
+        /** The experimental merged entries, which is when a selection offers Merge. */
+        val mergedEntries: Boolean = false,
         val dialog: Dialog? = null,
     ) {
         /**
@@ -218,6 +226,9 @@ class LibraryViewModel(
         val selectionMode: Boolean get() = selection.isNotEmpty()
 
         val selectionHasLocal: Boolean get() = selection.any { it in localManga }
+
+        /** Merging takes two entries or more, whatever the selection holds beyond that. */
+        val canMerge: Boolean get() = mergedEntries && selection.size >= 2
 
         /** True when every category came back empty, which a filter or a search can do to a full library. */
         val isEmpty: Boolean get() = itemsByCategory.values.all { it.isEmpty() }
@@ -246,6 +257,9 @@ class LibraryViewModel(
     /** A signed-in tracker as the filter tab names it. */
     data class SignedInTracker(val id: Long, val name: String)
 
+    /** A row of the merge dialog. */
+    data class MergeChoice(val mangaId: Long, val title: String, val sourceName: String)
+
     sealed interface Dialog {
         /** Filter, sort and display, in one sheet. */
         data object SettingsSheet : Dialog
@@ -253,7 +267,11 @@ class LibraryViewModel(
         /** Rows are built once, when the picker opens, so a tick underneath cannot re-tick a box. */
         data class ChangeCategory(val rows: List<CategoryCheck>) : Dialog
 
-        data class RemoveSelected(val count: Int) : Dialog
+        /** [mergedTitles] of the [count] are merged, so every source of those goes too. */
+        data class RemoveSelected(val count: Int, val mergedTitles: Int = 0) : Dialog
+
+        /** The selected entries to merge in selection order, which is the chapter order. */
+        data class MergeSelected(val entries: List<MergeChoice>) : Dialog
 
         /**
          * Grouped by source once, when the sheet opens; the rows open the entry that failed.
@@ -286,6 +304,9 @@ class LibraryViewModel(
      */
     private var libraryManga: Map<Long, Manga> = emptyMap()
 
+    /** Each merged title's entries by the main entry's id, which is the id a row and a selection hold. */
+    private var mergedMembers: Map<Long, List<Manga>> = emptyMap()
+
     private val eventChannel = Channel<Event>(Channel.BUFFERED)
     val events: Flow<Event> = eventChannel.receiveAsFlow()
 
@@ -314,6 +335,7 @@ class LibraryViewModel(
                 .flowOn(dispatchers.default)
                 .collect { projection ->
                     libraryManga = projection.mangaById
+                    mergedMembers = projection.mergedMembers
                     // update, never a whole-state assignment. The projection is computed on the
                     // default dispatcher while the selection and the isRunning collector write from
                     // Main, so overwriting every field here would drop a selection made while it was
@@ -343,6 +365,7 @@ class LibraryViewModel(
                             showItemCount = projection.showItemCount,
                             signedInTrackers = projection.signedInTrackers,
                             customUpdateInterval = projection.customUpdateInterval,
+                            mergedEntries = projection.mergedEntries,
                         )
                     }
                     logcat(LogPriority.DEBUG) { "$PROJECTION_LOG state set at ${SystemClock.elapsedRealtime()}" }
@@ -414,7 +437,7 @@ class LibraryViewModel(
         val ids = state.value.selection.toList()
         if (ids.isEmpty()) return
         clearSelection()
-        startUpdateOf(ids)
+        startUpdateOf(withMembers(ids))
     }
 
     /**
@@ -638,10 +661,10 @@ class LibraryViewModel(
      *
      * [SetReadStatus] takes a whole manga id and loads that entry's chapters itself, so the loop is
      * one suspending call per entry on [Dispatchers.io] rather than a chapter query per row raised
-     * on the main thread.
+     * on the main thread. A merged title is every one of its members.
      */
     fun markSelectedRead(read: Boolean) {
-        val ids = state.value.selection.toList()
+        val ids = withMembers(state.value.selection.toList())
         if (ids.isEmpty()) return
         viewModelScope.launch {
             withContext(dispatchers.io) {
@@ -652,14 +675,18 @@ class LibraryViewModel(
     }
 
     fun askRemoveSelected() {
-        val count = state.value.selection.size
-        if (count == 0) return
-        mutableState.update { it.copy(dialog = Dialog.RemoveSelected(count)) }
+        val selection = state.value.selection
+        if (selection.isEmpty()) return
+        val merged = selection.count { it in mergedMembers }
+        mutableState.update { it.copy(dialog = Dialog.RemoveSelected(selection.size, merged)) }
     }
 
-    /** Clears the favourite flag; the rows and their read progress stay in the database. */
+    /**
+     * Clears the favourite flag, of every member of a merged title; the rows and their read progress
+     * stay in the database.
+     */
     fun removeSelectedFromLibrary() {
-        val ids = state.value.selection.toList()
+        val ids = withMembers(state.value.selection.toList())
         if (ids.isEmpty()) {
             dismissDialog()
             return
@@ -667,6 +694,39 @@ class LibraryViewModel(
         viewModelScope.launch {
             withContext(dispatchers.io) {
                 ids.forEach { mangaId -> updateManga.awaitUpdateFavorite(mangaId, false) }
+            }
+            mutableState.update { it.copy(selection = emptySet(), dialog = null) }
+        }
+    }
+
+    /** The merge dialog over the selection, in the order it was selected. */
+    fun askMergeSelected() {
+        val current = state.value
+        if (!current.canMerge) return
+        // An entry can leave the library while it is selected, and one entry is nothing to merge.
+        val selected = current.selection.mapNotNull { libraryManga[it] }
+        if (selected.size < 2) return
+        viewModelScope.launch {
+            val entries = withContext(dispatchers.io) {
+                selected.map { MergeChoice(it.id, it.displayTitle, sourceManager.getOrStub(it.source).name) }
+            }
+            mutableState.update { it.copy(dialog = Dialog.MergeSelected(entries)) }
+        }
+    }
+
+    /** The merge dialog's confirm. [MergeEntries] brings a selected merged title whole. */
+    fun mergeSelected(mainId: Long) {
+        val ids = (state.value.dialog as? Dialog.MergeSelected)?.entries?.map { it.mangaId } ?: return
+        viewModelScope.launch {
+            try {
+                withContext(dispatchers.io) { mergeEntries.await(mainId, ids) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Could not merge the selected entries into entry $mainId" }
+                mutableState.update { it.copy(dialog = null) }
+                eventChannel.send(Event.Snackbar(R.string.merged_failed))
+                return@launch
             }
             mutableState.update { it.copy(selection = emptySet(), dialog = null) }
         }
@@ -703,6 +763,9 @@ class LibraryViewModel(
      * is left exactly as it was found. Writing the checked ids as the entry's whole category list
      * instead, which is the obvious shape, would strip every partially applied category from every
      * entry in the selection without the owner ever seeing that category resolved.
+     *
+     * A merged title's answer is written to every member, so each holds the categories the title
+     * shows and a later unmerge or a removed source lands where the owner put the title.
      */
     fun moveSelectedToCategories(rows: List<CategoryCheck>) {
         val ids = state.value.selection.toList()
@@ -720,7 +783,8 @@ class LibraryViewModel(
                     // is a reading of an empty list rather than a row worth writing back.
                     val current = membership[mangaId].orEmpty()
                         .filterNot { it == Category.UNCATEGORIZED_ID }
-                    setMangaCategories.await(mangaId, (current - remove + add).distinct())
+                    val categories = (current - remove + add).distinct()
+                    withMembers(listOf(mangaId)).forEach { setMangaCategories.await(it, categories) }
                 }
             }
             mutableState.update { it.copy(selection = emptySet(), dialog = null) }
@@ -732,10 +796,12 @@ class LibraryViewModel(
      * for each selected entry, the next N unread chapters in reading order ([GetNextChapters]), or
      * every one for Unread, or its bookmarked chapters for Bookmarked, less those already downloaded
      * or in the queue. They are queued oldest source position first, the order upstream's `Downloader`
-     * gives them, and the queue is started. The selection clears at once, as upstream's does.
+     * gives them, and the queue is started. The selection clears at once, as upstream's does. A
+     * merged title reads its merged list and queues each chapter under the entry it belongs to.
      */
     fun downloadSelected(action: DownloadAction) {
         val mangas = state.value.selection.mapNotNull { libraryManga[it] }
+        val members = mergedMembers
         clearSelection()
         if (mangas.isEmpty()) return
         val amount = when (action) {
@@ -749,16 +815,20 @@ class LibraryViewModel(
             withContext(dispatchers.io) {
                 val queued = downloadQueue.subscribe().first().mapTo(mutableSetOf()) { it.chapterId }
                 mangas.forEach { manga ->
-                    val downloaded = downloadedChapters.subscribeByMangaId(manga.id).first()
+                    val entries = members[manga.id] ?: listOf(manga)
+                    val downloaded = entries.flatMapTo(HashSet()) { downloadedChapters.subscribeByMangaId(it.id).first() }
                     val chapters = if (action == DownloadAction.BOOKMARKED_CHAPTERS) {
-                        getBookmarkedChaptersByMangaId.await(manga.id)
+                        entries.flatMap { getBookmarkedChaptersByMangaId.await(it.id) }
                     } else {
                         getNextChapters.await(manga.id)
                     }
                         .filterNot { it.id in queued || it.id in downloaded }
                         .let { if (amount != null) it.take(amount) else it }
-                    if (chapters.isNotEmpty()) {
-                        downloadQueue.enqueue(manga, chapters.sortedByDescending { it.sourceOrder }, autoStart = true)
+                    chapters.groupBy { it.mangaId }.forEach { (ownerId, own) ->
+                        val owner = entries.firstOrNull { it.id == ownerId } ?: manga
+                        if (owner.source != SourceIds.LOCAL) {
+                            downloadQueue.enqueue(owner, own.sortedByDescending { it.sourceOrder }, autoStart = true)
+                        }
                     }
                 }
             }
@@ -768,6 +838,10 @@ class LibraryViewModel(
     fun dismissDialog() {
         mutableState.update { it.copy(dialog = null) }
     }
+
+    /** [ids] with each merged title replaced by its members, for the writes that act on every source. */
+    private fun withMembers(ids: List<Long>): List<Long> =
+        ids.flatMap { id -> mergedMembers[id]?.map(Manga::id) ?: listOf(id) }
 
     /** The fields the projection owns. Everything else in [State] belongs to the main thread. */
     private data class Projection(
@@ -780,6 +854,7 @@ class LibraryViewModel(
         val categoriesByManga: Map<Long, List<Long>>,
         val localManga: Set<Long>,
         val mangaById: Map<Long, Manga>,
+        val mergedMembers: Map<Long, List<Manga>>,
         val filters: LibraryFilters,
         val downloadedOnly: Boolean,
         val globalSort: LibrarySort,
@@ -791,6 +866,7 @@ class LibraryViewModel(
         val showItemCount: Boolean,
         val signedInTrackers: List<SignedInTracker>,
         val customUpdateInterval: Boolean,
+        val mergedEntries: Boolean,
     )
 
     /**
@@ -936,9 +1012,13 @@ class LibraryViewModel(
             total = items.size,
             shown = filtered.size,
             query = query,
-            categoriesByManga = items.associate { it.id to it.libraryManga.categories },
+            categoriesByManga = items.flatMap { item ->
+                val categories = item.libraryManga.categories
+                item.members.map { it.id to categories } + (item.id to categories)
+            }.toMap(),
             localManga = items.filter { it.isLocal }.mapTo(mutableSetOf()) { it.id },
             mangaById = items.associate { it.id to it.manga },
+            mergedMembers = items.filter { it.members.isNotEmpty() }.associate { it.id to it.members },
             filters = filters,
             downloadedOnly = downloadedOnly,
             globalSort = globalSort,
@@ -950,6 +1030,7 @@ class LibraryViewModel(
             showItemCount = libraryPreferences.categoryNumberOfItems.get(),
             signedInTrackers = tracking.trackers.map { SignedInTracker(it.id, it.name) },
             customUpdateInterval = libraryPreferences.customUpdateInterval.get(),
+            mergedEntries = libraryPreferences.mergedEntries.get(),
         )
         logProjection(items.size, (System.nanoTime() - startedAt) / NANOS_PER_MILLI, filterNanos / NANOS_PER_MILLI)
         return projection
@@ -1022,6 +1103,7 @@ class LibraryViewModel(
         libraryPreferences.filterCompleted.changes(),
         libraryPreferences.filterIntervalCustom.changes(),
         libraryPreferences.customUpdateInterval.changes(),
+        libraryPreferences.mergedEntries.changes(),
         libraryPreferences.sortingMode.changes(),
         libraryPreferences.randomSortSeed.changes(),
         libraryPreferences.manualSortEnabled.changes(),

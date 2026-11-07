@@ -394,6 +394,12 @@ private fun AppScaffold(
                         migratingMangaId = backStackEntry.toRoute<Route.MigrateSearch>().mangaId,
                     )
                 }
+                composable<Route.MergeSearch> { backStackEntry ->
+                    GlobalSearchScreen(
+                        initialQuery = null,
+                        mergingMangaId = backStackEntry.toRoute<Route.MergeSearch>().mangaId,
+                    )
+                }
             }
         }
     }

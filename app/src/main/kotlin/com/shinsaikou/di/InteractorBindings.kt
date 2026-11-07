@@ -1,6 +1,8 @@
 package com.shinsaikou.di
 
 import com.shinsaikou.domain.extension.repository.ExtensionStoreRepository
+import com.shinsaikou.domain.merged.interactor.GetMergedChapters
+import com.shinsaikou.domain.merged.interactor.GetMergedGroup
 import com.shinsaikou.domain.preferences.DownloadPreferences
 import com.shinsaikou.domain.preferences.LibraryPreferences
 import com.shinsaikou.domain.preferences.SourcePreferences
@@ -165,7 +167,9 @@ object InteractorBindings {
         getChaptersByMangaId: GetChaptersByMangaId,
         getManga: GetManga,
         historyRepository: HistoryRepository,
-    ): GetNextChapters = GetNextChapters(getChaptersByMangaId, getManga, historyRepository)
+        getMergedGroup: GetMergedGroup,
+        getMergedChapters: GetMergedChapters,
+    ): GetNextChapters = GetNextChapters(getChaptersByMangaId, getManga, historyRepository, getMergedGroup, getMergedChapters)
 
     @Provides
     fun provideGetTotalReadDuration(

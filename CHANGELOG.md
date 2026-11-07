@@ -7,6 +7,17 @@ release may change behaviour.
 
 ## Unreleased
 
+### Added
+
+- **Merged entries** in Settings > Experimental, off by default, shows one title from several sources
+  as one library entry with one chapter list, so a chapter one source lacks comes from another. Merge
+  from an entry's menu with **Merge with...**, from a selection in the Library, or from the duplicate
+  question when adding a title. Tap the entry's source line to drag the sources into the order you
+  prefer, pick the main entry, stop checking one source for updates, remove a source, show every copy
+  of a chapter, or unmerge. Each source stays a whole entry, so unmerging puts them back. Merges sync
+  between your devices, and every device needs this version to keep syncing. Backups keep every entry
+  and chapter but not the merge. Turning the switch off shows the entries separately again.
+
 ## 0.1.2 - 2026-11-07
 
 ### Added

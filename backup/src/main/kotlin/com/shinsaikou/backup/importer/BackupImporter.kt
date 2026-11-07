@@ -6,6 +6,7 @@ import com.shinsaikou.domain.extension.ExtensionStoreDuplicates
 import com.shinsaikou.domain.extension.SourceExtensionInstaller
 import com.shinsaikou.domain.extension.repository.ExtensionStoreRepository
 import com.shinsaikou.domain.manga.interactor.UpdateManga
+import com.shinsaikou.domain.merged.interactor.ReconcileMergedRead
 import com.shinsaikou.domain.preferences.LibraryPreferences
 import com.shinsaikou.domain.preferences.SyncRestorePreferences
 import com.shinsaikou.domain.source.repository.SourceAliasRepository
@@ -83,6 +84,7 @@ class BackupImporter(
     private val backupScheduler: BackupScheduler,
     private val syncRestorePreferences: SyncRestorePreferences,
     private val sourceExtensionInstaller: SourceExtensionInstaller,
+    private val reconcileMergedRead: ReconcileMergedRead,
     private val json: Json,
 ) {
 
@@ -168,6 +170,7 @@ class BackupImporter(
                 decoder.entries(file.source(), skip = run.startCursor, passOverUndecodable = true).use { entries ->
                     restoreMangaList(entries, run.mangaTotal, options, run, progress)
                 }
+                reconcileMerged()
             }
 
             // 8. Last, so the library is back before the extensions download. Safe to repeat: what a
@@ -202,6 +205,21 @@ class BackupImporter(
         }
 
         finish(run)
+    }
+
+    /**
+     * A file carries no merges (R163 item 4), but it writes `read` on the members of groups already
+     * on the device, one copy at a time. A failure is logged: the library is restored, and an entry's
+     * next open heals it.
+     */
+    private suspend fun reconcileMerged() {
+        try {
+            reconcileMergedRead.awaitAll()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logcat(LogPriority.WARN, e) { "Could not reconcile the merged read marks after a restore" }
+        }
     }
 
     private suspend fun rememberStubSources(backup: Backup, run: Run) {

@@ -6,6 +6,9 @@ import com.shinsaikou.domain.chapter.interactor.SyncChaptersWithSource
 import com.shinsaikou.domain.download.AutoDownload
 import com.shinsaikou.domain.error.ErrorKey
 import com.shinsaikou.domain.manga.interactor.UpdateManga
+import com.shinsaikou.domain.merged.interactor.ReconcileMergedRead
+import com.shinsaikou.domain.merged.model.MergedGroup
+import com.shinsaikou.domain.merged.model.MergedMember
 import com.shinsaikou.domain.preferences.LibraryPreferences
 import com.shinsaikou.domain.preferences.LibraryUpdateRestrictions
 import com.shinsaikou.source.Source
@@ -87,6 +90,8 @@ class FlatLibraryUpdateTest {
     private val storedChapters = mutableMapOf<Long, List<Chapter>>()
     private val registryReady = MutableStateFlow(true)
     private val autoDownload = RecordingAutoDownload()
+    private val reconcile = mockk<ReconcileMergedRead>(relaxed = true)
+    private var mergedGroups: List<MergedGroup> = emptyList()
 
     @BeforeEach
     fun setUp() {
@@ -126,6 +131,8 @@ class FlatLibraryUpdateTest {
         updateManga = updateManga,
         fetchInterval = fetchInterval,
         libraryPreferences = preferences,
+        getMergedGroups = mockk { coEvery { await() } answers { mergedGroups } },
+        reconcileMergedRead = reconcile,
         autoDownload = autoDownload,
         dispatchers = Dispatchers(io = io, default = io, main = io),
         timeSource = testScheduler.timeSource,
@@ -260,6 +267,96 @@ class FlatLibraryUpdateTest {
 
         source(1L).calls shouldBe 0
         source(2L).calls shouldBe 1
+    }
+
+    // endregion
+
+    // region merged entries (R163)
+
+    private fun groupOf(vararg members: Pair<Long, Boolean>) = MergedGroup(
+        id = 1,
+        mainMangaId = members.first().first,
+        showAll = false,
+        members = members.mapIndexed { index, (id, check) ->
+            MergedMember(id, source = id, url = "/manga/$id", position = index.toLong(), checkUpdates = check)
+        },
+    )
+
+    @Test
+    fun `a member with check for updates off is left out of the run, as if it were not in the library`() = runTest {
+        seed(item(1L), item(2L), item(3L))
+        mergedGroups = listOf(groupOf(1L to true, 2L to false))
+
+        val outcome = run(automatic = true)
+
+        source(1L).calls shouldBe 1
+        source(2L).calls shouldBe 0
+        source(3L).calls shouldBe 1
+        outcome.checked shouldBe setOf(1L, 3L)
+    }
+
+    @Test
+    fun `a member with check for updates off stays out of a run over chosen entries`() = runTest {
+        seed(item(1L), item(2L))
+        mergedGroups = listOf(groupOf(1L to true, 2L to false))
+
+        val outcome = pass().run(categoryId = null, automatic = false, refreshMetadata = false, mangaIds = setOf(1L, 2L)) {}
+
+        source(2L).calls shouldBe 0
+        outcome.checked shouldBe setOf(1L)
+    }
+
+    @Test
+    fun `a member with check for updates on is updated like any entry`() = runTest {
+        seed(item(1L), item(2L))
+        mergedGroups = listOf(groupOf(1L to true, 2L to true))
+
+        run(automatic = true)
+
+        source(1L).calls shouldBe 1
+        source(2L).calls shouldBe 1
+    }
+
+    @Test
+    fun `with no group every entry is updated`() = runTest {
+        seed(item(1L), item(2L))
+
+        run(automatic = true)
+
+        source(1L).calls shouldBe 1
+        source(2L).calls shouldBe 1
+    }
+
+    @Test
+    fun `a member whose refresh inserted chapters has its group reconciled`() = runTest {
+        seed(item(1L), item(2L))
+        coEvery { syncChapters.await(any(), match { it.id == 2L }, any(), any()) } returns listOf(chapter(21L, 2L))
+
+        run(automatic = true)
+
+        coVerify(exactly = 1) { reconcile.await(2L) }
+        coVerify(exactly = 0) { reconcile.await(1L) }
+    }
+
+    @Test
+    fun `an entry with no new chapters reconciles nothing`() = runTest {
+        seed(item(1L))
+
+        run(automatic = true)
+
+        coVerify(exactly = 0) { reconcile.await(any<Long>()) }
+    }
+
+    @Test
+    fun `a failing reconcile does not fail the entry, and its new chapters still go to auto download`() = runTest {
+        seed(item(1L))
+        coEvery { syncChapters.await(any(), any(), any(), any()) } returns listOf(chapter(11L, 1L))
+        coEvery { reconcile.await(1L) } throws IllegalStateException("db busy")
+
+        val outcome = run(automatic = true)
+
+        outcome.failures.shouldBeEmpty()
+        autoDownload.reported shouldHaveSize 1
     }
 
     // endregion

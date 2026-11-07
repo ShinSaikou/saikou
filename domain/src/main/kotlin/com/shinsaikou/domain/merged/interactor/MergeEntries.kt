@@ -16,6 +16,7 @@ class MergeEntries(
     private val repository: MergedGroupRepository,
     private val getMergedGroup: GetMergedGroup,
     private val reconcileMergedRead: ReconcileMergedRead,
+    private val carryMergedTracks: CarryMergedTracks,
     private val libraryPreferences: LibraryPreferences,
     private val transactionRunner: TransactionRunner,
 ) {
@@ -34,6 +35,7 @@ class MergeEntries(
                 .filter { it.mainMangaId != mainId }
                 .distinctBy { it.id }
                 .forEach { repository.unmerge(it.id) }
+            carryMergedTracks.ontoMain(mainId, members)
         }
         reconcileMergedRead.await(mainId)
     }

@@ -1867,6 +1867,11 @@ private fun ExperimentalSection(viewModel: SettingsViewModel) {
         detailRes = R.string.settings_experimental_custom_interval_summary,
         onToggled = viewModel::onCustomUpdateIntervalToggled,
     )
+    CheckboxRow(
+        labelRes = R.string.settings_experimental_merged_entries,
+        pref = viewModel.libraryPreferences.mergedEntries,
+        detailRes = R.string.settings_experimental_merged_entries_summary,
+    )
 }
 
 /**

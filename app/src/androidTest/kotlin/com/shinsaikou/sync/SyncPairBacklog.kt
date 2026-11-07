@@ -8,6 +8,8 @@ import com.shinsaikou.di.AppGraph
 import com.shinsaikou.domain.chapter.ChapterReplacements
 import com.shinsaikou.domain.chapter.interactor.GetExcludedScanlators
 import com.shinsaikou.domain.chapter.interactor.SyncChaptersWithSource
+import com.shinsaikou.domain.merged.interactor.GetMergedGroups
+import com.shinsaikou.domain.merged.interactor.ReconcileMergedRead
 import com.shinsaikou.libraryupdate.FlatLibraryUpdate
 import com.shinsaikou.source.Source
 import com.shinsaikou.source.SourceManager
@@ -139,6 +141,8 @@ object SyncPairBacklog {
             fetchInterval = FetchInterval(getChaptersByMangaId),
             libraryPreferences = graph.libraryPreferences,
             autoDownload = graph.autoDownload,
+            getMergedGroups = GetMergedGroups(graph.mergedGroupRepository, graph.libraryPreferences),
+            reconcileMergedRead = ReconcileMergedRead(graph.mergedGroupRepository, graph.libraryPreferences),
             dispatchers = graph.dispatchers,
             timeSource = TimeSource.Monotonic,
         ).run(categoryId = null, automatic = false) {}

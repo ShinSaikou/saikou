@@ -4,6 +4,7 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -341,11 +342,12 @@ data class DuplicateEntry(
 /**
  * Shown when the entry being added is already in the library under another source. Adding both is
  * legitimate (one source may carry chapters the other does not), so this is a question and not a
- * refusal; the other ways out are to open the copy that is already there, or to migrate it onto
- * this one (phase 4 unit MA, the tap on upstream's duplicate card).
+ * refusal; the other ways out are to open the copy that is already there, to migrate it onto
+ * this one (phase 4 unit MA, the tap on upstream's duplicate card), or, with [onMerge] while Merged
+ * entries is on, to merge this one into it, the entry already in the library staying main.
  *
  * Every match is listed, as upstream lists them, each with its source and chapter count. With more
- * than one, View chapters and Migrate act on the one picked in the list, the first until another is
+ * than one, View chapters, Migrate and Merge act on the one picked in the list, the first until another is
  * picked; upstream's cards act on a tap each, which a dialog of text rows would make easy to hit by
  * accident.
  */
@@ -356,6 +358,7 @@ fun DuplicateMangaDialog(
     onAddAnyway: () -> Unit,
     onOpenExisting: (mangaId: Long) -> Unit,
     onMigrate: (mangaId: Long) -> Unit,
+    onMerge: ((mangaId: Long) -> Unit)? = null,
 ) {
     val first = duplicates.firstOrNull() ?: return
     var picked by rememberSaveable(duplicates) { mutableLongStateOf(first.manga.id) }
@@ -367,7 +370,8 @@ fun DuplicateMangaDialog(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     if (several) {
-                        stringResource(R.string.manga_duplicates_message)
+                        val message = R.string.manga_duplicates_message
+                        stringResource(if (onMerge != null) R.string.manga_duplicates_message_merge else message)
                     } else {
                         stringResource(R.string.manga_duplicate_message_format, first.manga.displayTitle)
                     },
@@ -388,7 +392,7 @@ fun DuplicateMangaDialog(
             TextButton(onClick = onAddAnyway) { Text(stringResource(R.string.action_add_anyway)) }
         },
         dismissButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 TextButton(onClick = onDismissRequest) {
                     Text(stringResource(R.string.action_cancel))
                 }
@@ -397,6 +401,11 @@ fun DuplicateMangaDialog(
                 }
                 TextButton(onClick = { onMigrate(picked) }) {
                     Text(stringResource(R.string.migrate))
+                }
+                if (onMerge != null) {
+                    TextButton(onClick = { onMerge(picked) }) {
+                        Text(stringResource(R.string.action_merge))
+                    }
                 }
             }
         },

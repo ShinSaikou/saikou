@@ -178,6 +178,10 @@ sealed interface Route {
     @Serializable
     data class MigrateSearch(val mangaId: Long) : Route
 
+    /** Global Search with the entry's title filled in, to pick what to merge with it (R163). */
+    @Serializable
+    data class MergeSearch(val mangaId: Long) : Route
+
     /** Opens the dedicated reader activity and is deliberately absent from the NavHost. */
     @Serializable
     data class Reader(val mangaId: Long, val chapterId: Long, val page: Int? = null) : Route

@@ -30,6 +30,7 @@ import io.kotest.assertions.assertSoftly
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
+import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -94,7 +95,7 @@ class FirstListBacklogTest {
             downloadPreferences,
             GetCategories(CategoryRepositoryImpl(device.handler)),
         ),
-        getNextChapters = GetNextChapters(getChaptersByMangaId, getManga, mockk()),
+        getNextChapters = GetNextChapters(getChaptersByMangaId, getManga, mockk(), mockk { coEvery { await(any()) } returns null }, mockk()),
         getScanlatorPriority = GetScanlatorPriority(ScanlatorPriorityRepositoryImpl(device.handler)),
         getManga = getManga,
         chapterRepository = chapters,
@@ -103,6 +104,8 @@ class FirstListBacklogTest {
         queue = queue,
         downloadPreferences = downloadPreferences,
         readerPreferences = ReaderPreferences(InMemoryPreferenceStore()),
+        getMergedGroup = mockk { coEvery { await(any()) } returns null },
+        getMergedChapters = mockk(),
     )
 
     private val syncChaptersWithSource = SyncChaptersWithSource(
@@ -129,6 +132,8 @@ class FirstListBacklogTest {
             updateManga = updateManga,
             fetchInterval = fetchInterval,
             libraryPreferences = libraryPreferences,
+            getMergedGroups = mockk { coEvery { await() } returns emptyList() },
+            reconcileMergedRead = mockk(relaxed = true),
             autoDownload = autoDownload,
             dispatchers = Dispatchers(io = io, default = io, main = io),
             timeSource = TimeSource.Monotonic,

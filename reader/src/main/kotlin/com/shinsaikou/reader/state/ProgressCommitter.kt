@@ -5,6 +5,7 @@ import com.shinsaikou.domain.chapter.ChapterReplacements
 import com.shinsaikou.domain.chapter.interactor.SetReadStatus
 import com.shinsaikou.domain.download.AutoDownload
 import com.shinsaikou.domain.download.ReadChapterCleanup
+import com.shinsaikou.domain.merged.interactor.ReconcileMergedRead
 import com.shinsaikou.domain.preferences.LibraryPreferences
 import com.shinsaikou.domain.preferences.TrackPreferences
 import com.shinsaikou.domain.track.TrackProgress
@@ -61,6 +62,7 @@ class ProgressCommitter @AssistedInject constructor(
     private val trackProgress: TrackProgress,
     private val autoDownload: AutoDownload,
     private val readChapterCleanup: ReadChapterCleanup,
+    private val reconcileMergedRead: ReconcileMergedRead,
     chapterReplacements: ChapterReplacements,
     private val dispatchers: Dispatchers,
     private val clock: () -> Long = System::currentTimeMillis,
@@ -232,6 +234,7 @@ class ProgressCommitter @AssistedInject constructor(
             recordTrackProgress(chapter)
             stageReadChapter(chapter, next.readBack)
             markDuplicatesRead(chapter)
+            reconcileMerged(chapter)
         } else {
             writeProgress(chapter) { id -> ChapterUpdate(id = id, lastPageRead = next.pageIndex.toLong()) }
         }
@@ -305,6 +308,21 @@ class ProgressCommitter @AssistedInject constructor(
             .filter { it.id != finished.id && !it.read && it.isRecognizedNumber && it.chapterNumber == finished.chapterNumber }
         if (duplicates.isEmpty()) return
         setReadStatus.await(read = true, chapters = duplicates.toTypedArray(), removeDownloads = false)
+    }
+
+    /**
+     * The write above bypasses [SetReadStatus], so the other copies of a merged entry's number are
+     * raised here. A failure is logged: the chapter is read, and the entry's next open heals it.
+     */
+    private suspend fun reconcileMerged(chapter: ReaderChapter) {
+        val finished = chapter.chapter
+        try {
+            reconcileMergedRead.await(finished.mangaId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logcat(LogPriority.WARN, e) { "Could not reconcile the merged read marks after ${finished.id}" }
+        }
     }
 
     private data class Pending(

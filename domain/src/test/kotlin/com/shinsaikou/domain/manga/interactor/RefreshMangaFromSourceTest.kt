@@ -56,6 +56,7 @@ class RefreshMangaFromSourceTest {
         syncChaptersWithSource = syncChaptersWithSource,
         fetchInterval = fetchInterval,
         libraryPreferences = LibraryPreferences(InMemoryPreferenceStore()),
+        reconcileMergedRead = mockk(relaxed = true),
         dispatchers = AppDispatchers(io = Dispatchers.Unconfined, default = Dispatchers.Unconfined, main = Dispatchers.Unconfined),
     )
 

@@ -175,6 +175,7 @@ fun LibraryScreen(searchRequest: String? = null, onSearchRequestConsumed: () -> 
                     onMarkUnread = { viewModel.markSelectedRead(false) },
                     onMoveToCategory = viewModel::askMoveToCategories,
                     onRemove = viewModel::askRemoveSelected,
+                    onMerge = viewModel::askMergeSelected.takeIf { state.canMerge },
                     onDownload = viewModel::downloadSelected.takeUnless { state.selectionHasLocal },
                     // Upstream's library Migrate: the selection in its order, cleared, then the config
                     // screen (phase 4 unit MB).
@@ -309,6 +310,7 @@ fun LibraryScreen(searchRequest: String? = null, onSearchRequestConsumed: () -> 
         onDismissRequest = viewModel::dismissDialog,
         onConfirmCategories = viewModel::moveSelectedToCategories,
         onConfirmRemove = viewModel::removeSelectedFromLibrary,
+        onConfirmMerge = viewModel::mergeSelected,
         onFilter = viewModel::setFilter,
         onTrackerFilter = viewModel::setTrackerFilter,
         onSort = viewModel::setSort,

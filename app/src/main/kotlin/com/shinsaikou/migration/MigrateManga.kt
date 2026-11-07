@@ -4,6 +4,8 @@ import com.shinsaikou.core.common.coroutines.Dispatchers
 import com.shinsaikou.domain.database.TransactionRunner
 import com.shinsaikou.domain.manga.interactor.RefreshMangaFromSource
 import com.shinsaikou.domain.manga.interactor.SetMangaDetailsOverride
+import com.shinsaikou.domain.merged.interactor.ReconcileMergedRead
+import com.shinsaikou.domain.merged.repository.MergedGroupRepository
 import com.shinsaikou.domain.preferences.SourcePreferences
 import com.shinsaikou.downloads.DownloadManifest
 import com.shinsaikou.downloads.DownloadQueue
@@ -60,7 +62,8 @@ import kotlin.time.Clock
  *    library logs every chapter it holds in one pass, with the copied read and bookmark flags and
  *    fetch dates (the library-add trigger the chapters with progress, `MangaRepository.updateAll`
  *    the rest; phase 4 unit NB). On [replace]
- *    the target also takes the old entry's `manualPosition`. A failure anywhere rolls every write
+ *    the target also takes the old entry's `manualPosition` and its place in a merged group (R163),
+ *    so migrating a merged title's main entry keeps the title. A failure anywhere rolls every write
  *    back. On a target already in the library, a copied fetch date reaches the sync log only on a
  *    chapter logged for another reason: no trigger tracks `date_fetch` alone, so another device
  *    keeps its own fetch date for the rest.
@@ -71,7 +74,8 @@ import kotlin.time.Clock
  *    downloads deleted, upstream's order, whether or not its source is installed (upstream asks for the
  *    source; [DownloadManifest.deleteManga] finds the folders without it); then, on a Migrate that
  *    did not carry the downloads and did not delete them, the old entry's downloaded chapters read
- *    for [Result.leftBehindDownloads]. Last, a tracker push queued
+ *    for [Result.leftBehindDownloads]. Next, the merged group's read marks are reconciled, since
+ *    the copy raised them without the mark-read path. Last, a tracker push queued
  *    for the old entry against the remote id a track was copied with is queued for the target too,
  *    and the retry worker is scheduled (R98 item 5); the old entry's own push stays queued, and the
  *    worker sends it to the same remote entry. A failure of any of these steps is logged and the
@@ -111,6 +115,8 @@ class MigrateManga(
     private val migrationDownloads: MigrationDownloads,
     private val delayedTrackingStore: DelayedTrackingStore,
     private val delayedTrackingScheduler: DelayedTrackingScheduler,
+    private val mergedGroupRepository: MergedGroupRepository,
+    private val reconcileMergedRead: ReconcileMergedRead,
     private val dispatchers: Dispatchers,
 ) {
 
@@ -157,6 +163,9 @@ class MigrateManga(
                 carried -> notMoved
                 // Read after a Delete downloaded that failed, so only what it left is counted.
                 else -> keptDownloads(written.current.id)
+            }
+            fileStep("reconcile the merged read marks of entry ${written.target.id}") {
+                reconcileMergedRead.await(written.target.id)
             }
             queueTrackerPushes(written.current.id, written.target.id, written.tracks)
             Result(leftBehindDownloads = leftBehind, carried = carried)
@@ -215,6 +224,8 @@ class MigrateManga(
         check(setMangaDetailsOverride.awaitCarry(from = current, to = target)) {
             "Could not write the edited details of entry ${target.id}"
         }
+
+        if (replace) mergedGroupRepository.replaceMember(current.id, target.id)
 
         val currentUpdate = MangaUpdate(
             id = current.id,

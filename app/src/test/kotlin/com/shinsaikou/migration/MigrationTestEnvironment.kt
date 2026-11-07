@@ -7,6 +7,7 @@ import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import com.shinsaikou.data.AndroidDatabaseHandler
 import com.shinsaikou.data.DatabaseTransactionRunner
 import com.shinsaikou.data.download.DownloadManifestRepositoryImpl
+import com.shinsaikou.data.merged.MergedGroupRepositoryImpl
 import com.shinsaikou.domain.chapter.ChapterReplacements
 import com.shinsaikou.domain.chapter.interactor.GetExcludedScanlators
 import com.shinsaikou.domain.chapter.interactor.SetReadStatus
@@ -16,6 +17,7 @@ import com.shinsaikou.domain.download.AutoDownload
 import com.shinsaikou.domain.manga.interactor.RefreshMangaFromSource
 import com.shinsaikou.domain.manga.interactor.SetMangaDetailsOverride
 import com.shinsaikou.domain.manga.interactor.UpdateManga
+import com.shinsaikou.domain.merged.interactor.ReconcileMergedRead
 import com.shinsaikou.domain.preferences.LibraryPreferences
 import com.shinsaikou.domain.preferences.SourcePreferences
 import com.shinsaikou.domain.track.TrackProgress
@@ -190,9 +192,14 @@ internal class MigrationTestEnvironment(val filesDir: File) : AutoCloseable {
             chapterReplacements = ChapterReplacements(chapterRepository, transactionRunner),
         ),
         fetchInterval = fetchInterval,
+        reconcileMergedRead = mockk(relaxed = true),
         libraryPreferences = libraryPreferences,
         dispatchers = dispatchers,
     )
+
+    /** The real merged group repository, so a migration's group write reaches the tables and the sync log. */
+    val mergedGroups = MergedGroupRepositoryImpl(handler)
+    val reconcileMergedRead: ReconcileMergedRead = mockk(relaxed = true)
 
     val migrateManga = MigrateManga(
         sourcePreferences = sourcePreferences,
@@ -215,6 +222,8 @@ internal class MigrationTestEnvironment(val filesDir: File) : AutoCloseable {
         downloadManifest = downloadManifest,
         migrationDownloads = migrationDownloads,
         delayedTrackingStore = delayedTrackingStore,
+        mergedGroupRepository = mergedGroups,
+        reconcileMergedRead = reconcileMergedRead,
         delayedTrackingScheduler = delayedTrackingScheduler,
         dispatchers = dispatchers,
     )

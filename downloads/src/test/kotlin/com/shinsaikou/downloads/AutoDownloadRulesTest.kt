@@ -8,6 +8,7 @@ import com.shinsaikou.source.SourceIds
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
+import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
@@ -72,7 +73,7 @@ class AutoDownloadRulesTest : DownloadTestBase() {
                 downloadPreferences,
                 GetCategories(categoryRepository),
             ),
-            getNextChapters = GetNextChapters(getChaptersByMangaId, getManga, mockk()),
+            getNextChapters = GetNextChapters(getChaptersByMangaId, getManga, mockk(), mockk { coEvery { await(any()) } returns null }, mockk()),
             getScanlatorPriority = GetScanlatorPriority(ScanlatorPriorityRepositoryImpl(handler)),
             getManga = getManga,
             chapterRepository = chapterRepository,
@@ -80,6 +81,8 @@ class AutoDownloadRulesTest : DownloadTestBase() {
             queue = queue(),
             downloadPreferences = downloadPreferences,
             readerPreferences = readerPreferences,
+            getMergedGroup = mockk { coEvery { await(any()) } returns null },
+            getMergedChapters = mockk(),
         )
     }
 

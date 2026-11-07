@@ -24,8 +24,11 @@ import com.shinsaikou.reader.ui.ReaderTheme
 import com.shinsaikou.reader.viewer.ViewerHolder
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
 
 /**
  * Window plumbing and event forwarding, and no reader logic of its own. Contract 07 part 2 section
@@ -86,7 +89,13 @@ class ReaderActivity : AppCompatActivity() {
         // reader closes when incognito is turned off, since this session, opened in it, would go
         // on writing no progress or history.
         if (intent.hasExtra(ReaderIntents.EXTRA_MANGA_ID)) {
-            readerGraph.newChaptersNotification.dismiss(intent.getLongExtra(ReaderIntents.EXTRA_MANGA_ID, 0L))
+            val mangaId = intent.getLongExtra(ReaderIntents.EXTRA_MANGA_ID, 0L)
+            readerGraph.newChaptersNotification.dismiss(mangaId)
+            // A merged title's other entries are known once its session has loaded.
+            lifecycleScope.launch {
+                val session = viewModel.state.mapNotNull { it.session }.first()
+                (session.entryIds - mangaId).forEach(readerGraph.newChaptersNotification::dismiss)
+            }
         }
         readerGraph.basePreferences.incognitoMode.changes()
             .drop(1)

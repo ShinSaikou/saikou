@@ -4,11 +4,13 @@ import com.shinsaikou.core.common.coroutines.Dispatchers
 import com.shinsaikou.data.DatabaseTransactionRunner
 import com.shinsaikou.data.chapter.ScanlatorPriorityRepositoryImpl
 import com.shinsaikou.data.download.DownloadQueueRepositoryImpl
+import com.shinsaikou.data.merged.MergedGroupRepositoryImpl
 import com.shinsaikou.domain.chapter.interactor.GetScanlatorPriority
 import com.shinsaikou.domain.database.TransactionRunner
 import com.shinsaikou.domain.download.ReadChapterCleanup
 import com.shinsaikou.domain.download.model.DownloadManifestEntry
 import com.shinsaikou.domain.download.model.DownloadQueueEntry
+import com.shinsaikou.domain.merged.repository.MergedGroupRepository
 import com.shinsaikou.domain.preferences.DownloadPreferences
 import com.shinsaikou.domain.preferences.LibraryPreferences
 import com.shinsaikou.domain.preferences.ReaderPreferences
@@ -132,7 +134,7 @@ class SyncDeleteAfterReadTest {
                 downloadPreferences,
                 GetCategories(CategoryRepositoryImpl(device.handler)),
             ),
-            getNextChapters = GetNextChapters(getChaptersByMangaId, getManga, mockk()),
+            getNextChapters = GetNextChapters(getChaptersByMangaId, getManga, mockk(), mockk { coEvery { await(any()) } returns null }, mockk()),
             getScanlatorPriority = GetScanlatorPriority(ScanlatorPriorityRepositoryImpl(device.handler)),
             getManga = getManga,
             chapterRepository = chapters,
@@ -140,6 +142,8 @@ class SyncDeleteAfterReadTest {
             queue = TableQueue(device),
             downloadPreferences = downloadPreferences,
             readerPreferences = ReaderPreferences(InMemoryPreferenceStore()),
+            getMergedGroup = mockk { coEvery { await(any()) } returns null },
+            getMergedChapters = mockk(),
         )
     }
 
@@ -267,6 +271,8 @@ class SyncDeleteAfterReadTest {
                 DelayedTrackingStore::class.java to queueOnA,
                 DownloadPreferences::class.java to downloadPreferences,
                 ReadChapterCleanup::class.java to onA,
+                MergedGroupRepository::class.java to MergedGroupRepositoryImpl(a.handler),
+                LibraryPreferences::class.java to LibraryPreferences(InMemoryPreferenceStore()),
             ),
         )
 

@@ -243,7 +243,7 @@ class ReaderViewModelEntriesTest {
         resolver = resolver,
         getManga = mockk {
             coEvery { await(MANGA_ID) } returns firstEntry
-            every { subscribeOrNull(MANGA_ID) } returns kotlinx.coroutines.flow.emptyFlow()
+            every { subscribeOrNull(any()) } returns kotlinx.coroutines.flow.emptyFlow()
         },
         excluded = excluded,
         readerEntries = twoEntries,

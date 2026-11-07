@@ -2,6 +2,8 @@ package com.shinsaikou.ui.browse.global
 
 import androidx.lifecycle.viewModelScope
 import com.shinsaikou.core.common.coroutines.Dispatchers
+import com.shinsaikou.domain.merged.interactor.AddMergedEntry
+import com.shinsaikou.domain.merged.interactor.MergeEntries
 import com.shinsaikou.domain.preferences.SourcePreferences
 import com.shinsaikou.domain.source.interactor.BrowseMode
 import com.shinsaikou.domain.source.interactor.GetSourceMangaPage
@@ -35,6 +37,8 @@ import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import logcat.LogPriority
+import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.manga.interactor.GetManga
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.manga.repository.MangaRepository
@@ -55,6 +59,9 @@ import tachiyomi.domain.manga.repository.MangaRepository
  * results come first. Saikou's limits stay: four sources in flight, page one, ten results kept and
  * the empty filter list. Null keeps Global Search as it was.
  *
+ * With [mergingMangaId] it is Merge with... (R163): the entry's title is searched at once, over the
+ * sources Global Search asks, and a result picked joins the entry after a confirmation.
+ *
  * Upstream's two chips are back: Pinned / All picks the sources a search asks (Global Search only;
  * a migration asks its own), and Has results hides the groups with nothing to show. Both are
  * remembered on this device. A result already in the library is marked from the live favourites,
@@ -64,11 +71,14 @@ import tachiyomi.domain.manga.repository.MangaRepository
 class GlobalSearchViewModel(
     @Assisted private val initialQuery: String?,
     @Assisted private val migratingMangaId: Long?,
+    @Assisted private val mergingMangaId: Long?,
     private val getManga: GetManga,
     private val getSourceMangaPage: GetSourceMangaPage,
     private val sourceManager: SourceManager,
     private val sourcePreferences: SourcePreferences,
     private val extensionManager: ExtensionManager,
+    private val addMergedEntry: AddMergedEntry,
+    private val mergeEntries: MergeEntries,
     mangaRepository: MangaRepository,
     private val dispatchers: Dispatchers,
 ) : StateViewModel<GlobalSearchViewModel.State>(State()) {
@@ -84,6 +94,11 @@ class GlobalSearchViewModel(
      * [migrateTarget] the result picked with no migration list below, which MA's dialog asks about.
      */
     /**
+     * In Merge with..., [mergingInto] is the entry the search was opened from, read once, and
+     * [mergeTarget] the result picked, with [mergeTargetSource] its source's name, which the
+     * confirmation names.
+     */
+    /**
      * [pinnedOnly] and [onlyShowHasResults] are the two chips, as stored; a migration, which has no
      * Pinned chip, keeps [pinnedOnly] false. [favoriteIds] are the live favourites, null until the
      * first read, when a row's own `favorite` stands in.
@@ -95,6 +110,9 @@ class GlobalSearchViewModel(
         val groups: List<SourceGroup> = emptyList(),
         val migratingFrom: Manga? = null,
         val migrateTarget: Manga? = null,
+        val mergingInto: Manga? = null,
+        val mergeTarget: Manga? = null,
+        val mergeTargetSource: String = "",
         val pinnedOnly: Boolean = false,
         val onlyShowHasResults: Boolean = false,
         val favoriteIds: Set<Long>? = null,
@@ -172,6 +190,12 @@ class GlobalSearchViewModel(
                 mutableState.update { it.copy(migratingFrom = manga) }
                 search(manga.title)
             }
+        } else if (mergingMangaId != null) {
+            viewModelScope.launch {
+                val manga = withContext(dispatchers.io) { getManga.await(mergingMangaId) } ?: return@launch
+                mutableState.update { it.copy(mergingInto = manga) }
+                search(manga.title)
+            }
         } else if (!initialQuery.isNullOrBlank()) {
             mutableState.update { it.copy(query = initialQuery) }
             search(initialQuery)
@@ -229,6 +253,46 @@ class GlobalSearchViewModel(
 
     fun dismissMigrateDialog() {
         mutableState.update { it.copy(migrateTarget = null) }
+    }
+
+    /** A result picked in Merge with...: the confirmation asks. The entry itself is no result to merge. */
+    fun showMergeDialog(target: Manga) {
+        if (target.id == mergingMangaId) return
+        mutableState.update { state ->
+            val source = state.groups.firstOrNull { it.sourceId == target.source }?.sourceName.orEmpty()
+            state.copy(mergeTarget = target, mergeTargetSource = source)
+        }
+    }
+
+    fun dismissMergeDialog() {
+        mutableState.update { it.copy(mergeTarget = null) }
+    }
+
+    /**
+     * The confirmation's Merge: both entries in the library, the one the search was opened from as
+     * main and the result after it. A failure before the merge leaves what it wrote, an entry added
+     * to the library, which is the state the owner asked for up to there.
+     */
+    fun confirmMerge(onMerged: () -> Unit, onFailed: () -> Unit) {
+        val current = state.value.mergingInto ?: return
+        val target = state.value.mergeTarget ?: return
+        dismissMergeDialog()
+        viewModelScope.launch {
+            try {
+                withContext(dispatchers.io) {
+                    addMergedEntry.await(current)
+                    addMergedEntry.await(target)
+                    mergeEntries.await(current.id, listOf(current.id, target.id))
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Could not merge entry ${target.id} into entry ${current.id}" }
+                onFailed()
+                return@launch
+            }
+            onMerged()
+        }
     }
 
     /**
@@ -369,7 +433,11 @@ class GlobalSearchViewModel(
     @ManualViewModelAssistedFactoryKey
     @ContributesIntoMap(AppScope::class)
     interface Factory : ManualViewModelAssistedFactory {
-        fun create(initialQuery: String?, migratingMangaId: Long?): GlobalSearchViewModel
+        fun create(
+            initialQuery: String?,
+            migratingMangaId: Long?,
+            mergingMangaId: Long?,
+        ): GlobalSearchViewModel
     }
 
     companion object {

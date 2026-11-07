@@ -16,6 +16,7 @@ import com.shinsaikou.domain.library.interactor.SortLibrary
 import com.shinsaikou.domain.library.model.LibraryItem
 import com.shinsaikou.domain.library.search.LibrarySearchMatcher
 import com.shinsaikou.domain.manga.interactor.UpdateManga
+import com.shinsaikou.domain.merged.interactor.MergeEntries
 import com.shinsaikou.domain.preferences.LibraryPreferences
 import com.shinsaikou.downloads.DownloadQueue
 import com.shinsaikou.i18n.R
@@ -41,6 +42,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -118,6 +120,7 @@ class LibraryViewModelTest {
     private val downloadedChapters = mockk<DownloadedChapters>()
     private val downloadedIds = mutableMapOf<Long, Set<Long>>()
     private val getBookmarkedChaptersByMangaId = mockk<GetBookmarkedChaptersByMangaId>()
+    private val mergeEntries = mockk<MergeEntries>(relaxed = true)
     private var trackerManager = TrackerManager(emptySet())
     private val trackRows = MutableStateFlow<List<Track>>(emptyList())
     private val trackRepository = mockk<TrackRepository>().also {
@@ -1545,6 +1548,394 @@ class LibraryViewModelTest {
             coVerify(exactly = 1) { setMangaCategories.await(2L, listOf(6L)) }
         }
 
+    // ---- Merged titles (R163): the main entry is the row, the writes reach every member ----
+
+    private fun member(id: Long, source: Long = id * 10) =
+        Manga.create().copy(id = id, source = source, title = "Member $id")
+
+    /** Title 1 is merged from entries 1 (main), 2 and 3; entry 9 stands alone. */
+    private fun feedMergedTitle(mergedEntries: Boolean = true, categories: List<Long> = listOf(5L)) {
+        libraryPreferences.mergedEntries.set(mergedEntries)
+        feed(
+            listOf(
+                fixtureItem(id = 1L, title = "Merged title", categories = categories, members = listOf(member(1), member(2), member(3))),
+                fixtureItem(id = 9L, title = "Alone"),
+            ),
+            categories = listOf(DEFAULT_CATEGORY, Category(id = 5L, name = "Favourites", order = 0L, flags = 0L)),
+        )
+    }
+
+    @Test
+    fun `marking a merged title read marks every member, and an entry on its own as before`() = runTest(testDispatcher) {
+        feedMergedTitle()
+        coEvery { setReadStatus.await(any<Long>(), any<Boolean>()) } returns SetReadStatus.Result.Success(emptyList())
+        val viewModel = viewModel()
+        advanceUntilIdle()
+        viewModel.toggleSelection(1L)
+        viewModel.toggleSelection(9L)
+
+        viewModel.markSelectedRead(true)
+        advanceUntilIdle()
+
+        listOf(1L, 2L, 3L, 9L).forEach { coVerify(exactly = 1) { setReadStatus.await(it, true) } }
+    }
+
+    @Test
+    fun `removing a merged title takes every member out of the library`() = runTest(testDispatcher) {
+        feedMergedTitle()
+        coEvery { updateManga.awaitUpdateFavorite(any(), any()) } returns true
+        val viewModel = viewModel()
+        advanceUntilIdle()
+        viewModel.toggleSelection(1L)
+        viewModel.toggleSelection(9L)
+
+        viewModel.askRemoveSelected()
+        viewModel.removeSelectedFromLibrary()
+        advanceUntilIdle()
+
+        listOf(1L, 2L, 3L, 9L).forEach { coVerify(exactly = 1) { updateManga.awaitUpdateFavorite(it, false) } }
+        viewModel.state.value.selection shouldBe emptySet()
+        viewModel.state.value.dialog shouldBe null
+    }
+
+    @Test
+    fun `the remove question counts the merged titles among the selection`() = runTest(testDispatcher) {
+        feedMergedTitle()
+        val viewModel = viewModel()
+        advanceUntilIdle()
+        viewModel.toggleSelection(1L)
+        viewModel.toggleSelection(9L)
+
+        viewModel.askRemoveSelected()
+
+        viewModel.state.value.dialog shouldBe LibraryViewModel.Dialog.RemoveSelected(count = 2, mergedTitles = 1)
+    }
+
+    @Test
+    fun `the remove question of entries on their own has no merged titles`() = runTest(testDispatcher) {
+        feedMergedTitle()
+        val viewModel = viewModel()
+        advanceUntilIdle()
+        viewModel.toggleSelection(9L)
+
+        viewModel.askRemoveSelected()
+
+        viewModel.state.value.dialog shouldBe LibraryViewModel.Dialog.RemoveSelected(count = 1, mergedTitles = 0)
+    }
+
+    @Test
+    fun `Update on a merged title starts a run over every member`() = runTest(testDispatcher) {
+        feedMergedTitle()
+        coEvery { libraryUpdateScheduler.startNow(mangaIds = any()) } returns true
+        val viewModel = viewModel()
+        advanceUntilIdle()
+        viewModel.toggleSelection(1L)
+        viewModel.toggleSelection(9L)
+
+        viewModel.updateSelected()
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { libraryUpdateScheduler.startNow(null, false, listOf(1L, 2L, 3L, 9L)) }
+    }
+
+    @Test
+    fun `changing the category of a merged title writes the answer to every member`() = runTest(testDispatcher) {
+        feedMergedTitle()
+        val archive = Category(id = 6L, name = "Archive", order = 1L, flags = 0L)
+        coEvery { getCategories.await() } returns listOf(Category(id = 5L, name = "Favourites", order = 0L, flags = 0L), archive)
+        coEvery { setMangaCategories.await(any(), any()) } returns Unit
+        val viewModel = viewModel()
+        advanceUntilIdle()
+        viewModel.toggleSelection(1L)
+        viewModel.askMoveToCategories()
+        advanceUntilIdle()
+        val dialog = viewModel.state.value.dialog as LibraryViewModel.Dialog.ChangeCategory
+
+        viewModel.moveSelectedToCategories(listOf(dialog.rows.single { it.id == 6L }.copy(state = ToggleableState.On)))
+        advanceUntilIdle()
+
+        // The title shows in the categories of its members, so each member takes the whole answer.
+        listOf(1L, 2L, 3L).forEach { coVerify(exactly = 1) { setMangaCategories.await(it, listOf(5L, 6L)) } }
+    }
+
+    @Test
+    fun `the category picker reads a merged title's categories, and any member counts as in the library`() =
+        runTest(testDispatcher) {
+            feedMergedTitle(categories = listOf(5L, 6L))
+
+            val viewModel = viewModel()
+            advanceUntilIdle()
+
+            viewModel.state.value.categoriesByManga shouldBe mapOf(
+                1L to listOf(5L, 6L),
+                2L to listOf(5L, 6L),
+                3L to listOf(5L, 6L),
+                9L to listOf(0L),
+            )
+        }
+
+    @Test
+    fun `Merge is offered on two selected entries with the switch on, and not otherwise`() = runTest(testDispatcher) {
+        feedMergedTitle(mergedEntries = true)
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        viewModel.toggleSelection(1L)
+        viewModel.state.value.canMerge shouldBe false
+        viewModel.toggleSelection(9L)
+        viewModel.state.value.canMerge shouldBe true
+
+        libraryPreferences.mergedEntries.set(false)
+        advanceUntilIdle()
+        viewModel.state.value.canMerge shouldBe false
+    }
+
+    @Test
+    fun `the merge dialog lists the selection in the order it was selected, with each source`() = runTest(testDispatcher) {
+        libraryPreferences.mergedEntries.set(true)
+        feed(
+            listOf(
+                fixtureItem(id = 1L, title = "First", source = 10L),
+                fixtureItem(id = 2L, title = "Second", source = 20L),
+                fixtureItem(id = 3L, title = "Third", source = 30L),
+            ),
+        )
+        every { sourceManager.getOrStub(any()) } answers { StubSource(id = firstArg(), name = "Source ${firstArg<Long>()}", lang = "") }
+        val viewModel = viewModel()
+        advanceUntilIdle()
+        viewModel.toggleSelection(3L)
+        viewModel.toggleSelection(1L)
+        viewModel.toggleSelection(2L)
+
+        viewModel.askMergeSelected()
+        advanceUntilIdle()
+
+        val dialog = viewModel.state.value.dialog as LibraryViewModel.Dialog.MergeSelected
+        dialog.entries shouldContainExactly listOf(
+            LibraryViewModel.MergeChoice(3L, "Third", "Source 30"),
+            LibraryViewModel.MergeChoice(1L, "First", "Source 10"),
+            LibraryViewModel.MergeChoice(2L, "Second", "Source 20"),
+        )
+    }
+
+    @Test
+    fun `the merge dialog is not opened for one entry or with the switch off`() = runTest(testDispatcher) {
+        feedMergedTitle(mergedEntries = false)
+        val viewModel = viewModel()
+        advanceUntilIdle()
+        viewModel.toggleSelection(1L)
+        viewModel.toggleSelection(9L)
+
+        viewModel.askMergeSelected()
+        advanceUntilIdle()
+
+        viewModel.state.value.dialog shouldBe null
+    }
+
+    @Test
+    fun `the merge dialog is not opened when fewer than two selected entries are still in the library`() =
+        runTest(testDispatcher) {
+            libraryPreferences.mergedEntries.set(true)
+            val items = MutableStateFlow(
+                listOf(fixtureItem(id = 1L, title = "First"), fixtureItem(id = 2L, title = "Second")),
+            )
+            feed(items.value)
+            every { getLibraryItems.subscribe() } returns items
+            val viewModel = viewModel()
+            advanceUntilIdle()
+            viewModel.toggleSelection(1L)
+            viewModel.toggleSelection(2L)
+            viewModel.state.value.canMerge shouldBe true
+
+            items.value = listOf(fixtureItem(id = 1L, title = "First"))
+            advanceUntilIdle()
+            viewModel.askMergeSelected()
+            advanceUntilIdle()
+
+            viewModel.state.value.dialog shouldBe null
+        }
+
+    @Test
+    fun `a merge that fails closes the dialog, keeps the selection and says so`() = runTest(testDispatcher) {
+        libraryPreferences.mergedEntries.set(true)
+        feed(listOf(fixtureItem(id = 1L, title = "First"), fixtureItem(id = 2L, title = "Second")))
+        coEvery { mergeEntries.await(any(), any()) } throws IllegalStateException("db busy")
+        val viewModel = viewModel()
+        advanceUntilIdle()
+        viewModel.toggleSelection(1L)
+        viewModel.toggleSelection(2L)
+        viewModel.askMergeSelected()
+        advanceUntilIdle()
+
+        viewModel.events.test {
+            viewModel.mergeSelected(mainId = 1L)
+            advanceUntilIdle()
+
+            awaitItem() shouldBe LibraryViewModel.Event.Snackbar(R.string.merged_failed)
+            expectNoEvents()
+        }
+        viewModel.state.value.dialog shouldBe null
+        viewModel.state.value.selection shouldBe setOf(1L, 2L)
+    }
+
+    @Test
+    fun `a cancelled merge is rethrown and not reported`() = runTest(testDispatcher) {
+        libraryPreferences.mergedEntries.set(true)
+        feed(listOf(fixtureItem(id = 1L, title = "First"), fixtureItem(id = 2L, title = "Second")))
+        coEvery { mergeEntries.await(any(), any()) } throws CancellationException("cancelled")
+        val viewModel = viewModel()
+        advanceUntilIdle()
+        viewModel.toggleSelection(1L)
+        viewModel.toggleSelection(2L)
+        viewModel.askMergeSelected()
+        advanceUntilIdle()
+
+        viewModel.events.test {
+            viewModel.mergeSelected(mainId = 1L)
+            advanceUntilIdle()
+
+            expectNoEvents()
+        }
+        viewModel.state.value.selection shouldBe setOf(1L, 2L)
+    }
+
+    @Test
+    fun `confirming the merge hands the chosen main entry and the selection order to the interactor`() =
+        runTest(testDispatcher) {
+            libraryPreferences.mergedEntries.set(true)
+            feed(listOf(fixtureItem(id = 1L, title = "First"), fixtureItem(id = 2L, title = "Second"), fixtureItem(id = 3L, title = "Third")))
+            val viewModel = viewModel()
+            advanceUntilIdle()
+            viewModel.toggleSelection(2L)
+            viewModel.toggleSelection(3L)
+            viewModel.toggleSelection(1L)
+            viewModel.askMergeSelected()
+            advanceUntilIdle()
+
+            viewModel.mergeSelected(mainId = 3L)
+            advanceUntilIdle()
+
+            coVerify(exactly = 1) { mergeEntries.await(3L, listOf(2L, 3L, 1L)) }
+            viewModel.state.value.selection shouldBe emptySet()
+            viewModel.state.value.dialog shouldBe null
+        }
+
+    @Test
+    fun `confirming a merge with no merge dialog open merges nothing`() = runTest(testDispatcher) {
+        feedMergedTitle()
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        viewModel.mergeSelected(mainId = 1L)
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { mergeEntries.await(any(), any()) }
+    }
+
+    @Test
+    fun `downloading a merged title reads its merged list and queues each chapter under its owner`() =
+        runTest(testDispatcher) {
+            feedMergedTitle()
+            coEvery { getNextChapters.await(1L) } returns listOf(
+                chapterFixture(11L, sourceOrder = 3L).copy(mangaId = 1L),
+                chapterFixture(21L, sourceOrder = 3L).copy(mangaId = 2L),
+                chapterFixture(22L, sourceOrder = 2L).copy(mangaId = 2L),
+                chapterFixture(31L, sourceOrder = 1L).copy(mangaId = 3L),
+            )
+            downloadedIds[3L] = setOf(31L)
+            queueRows.value = listOf(queueEntry(chapterId = 11L, mangaId = 1L))
+            val viewModel = viewModel()
+            advanceUntilIdle()
+            viewModel.toggleSelection(1L)
+
+            viewModel.downloadSelected(DownloadAction.UNREAD_CHAPTERS)
+            advanceUntilIdle()
+
+            // 11 is queued already and 31 is downloaded; entry 2's two go under entry 2, source order falling.
+            coVerify(exactly = 1) {
+                downloadQueue.enqueue(match { it.id == 2L }, match { list -> list.map { it.id } == listOf(21L, 22L) }, autoStart = true)
+            }
+            coVerify(exactly = 0) { downloadQueue.enqueue(match { it.id == 1L }, any(), any()) }
+            coVerify(exactly = 0) { downloadQueue.enqueue(match { it.id == 3L }, any(), any()) }
+        }
+
+    @Test
+    fun `downloading a merged title's bookmarked chapters reads every member's`() = runTest(testDispatcher) {
+        feedMergedTitle()
+        coEvery { getBookmarkedChaptersByMangaId.await(1L) } returns emptyList()
+        coEvery { getBookmarkedChaptersByMangaId.await(2L) } returns listOf(chapterFixture(21L).copy(mangaId = 2L))
+        coEvery { getBookmarkedChaptersByMangaId.await(3L) } returns listOf(chapterFixture(31L).copy(mangaId = 3L))
+        val viewModel = viewModel()
+        advanceUntilIdle()
+        viewModel.toggleSelection(1L)
+
+        viewModel.downloadSelected(DownloadAction.BOOKMARKED_CHAPTERS)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { downloadQueue.enqueue(match { it.id == 2L }, match { l -> l.map { it.id } == listOf(21L) }, autoStart = true) }
+        coVerify(exactly = 1) { downloadQueue.enqueue(match { it.id == 3L }, match { l -> l.map { it.id } == listOf(31L) }, autoStart = true) }
+    }
+
+    @Test
+    fun `a Local member's chapters are not queued in a merged title's download`() = runTest(testDispatcher) {
+        libraryPreferences.mergedEntries.set(true)
+        feed(
+            listOf(
+                fixtureItem(
+                    id = 1L,
+                    title = "Merged title",
+                    members = listOf(member(1), member(2, source = com.shinsaikou.source.SourceIds.LOCAL)),
+                ),
+            ),
+        )
+        coEvery { getNextChapters.await(1L) } returns listOf(
+            chapterFixture(11L).copy(mangaId = 1L),
+            chapterFixture(21L).copy(mangaId = 2L),
+        )
+        val viewModel = viewModel()
+        advanceUntilIdle()
+        viewModel.toggleSelection(1L)
+
+        viewModel.downloadSelected(DownloadAction.UNREAD_CHAPTERS)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { downloadQueue.enqueue(match { it.id == 1L }, any(), autoStart = true) }
+        coVerify(exactly = 0) { downloadQueue.enqueue(match { it.id == 2L }, any(), any()) }
+    }
+
+    @Test
+    fun `continue reading on a merged title opens the next chapter of the merged list, whichever member has it`() =
+        runTest(testDispatcher) {
+            feedMergedTitle()
+            coEvery { getNextChapters.await(1L, true) } returns listOf(chapterFixture(id = 31L).copy(mangaId = 3L))
+            val viewModel = viewModel()
+            advanceUntilIdle()
+
+            viewModel.events.test {
+                viewModel.continueReading(1L)
+                advanceUntilIdle()
+
+                awaitItem() shouldBe LibraryViewModel.Event.OpenReader(mangaId = 1L, chapterId = 31L)
+            }
+        }
+
+    @Test
+    fun `with the switch off an entry's selection acts on that entry alone`() = runTest(testDispatcher) {
+        // The fold is the interactor's; with the switch off it hands the view model no members.
+        libraryPreferences.mergedEntries.set(false)
+        feed(listOf(fixtureItem(id = 1L, title = "One"), fixtureItem(id = 2L, title = "Two")))
+        coEvery { setReadStatus.await(any<Long>(), any<Boolean>()) } returns SetReadStatus.Result.Success(emptyList())
+        val viewModel = viewModel()
+        advanceUntilIdle()
+        viewModel.toggleSelection(1L)
+
+        viewModel.markSelectedRead(true)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { setReadStatus.await(1L, true) }
+        coVerify(exactly = 0) { setReadStatus.await(2L, any<Boolean>()) }
+    }
+
     // ---- Manual sort (phase 4 unit MS) ----
 
     @Test
@@ -2042,6 +2433,7 @@ class LibraryViewModelTest {
         trackerManager = trackerManager,
         trackRepository = trackRepository,
         setManualLibraryOrder = SetManualLibraryOrder(mangaRepository),
+        mergeEntries = mergeEntries,
     )
 
     private fun chapterFixture(id: Long, sourceOrder: Long = 0L) = Chapter.create().copy(id = id, sourceOrder = sourceOrder)
@@ -2073,6 +2465,7 @@ class LibraryViewModelTest {
         status: Long = MangaStatus.ONGOING.code.toLong(),
         fetchInterval: Int = 0,
         manualPosition: Long = 0L,
+        members: List<Manga> = emptyList(),
     ) = LibraryItem(
         libraryManga = LibraryManga(
             manga = Manga.create().copy(
@@ -2095,6 +2488,7 @@ class LibraryViewModelTest {
         unreadCount = totalChapters - readCount,
         isLocal = isLocal,
         sourceLanguage = "en",
+        members = members,
     )
 
     private fun trackRow(mangaId: Long, trackerId: Long, score: Double = 0.0) = Track(

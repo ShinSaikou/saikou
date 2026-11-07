@@ -12,6 +12,7 @@ import dev.zacsweers.metro.Inject
 class RemoveMergedMember(
     private val repository: MergedGroupRepository,
     private val getMergedGroup: GetMergedGroup,
+    private val carryMergedTracks: CarryMergedTracks,
     private val transactionRunner: TransactionRunner,
 ) {
     suspend fun await(mangaId: Long) {
@@ -22,7 +23,10 @@ class RemoveMergedMember(
                 repository.unmerge(group.id)
                 return@inTransaction
             }
-            if (group.mainMangaId == mangaId) repository.setMain(group.id, left.first().mangaId)
+            if (group.mainMangaId == mangaId) {
+                repository.setMain(group.id, left.first().mangaId)
+                carryMergedTracks.toNewMain(oldMainId = mangaId, newMainId = left.first().mangaId)
+            }
             repository.removeMember(mangaId)
         }
     }

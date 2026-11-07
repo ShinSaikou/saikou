@@ -497,6 +497,7 @@ class ProgressCommitterTest {
             setReadStatus = SetReadStatus(
                 chapterRepository, mangaRepository, DownloadPreferences(downloadStore), cleanup,
                 GetMergedGroup(mockk(), LibraryPreferences(store)),
+                mockk(),
             ),
             getChaptersByMangaId = GetChaptersByMangaId(chapterRepository),
             libraryPreferences = LibraryPreferences(store),
@@ -504,6 +505,7 @@ class ProgressCommitterTest {
             trackProgress = trackProgress,
             autoDownload = autoDownload,
             readChapterCleanup = cleanup,
+            reconcileMergedRead = mockk(relaxed = true),
             chapterReplacements = ChapterReplacements(chapterRepository, ImmediateTransactionRunner),
             dispatchers = Dispatchers(io = dispatcher, default = dispatcher, main = dispatcher),
             clock = { now },

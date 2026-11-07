@@ -36,6 +36,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Deselect
 import androidx.compose.material.icons.outlined.Done
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.DownloadDone
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.FileDownloadOff
@@ -307,6 +308,9 @@ fun MangaDetailScreen(
                                 onMigrate = {
                                     navigator.open(Route.MigrationConfig(listOf(success.manga.id)))
                                 }.takeIf { success.manga.favorite },
+                                onMergeWith = {
+                                    navigator.open(Route.MergeSearch(success.manga.id))
+                                }.takeIf { success.mergedEntries },
                                 onOpenInWebView = viewModel::openInWebView,
                             )
                         }
@@ -365,6 +369,7 @@ fun MangaDetailScreen(
                                     viewModel::toggleDescription,
                                     viewModel::showCover,
                                     viewModel::showNotes,
+                                    viewModel::showMergedSources,
                                     onGenreSearch,
                                     onGlobalSearch,
                                 )
@@ -395,6 +400,7 @@ fun MangaDetailScreen(
                                 viewModel::toggleDescription,
                                 viewModel::showCover,
                                 viewModel::showNotes,
+                                viewModel::showMergedSources,
                                 onGenreSearch,
                                 onGlobalSearch,
                             )
@@ -415,6 +421,14 @@ fun MangaDetailScreen(
             navigator.open(Route.MangaDetail(duplicateId))
         },
         onMigrateDuplicate = viewModel::showMigrateDialog,
+        onMergeDuplicate = viewModel::mergeWithDuplicate,
+        onConfirmRemoveMerged = viewModel::confirmRemoveMerged,
+        onReorderSources = viewModel::setMergedSourceOrder,
+        onUseAsMain = viewModel::useAsMain,
+        onSourceCheckUpdates = viewModel::setSourceCheckUpdates,
+        onRemoveSource = viewModel::removeMergedSource,
+        onShowEveryCopy = viewModel::setShowEveryCopy,
+        onUnmerge = viewModel::unmerge,
         onMigrationFailed = { viewModel.migrationFailed() },
         onFilter = viewModel::setChapterFilter,
         onSort = viewModel::setChapterSort,
@@ -470,7 +484,8 @@ private fun MangaDownloadMenu(onDownload: (DownloadAction) -> Unit) {
  * per entry and so have nowhere else to live. Edit details (phase 5 unit ED) opens the owner's
  * title and description for the entry, and Notes the owner's notes on it. The WebView item appears
  * only for a source with a web presence. Migrate, after Reading mode as in upstream, is null and
- * absent while the entry is not in the library.
+ * absent while the entry is not in the library. Merge with... is null and absent while Merged
+ * entries is off in Experimental.
  */
 @Composable
 private fun MangaOverflowMenu(
@@ -482,6 +497,7 @@ private fun MangaOverflowMenu(
     onEditDetails: () -> Unit,
     onNotes: () -> Unit,
     onMigrate: (() -> Unit)?,
+    onMergeWith: (() -> Unit)?,
     onOpenInWebView: () -> Unit,
 ) {
     Box {
@@ -530,6 +546,15 @@ private fun MangaOverflowMenu(
                     },
                 )
             }
+            if (onMergeWith != null) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.action_merge_with)) },
+                    onClick = {
+                        onExpandedChange(false)
+                        onMergeWith()
+                    },
+                )
+            }
             if (showWebView) {
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.action_open_in_web_view)) },
@@ -565,6 +590,14 @@ private fun MangaDialogs(
     onConfirmCategories: (List<Long>) -> Unit,
     onOpenDuplicate: (Long) -> Unit,
     onMigrateDuplicate: (Long) -> Unit,
+    onMergeDuplicate: (Long) -> Unit,
+    onConfirmRemoveMerged: () -> Unit,
+    onReorderSources: (List<Long>) -> Unit,
+    onUseAsMain: (Long) -> Unit,
+    onSourceCheckUpdates: (Long, Boolean) -> Unit,
+    onRemoveSource: (Long) -> Unit,
+    onShowEveryCopy: (Boolean) -> Unit,
+    onUnmerge: () -> Unit,
     onMigrationFailed: (Throwable) -> Unit,
     onFilter: (MangaDetailViewModel.ChapterFilter, TriState) -> Unit,
     onSort: (Long) -> Unit,
@@ -597,6 +630,7 @@ private fun MangaDialogs(
             onAddAnyway = onAddAnyway,
             onOpenExisting = onOpenDuplicate,
             onMigrate = onMigrateDuplicate,
+            onMerge = onMergeDuplicate.takeIf { state.mergedEntries },
         )
         is MangaDetailViewModel.Dialog.Migrate -> MigrateMangaDialog(
             current = dialog.current,
@@ -663,6 +697,29 @@ private fun MangaDialogs(
                 TextButton(onClick = onDismissRequest) { Text(stringResource(R.string.action_cancel)) }
             },
         )
+        is MangaDetailViewModel.Dialog.RemoveMerged -> AlertDialog(
+            onDismissRequest = onDismissRequest,
+            title = { Text(stringResource(R.string.library_remove_selected_title)) },
+            text = { Text(stringResource(R.string.merged_remove_message_format, dialog.sources)) },
+            confirmButton = {
+                TextButton(onClick = onConfirmRemoveMerged) { Text(stringResource(R.string.action_remove)) }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismissRequest) { Text(stringResource(R.string.action_cancel)) }
+            },
+        )
+        MangaDetailViewModel.Dialog.MergedSources -> state.merged?.let { merged ->
+            MergedSourcesSheet(
+                title = merged,
+                onDismissRequest = onDismissRequest,
+                onReorder = onReorderSources,
+                onUseAsMain = onUseAsMain,
+                onCheckUpdates = onSourceCheckUpdates,
+                onRemove = onRemoveSource,
+                onShowEveryCopy = onShowEveryCopy,
+                onUnmerge = onUnmerge,
+            )
+        }
         MangaDetailViewModel.Dialog.TrackSheet -> TrackSheet(
             mangaId = state.manga.id,
             mangaTitle = state.manga.title,
@@ -768,6 +825,8 @@ private fun ChapterList(
                     val chapter = row.chapter
                     ChapterRow(
                         chapter = chapter,
+                        sourceName = state.sourceNameOf(chapter),
+                        hiddenDownload = chapter.id in state.hiddenDownloads,
                         download = state.downloadOf(chapter.id).takeIf { state.showsDownloadControl },
                         displayMode = state.manga.displayMode,
                         relativeTime = state.relativeTime,
@@ -859,14 +918,18 @@ private fun chapterSwipeAction(
  * does, and for its colours and alphas. The title line carries the unread dot and the bookmark before a one-line
  * title; the line under it is the upload date, "Page: N" while partly read, and the scanlator; a
  * read row is faded. The download control sits at the end, and [download] is null where the row
- * draws none (a Local entry, or chapters selected). A tap opens the chapter or toggles it in a
- * selection, a long press selects, and the swipes mark read and bookmark: the row has no buttons.
+ * draws none (a Local entry, or chapters selected). In a merged title [sourceName] opens the line
+ * under the title, and [hiddenDownload] badges a row whose hidden copy is on disk. A tap opens the
+ * chapter or toggles it in a selection, a long press selects, and the swipes mark read and
+ * bookmark: the row has no buttons.
  * It is [ListRowBody] with no divider, on upstream's padding (16 dp start, 12 dp top and bottom, 8 dp
  * end), its 6 dp between the two lines, its slots at the top, and its 4 dp before the control.
  */
 @Composable
 private fun ChapterRow(
     chapter: Chapter,
+    sourceName: String?,
+    hiddenDownload: Boolean,
     download: ChapterDownload?,
     displayMode: Long,
     relativeTime: Boolean,
@@ -908,11 +971,22 @@ private fun ChapterRow(
             bookmark = chapter.bookmark,
         )
         val detail = listOfNotNull(
+            sourceName,
             chapterUploadDate(chapter.dateUpload, relativeTime, dateFormat),
             chapterProgress(chapter.read, chapter.lastPageRead),
             chapter.scanlator?.takeIf { it.isNotBlank() },
         ).joinToString(" · ")
-        ChapterDetailText(detail, read = chapter.read)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (hiddenDownload) {
+                Icon(
+                    Icons.Outlined.DownloadDone,
+                    contentDescription = stringResource(R.string.merged_hidden_copy_downloaded),
+                    modifier = Modifier.size(14.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+            ChapterDetailText(detail, read = chapter.read)
+        }
     }
 }
 
@@ -937,6 +1011,7 @@ private fun MangaHeader(
     onToggleDescription: () -> Unit,
     onCoverClick: () -> Unit,
     onNotesClick: () -> Unit,
+    onMergedSources: () -> Unit,
     onGenreSearch: (String) -> Unit,
     onGlobalSearch: (String) -> Unit,
 ) {
@@ -944,7 +1019,12 @@ private fun MangaHeader(
     val context = LocalContext.current
     val copied = stringResource(R.string.copied_to_clipboard)
     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        MangaHeaderTop(state = state, onCoverClick = onCoverClick, onGlobalSearch = onGlobalSearch)
+        MangaHeaderTop(
+            state = state,
+            onCoverClick = onCoverClick,
+            onMergedSources = onMergedSources,
+            onGlobalSearch = onGlobalSearch,
+        )
         // Flowing, so a narrow pane (the tablet library's) puts the tracking button on its own line
         // rather than breaking its label.
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), itemVerticalAlignment = Alignment.CenterVertically) {
@@ -994,6 +1074,7 @@ private fun MangaHeader(
 private fun MangaHeaderTop(
     state: MangaDetailViewModel.State.Success,
     onCoverClick: () -> Unit,
+    onMergedSources: () -> Unit,
     onGlobalSearch: (String) -> Unit,
 ) {
     val coverWidth = if (isTabletUi()) 200.dp else 100.dp
@@ -1012,22 +1093,27 @@ private fun MangaHeaderTop(
             Row(verticalAlignment = Alignment.Top) {
                 cover(Modifier.width(coverWidth))
                 Spacer(Modifier.width(HEADER_COVER_GAP))
-                MangaHeaderLines(state, onGlobalSearch, Alignment.Start, TextAlign.Start)
+                MangaHeaderLines(state, onMergedSources, onGlobalSearch, Alignment.Start, TextAlign.Start)
             }
         } else {
             Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                 cover(Modifier.width(min(width * STACKED_COVER_FRACTION, coverWidth)))
                 Spacer(Modifier.height(HEADER_COVER_GAP))
-                MangaHeaderLines(state, onGlobalSearch, Alignment.CenterHorizontally, TextAlign.Center)
+                MangaHeaderLines(state, onMergedSources, onGlobalSearch, Alignment.CenterHorizontally, TextAlign.Center)
             }
         }
     }
 }
 
-/** The title, the author, the status and the source, aligned as [MangaHeaderTop] lays them out. */
+/**
+ * The title, the author, the status and the source, aligned as [MangaHeaderTop] lays them out. A
+ * merged title's source line names the main entry's source and how many more, and opens the Merged
+ * sources sheet.
+ */
 @Composable
 private fun MangaHeaderLines(
     state: MangaDetailViewModel.State.Success,
+    onMergedSources: () -> Unit,
     onGlobalSearch: (String) -> Unit,
     alignment: Alignment.Horizontal,
     textAlign: TextAlign,
@@ -1063,16 +1149,27 @@ private fun MangaHeaderLines(
             )
         }
         Text(statusLabel(manga), style = MaterialTheme.typography.bodySmall, textAlign = textAlign)
-        Text(
-            if (state.sourceInstalled && state.sourceName != null) {
-                stringResource(R.string.manga_source_format, state.sourceName)
-            } else {
-                stringResource(R.string.manga_source_not_installed)
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = textAlign,
-        )
+        val merged = state.merged
+        if (merged != null) {
+            Text(
+                stringResource(R.string.merged_source_line_format, state.sourceName.orEmpty(), merged.sources.size - 1),
+                modifier = Modifier.clickable(onClick = onMergedSources),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                textAlign = textAlign,
+            )
+        } else {
+            Text(
+                if (state.sourceInstalled && state.sourceName != null) {
+                    stringResource(R.string.manga_source_format, state.sourceName)
+                } else {
+                    stringResource(R.string.manga_source_not_installed)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = textAlign,
+            )
+        }
     }
 }
 

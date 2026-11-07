@@ -2,6 +2,8 @@ package com.shinsaikou.domain.merged
 
 import com.shinsaikou.domain.merged.model.MergedGroup
 import tachiyomi.domain.chapter.model.Chapter
+import tachiyomi.domain.chapter.service.getChapterSort
+import tachiyomi.domain.manga.model.Manga
 
 /** Which chapters of a merged entry show (`design/plans/merged-entries.md` section 4). */
 object MergedChapters {
@@ -35,5 +37,27 @@ object MergedChapters {
             if (best == null || rank < best) winners[chapter.chapterNumber] = rank
         }
         return chapters.filter { !it.isRecognizedNumber || rankOf(it) == winners[it.chapterNumber] }
+    }
+
+    /**
+     * [getChapterSort] for a merged list. `source_order` means nothing across sources, so a list
+     * sorted by source sorts by number, in the same direction. [manga] is the main entry.
+     */
+    fun sort(manga: Manga, sortDescending: Boolean = manga.sortDescending()): (Chapter, Chapter) -> Int = when {
+        manga.sorting != Manga.CHAPTER_SORTING_SOURCE -> getChapterSort(manga, sortDescending)
+        sortDescending -> { a, b -> b.chapterNumber.compareTo(a.chapterNumber) }
+        else -> { a, b -> a.chapterNumber.compareTo(b.chapterNumber) }
+    }
+
+    /**
+     * The rows of [shown] whose number has a copy [shown] left out with its files on disk, of
+     * [all] the group's chapters. A row badged here can be read offline through Show every copy.
+     */
+    fun withHiddenDownload(all: List<Chapter>, shown: List<Chapter>, downloaded: Set<Long>): Set<Long> {
+        val shownIds = shown.mapTo(HashSet()) { it.id }
+        val numbers = all
+            .filter { it.isRecognizedNumber && it.id in downloaded && it.id !in shownIds }
+            .mapTo(HashSet()) { it.chapterNumber }
+        return shown.filter { it.isRecognizedNumber && it.chapterNumber in numbers }.mapTo(HashSet()) { it.id }
     }
 }

@@ -46,6 +46,7 @@ import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -187,6 +188,8 @@ class MigrateMangaSyncTest {
                 updateManga = updateManga,
                 fetchInterval = fetchInterval,
                 libraryPreferences = libraryPreferences,
+                getMergedGroups = mockk { coEvery { await() } returns emptyList() },
+                reconcileMergedRead = mockk(relaxed = true),
                 autoDownload = autoDownload,
                 dispatchers = AppDispatchers(io = io, default = io, main = io),
                 timeSource = TimeSource.Monotonic,
@@ -205,7 +208,7 @@ class MigrateMangaSyncTest {
                 downloadPreferences,
                 GetCategories(CategoryRepositoryImpl(env.handler)),
             ),
-            getNextChapters = GetNextChapters(getChaptersByMangaId, getManga, mockk()),
+            getNextChapters = GetNextChapters(getChaptersByMangaId, getManga, mockk(), mockk { coEvery { await(any()) } returns null }, mockk()),
             getScanlatorPriority = GetScanlatorPriority(ScanlatorPriorityRepositoryImpl(env.handler)),
             getManga = getManga,
             chapterRepository = chapters,
@@ -213,6 +216,8 @@ class MigrateMangaSyncTest {
             queue = queue,
             downloadPreferences = downloadPreferences,
             readerPreferences = ReaderPreferences(InMemoryPreferenceStore()),
+            getMergedGroup = mockk { coEvery { await(any()) } returns null },
+            getMergedChapters = mockk(),
         )
     }
 

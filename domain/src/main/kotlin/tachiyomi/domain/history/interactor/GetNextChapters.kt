@@ -1,6 +1,10 @@
-// Vendored from upstream v0.20.4: domain/src/main/java/tachiyomi/domain/history/interactor/GetNextChapters.kt (modified: no)
+// Vendored from upstream v0.20.4: domain/src/main/java/tachiyomi/domain/history/interactor/GetNextChapters.kt (modified: yes)
+// Modified: a merged entry's next chapters come from its merged list (R163).
 package tachiyomi.domain.history.interactor
 
+import com.shinsaikou.domain.merged.MergedChapters
+import com.shinsaikou.domain.merged.interactor.GetMergedChapters
+import com.shinsaikou.domain.merged.interactor.GetMergedGroup
 import tachiyomi.domain.chapter.interactor.GetChaptersByMangaId
 import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.domain.chapter.service.getChapterSort
@@ -12,6 +16,8 @@ class GetNextChapters(
     private val getChaptersByMangaId: GetChaptersByMangaId,
     private val getManga: GetManga,
     private val historyRepository: HistoryRepository,
+    private val getMergedGroup: GetMergedGroup,
+    private val getMergedChapters: GetMergedChapters,
 ) {
 
     suspend fun await(onlyUnread: Boolean = true): List<Chapter> {
@@ -21,8 +27,14 @@ class GetNextChapters(
 
     suspend fun await(mangaId: Long, onlyUnread: Boolean = true): List<Chapter> {
         val manga = getManga.await(mangaId) ?: return emptyList()
-        val chapters = getChaptersByMangaId.await(mangaId, applyScanlatorFilter = true)
-            .sortedWith(getChapterSort(manga, sortDescending = false))
+        val group = getMergedGroup.await(mangaId)
+        val chapters = if (group == null) {
+            getChaptersByMangaId.await(mangaId, applyScanlatorFilter = true)
+                .sortedWith(getChapterSort(manga, sortDescending = false))
+        } else {
+            val main = getManga.await(group.mainMangaId) ?: manga
+            getMergedChapters.await(group).sortedWith(MergedChapters.sort(main, sortDescending = false))
+        }
 
         return if (onlyUnread) {
             chapters.filterNot { it.read }

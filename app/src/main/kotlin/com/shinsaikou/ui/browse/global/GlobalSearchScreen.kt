@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.DoneAll
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.PushPin
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -82,19 +83,25 @@ import tachiyomi.presentation.core.screens.LoadingScreen
  * opens it, a group's "more" opens that source's listing in the same mode, and the entry's own
  * source is headed with "▶". A pick goes back to the migration list below; with none, MA's dialog
  * migrates the one entry and a failure is said in a snackbar.
+ *
+ * With [mergingMangaId] it is Merge with... (R163): a tap on a cover asks whether to merge that
+ * result into the entry, a long press opens it, and a confirmed merge goes back to the entry. A group
+ * has no "more", because a source's listing has no merge pick.
  */
 @Composable
-fun GlobalSearchScreen(initialQuery: String?, migratingMangaId: Long? = null) {
+fun GlobalSearchScreen(initialQuery: String?, migratingMangaId: Long? = null, mergingMangaId: Long? = null) {
     val viewModel: GlobalSearchViewModel =
         assistedMetroViewModel<GlobalSearchViewModel, GlobalSearchViewModel.Factory> {
-            create(initialQuery, migratingMangaId)
+            create(initialQuery, migratingMangaId, mergingMangaId)
         }
     val state by viewModel.state.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
     val resources = LocalResources.current
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    val onManga: (Manga) -> Unit = if (migratingMangaId == null) {
+    val onManga: (Manga) -> Unit = if (mergingMangaId != null) {
+        viewModel::showMergeDialog
+    } else if (migratingMangaId == null) {
         { manga -> navigator.open(Route.MangaDetail(manga.id, fromSource = true)) }
     } else {
         { manga ->
@@ -108,7 +115,7 @@ fun GlobalSearchScreen(initialQuery: String?, migratingMangaId: Long? = null) {
             }
         }
     }
-    val onMangaLongClick: ((Manga) -> Unit)? = if (migratingMangaId == null) {
+    val onMangaLongClick: ((Manga) -> Unit)? = if (migratingMangaId == null && mergingMangaId == null) {
         null
     } else {
         { manga -> navigator.open(Route.MangaDetail(manga.id, fromSource = true)) }
@@ -173,7 +180,7 @@ fun GlobalSearchScreen(initialQuery: String?, migratingMangaId: Long? = null) {
                                         migratingMangaId = migratingMangaId,
                                     ),
                                 )
-                            },
+                            }.takeIf { mergingMangaId == null },
                             inLibrary = state::inLibrary,
                             onManga = onManga,
                             onMangaLongClick = onMangaLongClick,
@@ -183,6 +190,35 @@ fun GlobalSearchScreen(initialQuery: String?, migratingMangaId: Long? = null) {
                 }
             }
         }
+    }
+
+    state.mergeTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissMergeDialog,
+            title = { Text(stringResource(R.string.merged_confirm_title)) },
+            text = {
+                Text(stringResource(R.string.merged_confirm_message_format, target.title, state.mergeTargetSource))
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.confirmMerge(
+                            onMerged = navigator::back,
+                            onFailed = {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(resources.getString(R.string.merged_failed))
+                                }
+                            },
+                        )
+                    },
+                ) {
+                    Text(stringResource(R.string.action_merge))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissMergeDialog) { Text(stringResource(R.string.action_cancel)) }
+            },
+        )
     }
 
     val current = state.migratingFrom
@@ -282,7 +318,7 @@ private fun SourceSection(
     title: String,
     resources: Resources,
     inLibrary: (Manga) -> Boolean,
-    onMore: () -> Unit,
+    onMore: (() -> Unit)?,
     onManga: (Manga) -> Unit,
     onMangaLongClick: ((Manga) -> Unit)?,
     onRetry: () -> Unit,
@@ -298,7 +334,7 @@ private fun SourceSection(
                 style = MaterialTheme.typography.titleSmall,
                 maxLines = 1,
             )
-            if (group.status is GlobalSearchViewModel.Status.Results) {
+            if (onMore != null && group.status is GlobalSearchViewModel.Status.Results) {
                 TextButton(onClick = onMore) {
                     Text(stringResource(R.string.global_search_source_more))
                 }

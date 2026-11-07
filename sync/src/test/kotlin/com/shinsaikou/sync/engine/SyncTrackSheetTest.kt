@@ -123,7 +123,7 @@ class SyncTrackSheetTest {
         val store = DelayedTrackingStore(preferences) { key, value ->
             if (value == null) preferences.values.remove(key) else preferences.values[key] = value
         }
-        val recorder = TrackProgressRecorder(repository, recording.manager, store, DelayedTrackingScheduler {})
+        val recorder = TrackProgressRecorder(repository, recording.manager, store, DelayedTrackingScheduler {}, mockk { coEvery { await(any()) } returns null })
         val worker = DelayedTrackingUpdate(
             store,
             repository,

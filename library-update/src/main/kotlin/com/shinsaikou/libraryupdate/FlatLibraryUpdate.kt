@@ -4,6 +4,8 @@ import com.shinsaikou.core.common.coroutines.Dispatchers
 import com.shinsaikou.domain.chapter.interactor.SyncChaptersWithSource
 import com.shinsaikou.domain.download.AutoDownload
 import com.shinsaikou.domain.manga.interactor.UpdateManga
+import com.shinsaikou.domain.merged.interactor.GetMergedGroups
+import com.shinsaikou.domain.merged.interactor.ReconcileMergedRead
 import com.shinsaikou.domain.preferences.LibraryPreferences
 import com.shinsaikou.domain.preferences.LibraryUpdateRestrictions
 import com.shinsaikou.domain.source.toChapterInfo
@@ -96,6 +98,11 @@ import kotlin.time.TimeSource
  * every run: the restrictions apply to automatic runs only (a manual run applies only the
  * fetch-once rule), and [LibraryPreferences.autoUpdateMetadata] asks for details on automatic runs
  * only (a manual run asks through `refreshMetadata`).
+ *
+ * Each member of a merged entry is an entry here, one unit of work against one site, except one with
+ * Check for updates off, which the run leaves out as if it were not in the library. A member whose
+ * refresh inserted chapters has its group's read marks reconciled, since a new copy can be of a number
+ * already read.
  */
 @Inject
 class FlatLibraryUpdate(
@@ -108,6 +115,8 @@ class FlatLibraryUpdate(
     private val fetchInterval: FetchInterval,
     private val libraryPreferences: LibraryPreferences,
     private val autoDownload: AutoDownload,
+    private val getMergedGroups: GetMergedGroups,
+    private val reconcileMergedRead: ReconcileMergedRead,
     private val dispatchers: Dispatchers,
     private val timeSource: TimeSource,
 ) {
@@ -220,7 +229,7 @@ class FlatLibraryUpdate(
 
         val zone = TimeZone.currentSystemDefault()
         val window = fetchInterval.getWindow(Clock.System.now().toLocalDateTime(zone).date, zone)
-        val (queue, skipped) = queueOf(getLibraryManga.await(), categoryId, automatic, window, mangaIds)
+        val (queue, skipped) = queueOf(checkedLibrary(), categoryId, automatic, window, mangaIds)
         val plan = Plan(
             automatic = automatic,
             fetchDetails = refreshMetadata || (automatic && libraryPreferences.autoUpdateMetadata.get()),
@@ -445,8 +454,22 @@ class FlatLibraryUpdate(
             results.failures[index] = Failure(fresh, e)
             return Turn(Request.COMPLETED)
         }
-        if (newChapters.isNotEmpty()) queueNewChapters(fresh, newChapters, results)
+        if (newChapters.isNotEmpty()) {
+            reconcileMerged(fresh)
+            queueNewChapters(fresh, newChapters, results)
+        }
         return Turn(Request.COMPLETED)
+    }
+
+    /** The chapters are in the database, so a failure here is logged: the entry's update did not fail. */
+    private suspend fun reconcileMerged(manga: Manga) {
+        try {
+            reconcileMergedRead.await(manga.id)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            logcat(LogPriority.WARN, e) { "Library update: could not reconcile the read marks of ${manga.id}" }
+        }
     }
 
     /**
@@ -523,7 +546,16 @@ class FlatLibraryUpdate(
         automatic: Boolean,
         window: Pair<Long, Long>,
         mangaIds: Set<Long>? = null,
-    ): List<LibraryManga> = buildQueue(getLibraryManga.await(), categoryId, automatic, window, mangaIds)
+    ): List<LibraryManga> = buildQueue(checkedLibrary(), categoryId, automatic, window, mangaIds)
+
+    /** The library less the merged members with Check for updates off. */
+    private suspend fun checkedLibrary(): List<LibraryManga> {
+        val resting = getMergedGroups.await()
+            .flatMap { group -> group.members.filterNot { it.checkUpdates } }
+            .mapTo(HashSet()) { it.mangaId }
+        val library = getLibraryManga.await()
+        return if (resting.isEmpty()) library else library.filterNot { it.id in resting }
+    }
 
     /**
      * The queue built from [library], the whole of `GetLibraryManga.await()` as a caller already

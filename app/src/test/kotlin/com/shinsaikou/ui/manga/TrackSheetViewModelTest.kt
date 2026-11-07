@@ -161,6 +161,7 @@ class TrackSheetViewModelTest {
                     PassThroughTransactionRunner,
                     store,
                     RemoveTrack(repository, store),
+                    mockk(relaxed = true),
                 ),
             ),
             uiPreferences = UiPreferences(preferences),
