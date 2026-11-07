@@ -72,6 +72,9 @@ data class ReaderState(
 ) {
     val currentChapter: ReaderChapter? get() = window?.currChapter
 
+    /** The entry the chapter on screen belongs to, [manga] unless the title is merged. */
+    val currentOwner: Manga? get() = currentChapter?.chapter?.let { session?.ownerOf(it) } ?: manga
+
     /**
      * The note on the page on screen, or null: what the bottom bar's marker shows. Keyed by
      * [currentPage], which a part of a split page reports as its parent's index, so every part of a

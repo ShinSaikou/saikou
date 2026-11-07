@@ -29,9 +29,10 @@ fun chapter(
     scanlator: String? = null,
     deletedAt: Long? = null,
     sourceOrder: Long = id,
+    mangaId: Long = MANGA_ID,
 ): Chapter = Chapter.create().copy(
     id = id,
-    mangaId = MANGA_ID,
+    mangaId = mangaId,
     chapterNumber = number,
     read = read,
     bookmark = bookmark,
@@ -53,9 +54,11 @@ const val MANGA_ID = 7L
 fun manga(
     chapterFlags: Long = Manga.CHAPTER_SORTING_NUMBER,
     viewerFlags: Long = 0L,
+    id: Long = MANGA_ID,
+    source: Long = 1L,
 ): Manga = Manga(
-    id = MANGA_ID,
-    source = 1L,
+    id = id,
+    source = source,
     favorite = true,
     lastUpdate = 0,
     nextUpdate = 0,

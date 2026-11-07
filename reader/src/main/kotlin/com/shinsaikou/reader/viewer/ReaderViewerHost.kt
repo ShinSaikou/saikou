@@ -17,6 +17,7 @@ import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.viewer.ViewerNavigation
 import kotlinx.coroutines.CoroutineScope
+import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.domain.manga.model.Manga
 
 /**
@@ -52,6 +53,8 @@ class ReaderViewerHost(
     override val menuVisible: Boolean get() = state().menuVisible
     override val isScrollingThroughPages: Boolean get() = state().scrubbing || state().movingBySlider
     override val manga: Manga? get() = state().manga
+
+    override fun ownerOf(chapter: Chapter): Manga? = state().session?.ownerOf(chapter) ?: manga
 
     override fun preloadWindow(): PreloadPolicy.Window = state().preload
 

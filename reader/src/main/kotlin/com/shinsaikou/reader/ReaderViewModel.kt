@@ -31,6 +31,7 @@ import com.shinsaikou.reader.state.PreloadPolicy
 import com.shinsaikou.reader.state.ReaderDialog
 import com.shinsaikou.reader.state.ProgressCommitter
 import com.shinsaikou.reader.state.ReaderEffect
+import com.shinsaikou.reader.state.ReaderEntries
 import com.shinsaikou.reader.state.ReaderEvent
 import com.shinsaikou.reader.state.ReaderSession
 import com.shinsaikou.reader.state.ReaderState
@@ -110,6 +111,7 @@ class ReaderViewModel @AssistedInject constructor(
     private val basePreferences: BasePreferences,
     progressCommitterFactory: ProgressCommitter.Factory,
     private val incognitoPolicy: IncognitoPolicy,
+    private val readerEntries: ReaderEntries,
     val readerPreferences: ReaderPreferences,
     private val preloadPolicy: PreloadPolicy,
     val animatedImagePolicy: AnimatedImagePolicy,
@@ -139,14 +141,22 @@ class ReaderViewModel @AssistedInject constructor(
     val effects: Flow<ReaderEffect> = _effects.receiveAsFlow()
 
     /**
-     * The entry's downloaded chapters, which the chapter transition marks. Empty until the session
-     * names the entry, and followed only while the screen collects it.
+     * The downloaded chapters of the session's entries, which the chapter transition marks. Empty
+     * until the session loads, and followed only while the screen collects it.
      */
     @OptIn(ExperimentalCoroutinesApi::class)
     val downloadedChapterIds: StateFlow<Set<Long>> = _state
-        .map { it.manga?.id }
+        .map { it.session?.entryIds.orEmpty() }
         .distinctUntilChanged()
-        .flatMapLatest { mangaId -> mangaId?.let(downloadedChapters::subscribeByMangaId) ?: flowOf(emptySet()) }
+        .flatMapLatest { entryIds ->
+            if (entryIds.isEmpty()) {
+                flowOf(emptySet())
+            } else {
+                combine(entryIds.map(downloadedChapters::subscribeByMangaId)) { sets ->
+                    sets.flatMapTo(HashSet()) { it }
+                }
+            }
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), emptySet())
 
     private val events = Channel<ReaderEvent>(Channel.UNLIMITED)
@@ -261,10 +271,12 @@ class ReaderViewModel @AssistedInject constructor(
                     // Named by its own key (R128 carry-over 2): a row removed while the process was
                     // dead reopens the reader into "That entry is no longer in the database.", as a
                     // row that leaves an open session does (observeChanges).
-                    val manga = getManga.await(mangaId) ?: throw MangaNotFoundException(mangaId)
+                    val opened = getManga.await(mangaId) ?: throw MangaNotFoundException(mangaId)
+                    val entries = readerEntries.of(opened)
+                    val manga = entries.first()
                     val chapters = withRequested(
-                        getChaptersByMangaId.await(mangaId, applyScanlatorFilter = true),
-                        mangaId,
+                        entries.flatMap { getChaptersByMangaId.await(it.id, applyScanlatorFilter = true) },
+                        entries,
                         setOfNotNull(chapterId, startedOn),
                     )
                     val opening = openingChapter(chapters, restored = chapterId, startedOn = startedOn)
@@ -281,12 +293,18 @@ class ReaderViewModel @AssistedInject constructor(
                     // A file lookup per manifest row, so it is only made when a filter reads it.
                     val downloadedFilter = filters.skipFiltered && manga.downloadedFilterRaw != Manga.SHOW_ALL
                     val downloaded = if (downloadedFilter || filters.downloadedOnly) {
-                        downloadedChapters.subscribeByMangaId(mangaId).first()
+                        entries.flatMapTo(HashSet()) { downloadedChapters.subscribeByMangaId(it.id).first() }
                     } else {
                         emptySet()
                     }
                     // Only the duplicate pass reads the ranking, so it is read only when that runs.
-                    val ranking = if (filters.skipDupe) getScanlatorPriority.await(mangaId) else emptyMap()
+                    val ranking = if (filters.skipDupe) {
+                        entries.fold(emptyMap<String, Long>()) { ranks, entry ->
+                            getScanlatorPriority.await(entry.id) + ranks
+                        }
+                    } else {
+                        emptyMap()
+                    }
                     val session = ReaderSession.build(
                         manga = manga,
                         all = chapters,
@@ -294,6 +312,7 @@ class ReaderViewModel @AssistedInject constructor(
                         prefs = filters,
                         downloaded = downloaded,
                         ranking = ranking,
+                        owners = entries.associateBy { it.id },
                     )
                     // The handle's page belongs to the chapter it was saved with, so a fallback
                     // to the chapter the reader was started on resumes that chapter instead.
@@ -303,7 +322,7 @@ class ReaderViewModel @AssistedInject constructor(
                         manga = manga,
                         session = session,
                         initialChapterId = opening.id,
-                        incognito = incognitoPolicy.isIncognito(manga.source),
+                        incognito = entries.any { incognitoPolicy.isIncognito(it.source) },
                         // The same derivation MangaChanged and PreferencesChanged use below, so
                         // the mode the session opens in and the mode it settles on after the first
                         // row or preference change can never disagree.
@@ -328,8 +347,8 @@ class ReaderViewModel @AssistedInject constructor(
                     val message = R.string.reader_chapter_gone.takeIf { error is ChapterGoneException }
                     send(ReaderEvent.SessionFailed(error, message))
                 }
-            if (loaded.isSuccess) {
-                observeChanges(mangaId)
+            loaded.getOrNull()?.let {
+                observeChanges(it.manga.id)
                 observeNotes()
             }
         }
@@ -353,10 +372,14 @@ class ReaderViewModel @AssistedInject constructor(
      * reader with "That chapter is gone". Only the requested chapters come back; the rest of an
      * excluded scanlator's chapters stay out of the session.
      */
-    private suspend fun withRequested(filtered: List<Chapter>, mangaId: Long, requested: Set<Long>): List<Chapter> {
+    private suspend fun withRequested(
+        filtered: List<Chapter>,
+        entries: List<Manga>,
+        requested: Set<Long>,
+    ): List<Chapter> {
         val missing = requested - filtered.mapTo(HashSet()) { it.id }
         if (missing.isEmpty()) return filtered
-        return filtered + getChaptersByMangaId.await(mangaId).filter { it.id in missing }
+        return filtered + entries.flatMap { getChaptersByMangaId.await(it.id) }.filter { it.id in missing }
     }
 
     /**
@@ -691,9 +714,13 @@ class ReaderViewModel @AssistedInject constructor(
             val loaded = runCatching {
                 withContext(dispatchers.io) {
                     val manga = _state.value.manga ?: error("no manga")
-                    val source = sourceManager.getOrStub(manga.source)
+                    // The state's row is the freshest of the session's own entry.
+                    val owner = _state.value.session?.ownerOf(chapter.chapter)
+                        ?.takeUnless { it.id == manga.id }
+                        ?: manga
+                    val source = sourceManager.getOrStub(owner.source)
                     val loader = chapter.pageLoader
-                        ?: pageLoaderResolver.resolve(manga, chapter, source) { preloadWindow }
+                        ?: pageLoaderResolver.resolve(owner, chapter, source) { preloadWindow }
                             .also { resolved = it }
                     val pages = loader.getPages()
                     if (pages.isEmpty()) throw PageListEmptyException(chapter.chapter.id)

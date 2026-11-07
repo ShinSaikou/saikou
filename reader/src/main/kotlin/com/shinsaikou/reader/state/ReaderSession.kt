@@ -12,7 +12,17 @@ import tachiyomi.domain.manga.model.Manga
  * The ordered, filtered chapter list of one reader session, computed once at open.
  * Contract 07 section 3.4.
  */
-class ReaderSession(val manga: Manga, val chapters: List<ReaderChapter>) {
+class ReaderSession(
+    val manga: Manga,
+    val chapters: List<ReaderChapter>,
+    private val owners: Map<Long, Manga> = mapOf(manga.id to manga),
+) {
+
+    /** The ids of the entries this session reads, one unless the title is merged. */
+    val entryIds: Set<Long> get() = owners.keys
+
+    /** The entry [chapter] belongs to, whose source serves it: [manga] unless the title is merged. */
+    fun ownerOf(chapter: Chapter): Manga = owners[chapter.mangaId] ?: manga
 
     fun indexOf(chapter: ReaderChapter): Int = chapters.indexOfFirst { it.chapter.id == chapter.chapter.id }
 
@@ -62,6 +72,9 @@ class ReaderSession(val manga: Manga, val chapters: List<ReaderChapter>) {
          * duplicate pass reads to keep the best-ranked copy of each other number (phase 4 unit SC).
          * It is only consulted under `skipDupe`, so the caller may pass an empty map when that is
          * off; empty is also an unranked title, which keeps upstream's rule.
+         *
+         * [owners] is the session's entries by id, which settle whether a chapter is a Local one. In
+         * a merged title that is per chapter; [manga] alone holds the filters.
          */
         fun build(
             manga: Manga,
@@ -70,7 +83,9 @@ class ReaderSession(val manga: Manga, val chapters: List<ReaderChapter>) {
             prefs: SessionFilters,
             downloaded: Set<Long>,
             ranking: Map<String, Long>,
+            owners: Map<Long, Manga> = mapOf(manga.id to manga),
         ): ReaderSession {
+            val isLocal = { chapter: Chapter -> (owners[chapter.mangaId] ?: manga).source == SourceIds.LOCAL }
             val initial = all.firstOrNull { it.id == initialChapterId }
                 ?: error("the chapter being opened is not in the manga's chapter list")
 
@@ -79,7 +94,8 @@ class ReaderSession(val manga: Manga, val chapters: List<ReaderChapter>) {
                 kept = kept.filterNot { chapter ->
                     when {
                         prefs.skipRead && chapter.read -> true
-                        prefs.skipFiltered -> isFilteredOut(manga, chapter, downloaded)
+                        prefs.skipFiltered ->
+                            isFilteredOut(manga, chapter, isLocal(chapter) || chapter.id in downloaded)
                         else -> false
                     }
                 }
@@ -94,17 +110,16 @@ class ReaderSession(val manga: Manga, val chapters: List<ReaderChapter>) {
             // upstream runs it after: a number whose preferred copy is not downloaded keeps its
             // downloaded one, where upstream drops the downloaded copy, then the preferred one, and
             // loses the number.
-            if (prefs.downloadedOnly && manga.source != SourceIds.LOCAL) {
-                sorted = sorted.filter { it.id in downloaded || it.id == initialChapterId }
+            if (prefs.downloadedOnly) {
+                sorted = sorted.filter { isLocal(it) || it.id in downloaded || it.id == initialChapterId }
             }
             if (prefs.skipDupe) {
                 sorted = sorted.removeDuplicates(initial, ranking)
             }
-            return ReaderSession(manga, sorted.map(::ReaderChapter))
+            return ReaderSession(manga, sorted.map(::ReaderChapter), owners)
         }
 
-        private fun isFilteredOut(manga: Manga, chapter: Chapter, downloaded: Set<Long>): Boolean {
-            val isDownloaded = manga.source == SourceIds.LOCAL || chapter.id in downloaded
+        private fun isFilteredOut(manga: Manga, chapter: Chapter, isDownloaded: Boolean): Boolean {
             return (manga.unreadFilterRaw == Manga.CHAPTER_SHOW_READ && !chapter.read) ||
                 (manga.unreadFilterRaw == Manga.CHAPTER_SHOW_UNREAD && chapter.read) ||
                 (manga.downloadedFilterRaw == Manga.CHAPTER_SHOW_DOWNLOADED && !isDownloaded) ||
