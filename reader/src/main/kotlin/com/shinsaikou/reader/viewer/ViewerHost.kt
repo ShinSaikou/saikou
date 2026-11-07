@@ -10,6 +10,7 @@ import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.viewer.ViewerNavigation
 import kotlinx.coroutines.CoroutineScope
+import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.domain.manga.model.Manga
 
 /**
@@ -67,8 +68,11 @@ interface ViewerHost {
      */
     val manga: Manga?
 
+    /** The entry [chapter] belongs to, which is [manga] unless the title is merged (R163). */
+    fun ownerOf(chapter: Chapter): Manga? = manga
+
     /**
-     * The entry's downloaded chapters, which the chapter transition marks as upstream's does with
+     * The downloaded chapters of the session's entries, which the chapter transition marks as upstream's does with
      * its `DownloadManager`. Snapshot state in the reader, so the transition redraws when it changes.
      */
     val downloadedChapterIds: Set<Long> get() = emptySet()

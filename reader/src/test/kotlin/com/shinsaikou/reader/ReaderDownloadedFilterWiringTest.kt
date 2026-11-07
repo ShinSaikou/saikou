@@ -188,6 +188,7 @@ class ReaderDownloadedFilterWiringTest {
             every { create(any()) } returns mockk(relaxed = true)
         },
         incognitoPolicy = mockk<IncognitoPolicy> { every { isIncognito(any()) } returns false },
+        readerEntries = { listOf(it) },
         readerPreferences = readerPreferences,
         preloadPolicy = mockk<PreloadPolicy> { every { compute() } returns PreloadPolicy.DEFAULT },
         animatedImagePolicy = mockk(relaxed = true),

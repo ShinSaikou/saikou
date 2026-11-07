@@ -48,7 +48,8 @@ interface ReaderGraph {
     /**
      * Ruling R22's shape, verbatim. `@ContributesTo(AppScope::class)` merges this factory into
      * `AppGraph`, which makes Metro resolve every accessor above; the app module binds
-     * [ChapterWebActions], [PageImageActions], `IncognitoPolicy` and `LocalChapterResolver`, and
+     * [ChapterWebActions], [PageImageActions], `IncognitoPolicy`, `ReaderEntries` and
+     * `LocalChapterResolver`, and
      * provides the `Dispatchers`, `PreferenceStore`, `Json` and app `CoroutineScope` that
      * `ReaderViewModel` reaches through.
      */

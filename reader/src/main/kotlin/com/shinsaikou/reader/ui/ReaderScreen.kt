@@ -130,9 +130,9 @@ fun ReaderScreen(
     // The chapter web URL is shell state, not reader state: one IO call per chapter, and nothing in
     // the reducer depends on it (decision D14).
     val chapterUrl by produceState<String?>(null, state.manga, state.currentChapter) {
-        val manga = state.manga
+        val owner = state.currentOwner
         val chapter = state.currentChapter?.chapter
-        value = if (manga == null || chapter == null) null else webActions.chapterUrl(manga, chapter)
+        value = if (owner == null || chapter == null) null else webActions.chapterUrl(owner, chapter)
     }
     LaunchedEffect(chapterUrl) { onAssistUrlChanged(chapterUrl) }
 
@@ -221,8 +221,8 @@ fun ReaderScreen(
             },
             onOpenInWebView = {
                 val url = chapterUrl ?: return@ReaderAppBarsHost
-                val manga = state.manga ?: return@ReaderAppBarsHost
-                val intent = webActions.webViewIntent(context, manga, url) ?: webActions.browserIntent(url)
+                val owner = state.currentOwner ?: return@ReaderAppBarsHost
+                val intent = webActions.webViewIntent(context, owner, url) ?: webActions.browserIntent(url)
                 context.startActivitySafely(intent, messages)
             },
             onOpenInBrowser = {

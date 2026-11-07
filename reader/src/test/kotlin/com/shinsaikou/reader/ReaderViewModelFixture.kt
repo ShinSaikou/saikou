@@ -21,6 +21,7 @@ import com.shinsaikou.reader.state.IncognitoPolicy
 import com.shinsaikou.reader.state.MANGA_ID
 import com.shinsaikou.reader.state.PreloadPolicy
 import com.shinsaikou.reader.state.ProgressCommitter
+import com.shinsaikou.reader.state.ReaderEntries
 import com.shinsaikou.reader.state.manga
 import com.shinsaikou.source.Source
 import com.shinsaikou.source.SourceManager
@@ -57,6 +58,9 @@ import com.shinsaikou.core.common.coroutines.Dispatchers as AppDispatchers
  * the three page note interactors, which are the real ones. [getManga] follows no row by default;
  * a test of the entry's row passes the real interactor over its own repository. [excluded] are the
  * chapters whose scanlator the owner excluded: the scanlator filter leaves them out of the list.
+ * A title of several entries passes [readerEntries] and one flat [chapters] list, each chapter
+ * served by the entry its `mangaId` names; [downloadedChapters] and [incognitoPolicy] default to a
+ * strict mock and to one answering [incognito] for every source.
  */
 internal fun readerViewModel(
     savedState: SavedStateHandle,
@@ -73,10 +77,17 @@ internal fun readerViewModel(
         every { subscribeOrNull(MANGA_ID) } returns emptyFlow()
     },
     excluded: Set<Long> = emptySet(),
+    readerEntries: ReaderEntries = ReaderEntries { listOf(it) },
+    downloadedChapters: DownloadedChapters = mockk<DownloadedChapters>(),
+    incognitoPolicy: IncognitoPolicy = mockk<IncognitoPolicy> { every { isIncognito(any()) } returns incognito },
 ): ReaderViewModel {
+    // Each entry serves the chapters whose mangaId is its id, so a title of several entries passes
+    // one flat list. An entry with none answers an empty list.
     val getChapters = mockk<GetChaptersByMangaId> {
-        coEvery { await(MANGA_ID, true) } returns chapters.filterNot { it.id in excluded }
-        coEvery { await(MANGA_ID, false) } returns chapters
+        coEvery { await(any<Long>(), true) } answers {
+            chapters.filter { it.mangaId == firstArg<Long>() && it.id !in excluded }
+        }
+        coEvery { await(any<Long>(), false) } answers { chapters.filter { it.mangaId == firstArg<Long>() } }
     }
     val getChapter = mockk<GetChapter> {
         coEvery { await(any<Long>()) } answers { rows(firstArg()) }
@@ -94,12 +105,13 @@ internal fun readerViewModel(
         upsertBookmarkNote = UpsertBookmarkNote(notes),
         removeBookmarkNote = RemoveBookmarkNote(notes),
         pageLoaderResolver = resolver,
-        downloadedChapters = mockk<DownloadedChapters>(),
+        downloadedChapters = downloadedChapters,
         basePreferences = BasePreferences(InMemoryPreferenceStore()),
         progressCommitterFactory = mockk<ProgressCommitter.Factory> {
             every { create(any()) } returns committer
         },
-        incognitoPolicy = mockk<IncognitoPolicy> { every { isIncognito(any()) } returns incognito },
+        incognitoPolicy = incognitoPolicy,
+        readerEntries = readerEntries,
         readerPreferences = ReaderPreferences(InMemoryPreferenceStore()),
         preloadPolicy = mockk<PreloadPolicy> { every { compute() } returns PreloadPolicy.DEFAULT },
         animatedImagePolicy = mockk(),

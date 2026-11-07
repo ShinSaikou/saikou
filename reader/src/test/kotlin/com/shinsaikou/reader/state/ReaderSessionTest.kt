@@ -294,6 +294,120 @@ class ReaderSessionTest {
         build(initial = 1).readBack(waitingChapter(42)) shouldBe emptyList()
     }
 
+    // ---- Merged entries, each chapter owned by its own entry (R163) ----
+
+    private val online = manga(id = 7L, source = 1L)
+    private val local = manga(id = 20L, source = SourceIds.LOCAL)
+    private val owners = mapOf(online.id to online, local.id to local)
+
+    /** Chapters 1 and 2 belong to the Local entry, 3 and 4 to the online one. */
+    private val merged = listOf(
+        chapter(id = 1, mangaId = local.id),
+        chapter(id = 2, mangaId = local.id),
+        chapter(id = 3, mangaId = online.id),
+        chapter(id = 4, mangaId = online.id),
+    )
+
+    @Test
+    fun `ownerOf answers the entry the chapter belongs to`() {
+        val session = ReaderSession(online, emptyList(), owners)
+
+        session.ownerOf(chapter(id = 1, mangaId = local.id)) shouldBe local
+        session.ownerOf(chapter(id = 3, mangaId = online.id)) shouldBe online
+    }
+
+    @Test
+    fun `ownerOf falls back to the session's manga for an entry that is not in owners`() {
+        val session = ReaderSession(online, emptyList(), owners)
+
+        session.ownerOf(chapter(id = 9, mangaId = 99L)) shouldBe online
+    }
+
+    @Test
+    fun `entryIds is every entry of the session`() {
+        ReaderSession(online, emptyList(), owners).entryIds shouldBe setOf(online.id, local.id)
+    }
+
+    @Test
+    fun `with the default owners the session has one entry, its manga`() {
+        val session = ReaderSession(online, emptyList())
+
+        session.entryIds shouldBe setOf(online.id)
+        session.ownerOf(chapter(id = 1, mangaId = online.id)) shouldBe online
+    }
+
+    @Test
+    fun `build keeps the owners it was given`() {
+        val session = build(manga = online, all = merged, initial = 3, owners = owners)
+
+        session.entryIds shouldBe setOf(online.id, local.id)
+        session.ownerOf(merged[0]) shouldBe local
+    }
+
+    @Test
+    fun `downloaded only keeps a local owner's chapters and drops the online owner's that are not downloaded`() {
+        val session = build(
+            manga = online,
+            all = merged,
+            initial = 1,
+            prefs = none.copy(downloadedOnly = true),
+            owners = owners,
+        )
+        ids(session) shouldBe listOf(1L, 2L)
+    }
+
+    @Test
+    fun `downloaded only keeps the online owner's downloaded chapters beside the local owner's`() {
+        val session = build(
+            manga = online,
+            all = merged,
+            initial = 1,
+            prefs = none.copy(downloadedOnly = true),
+            downloaded = setOf(4L),
+            owners = owners,
+        )
+        ids(session) shouldBe listOf(1L, 2L, 4L)
+    }
+
+    @Test
+    fun `downloaded only keeps the tapped chapter of the online owner`() {
+        val session = build(
+            manga = online,
+            all = merged,
+            initial = 4,
+            prefs = none.copy(downloadedOnly = true),
+            owners = owners,
+        )
+        ids(session) shouldBe listOf(1L, 2L, 4L)
+    }
+
+    @Test
+    fun `the downloaded filter counts a local owner's chapter as downloaded`() {
+        val filtered = online.copy(chapterFlags = Manga.CHAPTER_SORTING_NUMBER or Manga.CHAPTER_SHOW_DOWNLOADED)
+        val session = build(
+            manga = filtered,
+            all = merged,
+            initial = 4,
+            prefs = none.copy(skipFiltered = true),
+            owners = mapOf(filtered.id to filtered, local.id to local),
+        )
+        // 3 is online and not downloaded, so it goes; 1 and 2 are Local; 4 is the tapped chapter.
+        ids(session) shouldBe listOf(1L, 2L, 4L)
+    }
+
+    @Test
+    fun `the not downloaded filter drops a local owner's chapters`() {
+        val filtered = online.copy(chapterFlags = Manga.CHAPTER_SORTING_NUMBER or Manga.CHAPTER_SHOW_NOT_DOWNLOADED)
+        val session = build(
+            manga = filtered,
+            all = merged,
+            initial = 3,
+            prefs = none.copy(skipFiltered = true),
+            owners = mapOf(filtered.id to filtered, local.id to local),
+        )
+        ids(session) shouldBe listOf(3L, 4L)
+    }
+
     private fun build(
         manga: Manga = manga(),
         all: List<tachiyomi.domain.chapter.model.Chapter> = this.all,
@@ -301,7 +415,8 @@ class ReaderSessionTest {
         prefs: SessionFilters = none,
         downloaded: Set<Long> = emptySet(),
         ranking: Map<String, Long> = emptyMap(),
-    ) = ReaderSession.build(manga, all, initial, prefs, downloaded, ranking)
+        owners: Map<Long, Manga> = mapOf(manga.id to manga),
+    ) = ReaderSession.build(manga, all, initial, prefs, downloaded, ranking, owners)
 
     private fun ids(session: ReaderSession) = session.chapters.map { it.chapter.id }
 }
