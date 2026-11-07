@@ -7,6 +7,8 @@ release may change behaviour.
 
 ## Unreleased
 
+## 0.1.3 - 2026-11-07
+
 ### Added
 
 - **Merged entries** in Settings > Experimental, off by default, shows one title from several sources
