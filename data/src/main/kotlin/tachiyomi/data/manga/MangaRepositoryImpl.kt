@@ -26,8 +26,9 @@ import tachiyomi.domain.manga.repository.MangaRepository
  * gone (no upcoming screen), and the fresh soft-delete, manual-order, excluded-scanlator and
  * source-rewrite functions of 04-domain's interface are added, with `getMangaByIdOrNullAsFlow`
  * (phase 4 unit missing-entry), `partialUpdate` logs a library add's chapters without progress
- * (phase 4 unit NB), `rebuildLibrarySummary` is the library counts' repair (phase 5 unit SC4), and
- * `setDetailsOverride` is the owner's title and description edit (phase 5 unit ED).
+ * (phase 4 unit NB), `rebuildLibrarySummary` is the library counts' repair (phase 5 unit SC4),
+ * `setDetailsOverride` is the owner's title and description edit (phase 5 unit ED), and
+ * `rewriteSourceId` rewrites the merged tables too (R163).
  */
 @Inject
 @SingleIn(AppScope::class)
@@ -268,7 +269,9 @@ class MangaRepositoryImpl(
     }
 
     override suspend fun rewriteSourceId(oldSourceId: Long, newSourceId: Long): Long {
-        return handler.await {
+        return handler.await(inTransaction = true) {
+            merged_groupsQueries.rewriteGroupSource(newSourceId = newSourceId, oldSourceId = oldSourceId)
+            merged_groupsQueries.rewriteMemberSource(newSourceId = newSourceId, oldSourceId = oldSourceId)
             mangasQueries.rewriteSourceId(newSourceId = newSourceId, oldSourceId = oldSourceId)
         }
     }

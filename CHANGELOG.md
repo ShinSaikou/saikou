@@ -56,6 +56,7 @@ release may change behaviour.
 
 ### Changed
 
+- Sync uses a new format, so every device needs this version before it can sync again.
 - The Backup screen has two tabs, **Create** and **Restore**, instead of one long list where
   restoring sat below every export option. The automatic backups are listed on the Restore tab,
   and a backup file opened from outside Saikou opens straight on it.

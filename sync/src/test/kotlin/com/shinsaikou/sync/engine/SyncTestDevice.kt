@@ -6,11 +6,14 @@ import app.cash.sqldelight.db.SqlCursor
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import com.shinsaikou.data.AndroidDatabaseHandler
 import com.shinsaikou.data.DatabaseHandler
+import com.shinsaikou.data.merged.MergedGroupRepositoryImpl
 import com.shinsaikou.data.source.SourceAliasRepositoryImpl
 import com.shinsaikou.data.sync.SyncChangeLogRepositoryImpl
 import com.shinsaikou.data.sync.SyncStoreImpl
 import com.shinsaikou.domain.category.CategorySyncKey
 import com.shinsaikou.domain.download.AutoDownload
+import com.shinsaikou.domain.merged.interactor.ReconcileMergedRead
+import com.shinsaikou.domain.preferences.LibraryPreferences
 import com.shinsaikou.domain.preferences.SyncRestorePreferences
 import com.shinsaikou.domain.sync.repository.SyncStore
 import com.shinsaikou.sync.InMemorySyncBackend
@@ -23,6 +26,7 @@ import com.shinsaikou.sync.SyncRunResult
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import tachiyomi.core.common.preference.InMemoryPreferenceStore
 import tachiyomi.data.Chapters
 import tachiyomi.data.Database
 import tachiyomi.data.DateColumnAdapter
@@ -84,7 +88,12 @@ internal class SyncTestDevice(
         SyncRestorePreferences(store) { key, value -> store.getBoolean(key, false).set(value) }
     }
     val autoDownload: AutoDownload = autoDownloadOf(this)
-    val engine = SyncEngine(store, changeLog, aliases, preferences, restorePreferences, MergeEngine(), autoDownload)
+    val mergedGroups = MergedGroupRepositoryImpl(handler)
+    val libraryPreferences = LibraryPreferences(InMemoryPreferenceStore())
+    val engine = SyncEngine(
+        store, changeLog, aliases, preferences, restorePreferences, MergeEngine(), autoDownload,
+        ReconcileMergedRead(mergedGroups, libraryPreferences),
+    )
 
     /** The calls the default [autoDownload] recorded. */
     val pulledChapters: List<List<Long>> get() = (autoDownload as RecordingAutoDownload).pulled

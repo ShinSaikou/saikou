@@ -3,6 +3,7 @@ package com.shinsaikou.ui.fixture
 import com.shinsaikou.domain.chapter.interactor.SetReadStatus
 import com.shinsaikou.domain.download.ReadChapterCleanup
 import com.shinsaikou.domain.preferences.DownloadPreferences
+import io.mockk.coEvery
 import io.mockk.mockk
 import tachiyomi.core.common.preference.InMemoryPreferenceStore
 import tachiyomi.domain.chapter.repository.ChapterRepository
@@ -36,4 +37,5 @@ internal fun deletingSetReadStatus(
     mangaRepository = mangaRepository,
     downloadPreferences = DownloadPreferences(InMemoryPreferenceStore()).apply { removeAfterMarkedAsRead.set(true) },
     readChapterCleanup = cleanup,
+    getMergedGroup = mockk { coEvery { await(any()) } returns null },
 )

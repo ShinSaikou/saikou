@@ -14,6 +14,7 @@ import com.shinsaikou.domain.chapter.interactor.SyncChaptersWithSource
 import com.shinsaikou.domain.download.AutoDownload
 import com.shinsaikou.domain.download.model.DownloadQueueEntry
 import com.shinsaikou.domain.manga.interactor.UpdateManga
+import com.shinsaikou.domain.merged.interactor.ReconcileMergedRead
 import com.shinsaikou.domain.preferences.DownloadPreferences
 import com.shinsaikou.domain.preferences.LibraryPreferences
 import com.shinsaikou.domain.preferences.ReaderPreferences
@@ -118,6 +119,7 @@ class MigrateMangaSyncTest {
             },
             merge = MergeEngine(),
             autoDownload = autoDownload,
+            reconcileMergedRead = ReconcileMergedRead(mockk(), LibraryPreferences(InMemoryPreferenceStore())),
         )
 
         fun sync() = runBlocking { engine.run(backend) }.shouldNotBeNull()

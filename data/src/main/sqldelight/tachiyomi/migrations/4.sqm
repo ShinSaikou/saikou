@@ -1,0 +1,75 @@
+-- Fresh: schema version 4 to 5, merged entries (R163, design/plans/merged-entries.md section 3).
+-- Version 4 is the committed schemas/4.db; verifyMigrations applies this file to it and diffs the
+-- result against the .sq files, so every statement here mirrors one in merged_groups.sq, where the
+-- reasons are. Nothing but the two new tables changes, so no existing row moves.
+
+CREATE TABLE merged_groups(
+    _id INTEGER NOT NULL PRIMARY KEY,
+    main_source INTEGER NOT NULL,
+    main_url TEXT NOT NULL,
+    show_all INTEGER NOT NULL DEFAULT 0,
+    modified_at INTEGER NOT NULL,
+    is_syncing INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (main_source, main_url)
+);
+
+CREATE TABLE merged_members(
+    member_source INTEGER NOT NULL,
+    member_url TEXT NOT NULL,
+    group_id INTEGER NOT NULL,
+    position INTEGER NOT NULL,
+    check_updates INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (member_source, member_url),
+    FOREIGN KEY (group_id) REFERENCES merged_groups (_id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_merged_groups_is_syncing ON merged_groups(is_syncing) WHERE is_syncing = 1;
+CREATE INDEX idx_merged_members_group_id_position ON merged_members(group_id, position);
+
+CREATE TRIGGER insert_merged_group_change AFTER INSERT ON merged_groups
+WHEN new.is_syncing = 0
+BEGIN
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('merged_group', new._id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+CREATE TRIGGER update_merged_group_change AFTER UPDATE OF show_all ON merged_groups
+WHEN new.is_syncing = 0 AND new.show_all != old.show_all
+BEGIN
+    UPDATE merged_groups
+    SET modified_at = max(strftime('%s', 'now') * 1000, modified_at + 1)
+    WHERE _id = new._id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('merged_group', new._id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+CREATE TRIGGER insert_merged_member_change AFTER INSERT ON merged_members
+WHEN (SELECT is_syncing FROM merged_groups WHERE _id = new.group_id) = 0
+BEGIN
+    UPDATE merged_groups
+    SET modified_at = max(strftime('%s', 'now') * 1000, modified_at + 1)
+    WHERE _id = new.group_id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('merged_group', new.group_id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+CREATE TRIGGER update_merged_member_change AFTER UPDATE OF position, check_updates ON merged_members
+WHEN (SELECT is_syncing FROM merged_groups WHERE _id = new.group_id) = 0
+    AND (new.position != old.position OR new.check_updates != old.check_updates)
+BEGIN
+    UPDATE merged_groups
+    SET modified_at = max(strftime('%s', 'now') * 1000, modified_at + 1)
+    WHERE _id = new.group_id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('merged_group', new.group_id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+CREATE TRIGGER delete_merged_member_change AFTER DELETE ON merged_members
+WHEN (SELECT is_syncing FROM merged_groups WHERE _id = old.group_id) = 0
+BEGIN
+    UPDATE merged_groups
+    SET modified_at = max(strftime('%s', 'now') * 1000, modified_at + 1)
+    WHERE _id = old.group_id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('merged_group', old.group_id, 'upsert', strftime('%s', 'now') * 1000);
+END;

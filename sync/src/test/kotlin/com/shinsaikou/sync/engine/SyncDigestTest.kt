@@ -13,6 +13,7 @@ import com.shinsaikou.sync.format.HistoryRow
 import com.shinsaikou.sync.format.MangaCategoriesRow
 import com.shinsaikou.sync.format.MangaKey
 import com.shinsaikou.sync.format.MangaRow
+import com.shinsaikou.sync.format.MergedGroupRow
 import com.shinsaikou.sync.format.ScanlatorPriorityRow
 import com.shinsaikou.sync.format.SyncFormat
 import com.shinsaikou.sync.format.SyncRow
@@ -360,6 +361,22 @@ class SyncDigestTest {
         "bookmark_notes.bookmarkNotesModifiedAt" to row<BookmarkNotesRow> {
             copy(bookmarkNotesModifiedAt = (bookmarkNotesModifiedAt ?: 0) + 1)
         },
+        "merged_group.main.source" to row<MergedGroupRow> { copy(main = main.onOtherSource()) },
+        "merged_group.main.url" to row<MergedGroupRow> { copy(main = main.moved()) },
+        "merged_group.members.manga.source" to row<MergedGroupRow> {
+            copy(members = members.map { it.copy(manga = it.manga.onOtherSource()) })
+        },
+        "merged_group.members.manga.url" to row<MergedGroupRow> {
+            copy(members = members.map { it.copy(manga = it.manga.moved()) })
+        },
+        "merged_group.members.position" to row<MergedGroupRow> {
+            copy(members = members.map { it.copy(position = it.position + 1) })
+        },
+        "merged_group.members.checkUpdates" to row<MergedGroupRow> {
+            copy(members = members.map { it.copy(checkUpdates = !it.checkUpdates) })
+        },
+        "merged_group.showAll" to row<MergedGroupRow> { copy(showAll = !showAll) },
+        "merged_group.modifiedAt" to row<MergedGroupRow> { copy(modifiedAt = modifiedAt + 1) },
     )
 
     private inline fun <reified R : SyncRow> row(crossinline change: R.() -> R): (SyncRow) -> SyncRow =

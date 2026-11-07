@@ -5,7 +5,10 @@ import com.shinsaikou.sync.merge.BookmarkNoteRecord
 import com.shinsaikou.sync.merge.CategoryRecord
 import com.shinsaikou.sync.merge.ChapterRecord
 import com.shinsaikou.sync.merge.HistoryRecord
+import com.shinsaikou.sync.format.MangaKey
 import com.shinsaikou.sync.merge.MangaRecord
+import com.shinsaikou.sync.merge.MergedGroupRecord
+import com.shinsaikou.sync.merge.MergedMemberRecord
 import com.shinsaikou.sync.merge.TrackRecord
 import io.kotest.property.Arb
 import io.kotest.property.arbitrary.arbitrary
@@ -163,6 +166,34 @@ internal object MergeArbs {
     val history: Arb<HistoryRecord> = arbitrary {
         HistoryRecord(chapter = MergeFixtures.CHAPTER_KEY, readAt = clock.bind(), readDuration = small.bind())
     }
+
+    /** The three entries a generated group is made of: its main entry and the members it may name. */
+    val groupKeys: List<MangaKey> = listOf(MangaKey(1L, "/m/a"), MangaKey(1L, "/m/b"), MangaKey(2L, "/m/a"))
+
+    /**
+     * A group's clock is never null, and three values make equal clocks common. Members are drawn
+     * from [groupKeys], listed by position then key as a record holds them, so equal sets are equal
+     * values.
+     */
+    private val groupClock: Arb<Long> = Arb.element(1L, 2L, 3L)
+
+    private fun groupOf(main: Arb<MangaKey>): Arb<MergedGroupRecord> = arbitrary {
+        val members = groupKeys.filter { Arb.boolean().bind() }.map {
+            MergedMemberRecord(key = it, position = small.bind(), checkUpdates = Arb.boolean().bind())
+        }
+        MergedGroupRecord(
+            main = main.bind(),
+            showAll = Arb.boolean().bind(),
+            modifiedAt = groupClock.bind(),
+            members = members.sortedWith(compareBy({ it.position }, { it.key.source }, { it.key.url })),
+        )
+    }
+
+    /** Groups of one main entry, the only kind [MergeEngine.mergeMergedGroup] is asked to join. */
+    val mergedGroup: Arb<MergedGroupRecord> = groupOf(Arb.element(MergeFixtures.GROUP_MAIN))
+
+    /** Groups of any of three main entries, for the rule that settles a member two groups claim. */
+    val anyMergedGroup: Arb<MergedGroupRecord> = groupOf(Arb.element(groupKeys))
 
     private fun restoredAfterDeletion(deletedAt: Long?, restoredAt: Long?) =
         deletedAt != null && restoredAt != null && restoredAt >= deletedAt

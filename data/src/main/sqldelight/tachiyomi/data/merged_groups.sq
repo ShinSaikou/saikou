@@ -1,0 +1,258 @@
+-- Fresh: schema version 5, merged entries (R163, design/plans/merged-entries.md section 3). The same
+-- title from several sources stays one whole favourite per source; these two tables say which rows
+-- belong together, and one of them, the main entry, stands for the group in the Library.
+--
+-- Both name entries by source and url, never by local id, and neither has a foreign key to mangas: a
+-- sync line stores whatever it names, and a member whose row has not arrived is inert until it does.
+-- So every read joins mangas through idx_mangas_source_url. A group is live while its main entry is
+-- a live favourite with a member row of its own and at least one other member is one too; a dead
+-- group hides nothing, so a stale row is harmless (MergedGroupMapper.kt decides it).
+--
+-- An unmerge deletes the members and keeps the group row, with its newer clock, as the tombstone of
+-- that main entry. Nothing deletes a group row but a source alias collision (rewriteGroupSource).
+
+import kotlin.Boolean;
+
+CREATE TABLE merged_groups(
+    _id INTEGER NOT NULL PRIMARY KEY,
+    main_source INTEGER NOT NULL,
+    main_url TEXT NOT NULL,
+    show_all INTEGER AS Boolean NOT NULL DEFAULT 0,
+    modified_at INTEGER NOT NULL,
+    is_syncing INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (main_source, main_url)
+);
+
+-- The main entry has a row here too. position is the order of the sources' chapters, the lowest
+-- first, and is independent of which member is main.
+CREATE TABLE merged_members(
+    member_source INTEGER NOT NULL,
+    member_url TEXT NOT NULL,
+    group_id INTEGER NOT NULL,
+    position INTEGER NOT NULL,
+    check_updates INTEGER AS Boolean NOT NULL DEFAULT 1,
+    PRIMARY KEY (member_source, member_url),
+    FOREIGN KEY (group_id) REFERENCES merged_groups (_id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_merged_groups_is_syncing ON merged_groups(is_syncing) WHERE is_syncing = 1;
+-- The composite index serves WHERE group_id = ? ORDER BY position in one pass.
+CREATE INDEX idx_merged_members_group_id_position ON merged_members(group_id, position);
+
+-- entity_id is the group id: the group travels as one whole line. A member's trigger reads its
+-- group's latch; a member cascaded from a deleted group finds no group and logs nothing. A clock
+-- moves past its own last value, so two writes in one second still order.
+CREATE TRIGGER insert_merged_group_change AFTER INSERT ON merged_groups
+WHEN new.is_syncing = 0
+BEGIN
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('merged_group', new._id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+CREATE TRIGGER update_merged_group_change AFTER UPDATE OF show_all ON merged_groups
+WHEN new.is_syncing = 0 AND new.show_all != old.show_all
+BEGIN
+    UPDATE merged_groups
+    SET modified_at = max(strftime('%s', 'now') * 1000, modified_at + 1)
+    WHERE _id = new._id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('merged_group', new._id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+CREATE TRIGGER insert_merged_member_change AFTER INSERT ON merged_members
+WHEN (SELECT is_syncing FROM merged_groups WHERE _id = new.group_id) = 0
+BEGIN
+    UPDATE merged_groups
+    SET modified_at = max(strftime('%s', 'now') * 1000, modified_at + 1)
+    WHERE _id = new.group_id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('merged_group', new.group_id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+-- A member's key is left out: an alias remap is local, as the mangas rewrite beside it is.
+CREATE TRIGGER update_merged_member_change AFTER UPDATE OF position, check_updates ON merged_members
+WHEN (SELECT is_syncing FROM merged_groups WHERE _id = new.group_id) = 0
+    AND (new.position != old.position OR new.check_updates != old.check_updates)
+BEGIN
+    UPDATE merged_groups
+    SET modified_at = max(strftime('%s', 'now') * 1000, modified_at + 1)
+    WHERE _id = new.group_id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('merged_group', new.group_id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+CREATE TRIGGER delete_merged_member_change AFTER DELETE ON merged_members
+WHEN (SELECT is_syncing FROM merged_groups WHERE _id = old.group_id) = 0
+BEGIN
+    UPDATE merged_groups
+    SET modified_at = max(strftime('%s', 'now') * 1000, modified_at + 1)
+    WHERE _id = old.group_id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    VALUES ('merged_group', old.group_id, 'upsert', strftime('%s', 'now') * 1000);
+END;
+
+-- The member rows with a live favourite behind them, the lowest position first in each group: what
+-- a live group is read from. getLiveMembersByMangaId finds the group by any member's id. CROSS JOIN
+-- is how SQLite is told the join order: left to its own estimates it starts from idx_mangas_favorite,
+-- which reads every favourite of the library to find a handful of members.
+getLiveMembers:
+SELECT G._id AS groupId, G.main_source, G.main_url, G.show_all, M.member_source, M.member_url,
+    M.position, M.check_updates, A._id AS mangaId
+FROM merged_members M
+CROSS JOIN merged_groups G ON G._id = M.group_id
+CROSS JOIN mangas A ON A.source = M.member_source AND A.url = M.member_url
+WHERE A.favorite = 1 AND A.deleted_at IS NULL
+ORDER BY M.group_id, M.position;
+
+getLiveMembersByMangaId:
+SELECT G._id AS groupId, G.main_source, G.main_url, G.show_all, M.member_source, M.member_url,
+    M.position, M.check_updates, A._id AS mangaId
+FROM merged_members M
+CROSS JOIN merged_groups G ON G._id = M.group_id
+CROSS JOIN mangas A ON A.source = M.member_source AND A.url = M.member_url
+WHERE M.group_id = (
+    SELECT O.group_id
+    FROM mangas T
+    CROSS JOIN merged_members O ON O.member_source = T.source AND O.member_url = T.url
+    WHERE T._id = :mangaId AND T.favorite = 1 AND T.deleted_at IS NULL
+) AND A.favorite = 1 AND A.deleted_at IS NULL
+ORDER BY M.position;
+
+getGroupById:
+SELECT *
+FROM merged_groups
+WHERE _id = :groupId;
+
+getGroupByMain:
+SELECT *
+FROM merged_groups
+WHERE main_source = :mainSource AND main_url = :mainUrl;
+
+-- The group that holds a member, by the member's key.
+getGroupByMember:
+SELECT G.*
+FROM merged_members M
+JOIN merged_groups G ON G._id = M.group_id
+WHERE M.member_source = :memberSource AND M.member_url = :memberUrl;
+
+getMember:
+SELECT *
+FROM merged_members
+WHERE member_source = :memberSource AND member_url = :memberUrl;
+
+-- Every row of the group, the members with no live favourite behind them too.
+getMembersByGroupId:
+SELECT *
+FROM merged_members
+WHERE group_id = :groupId
+ORDER BY position;
+
+-- The whole of both tables, tombstones included, for a sync export, a snapshot and the fingerprint.
+getAllGroups:
+SELECT *
+FROM merged_groups;
+
+getAllMembers:
+SELECT *
+FROM merged_members;
+
+-- A local merge: a main entry's row may already be there as a tombstone, which is reused, and the
+-- member writes that follow move its clock past the tombstone's.
+insertGroup:
+INSERT OR IGNORE INTO merged_groups(main_source, main_url, show_all, modified_at)
+VALUES (:mainSource, :mainUrl, :showAll, strftime('%s', 'now') * 1000);
+
+insertMember:
+INSERT INTO merged_members(member_source, member_url, group_id, position, check_updates)
+VALUES (:memberSource, :memberUrl, :groupId, :position, :checkUpdates);
+
+deleteMember:
+DELETE FROM merged_members
+WHERE member_source = :memberSource AND member_url = :memberUrl;
+
+deleteMembersByGroupId:
+DELETE FROM merged_members
+WHERE group_id = :groupId;
+
+setPosition:
+UPDATE merged_members
+SET position = :position
+WHERE member_source = :memberSource AND member_url = :memberUrl;
+
+setCheckUpdates:
+UPDATE merged_members
+SET check_updates = :checkUpdates
+WHERE member_source = :memberSource AND member_url = :memberUrl;
+
+setShowAll:
+UPDATE merged_groups
+SET show_all = :showAll
+WHERE _id = :groupId;
+
+-- Changing the main entry gives both groups one clock (design/plans/merged-entries.md section 6).
+-- Logged by the member writes before it.
+setModifiedAt:
+UPDATE merged_groups
+SET modified_at = :modifiedAt
+WHERE _id = :groupId;
+
+-- The source alias remap, in mangas.rewriteSourceId's transaction. Local, as that rewrite is: no
+-- trigger reads these columns and no clock moves, since a receiver resolves the old id through its
+-- own aliases. When the new id already has a row for the same url, the row being moved takes its
+-- place, and the group replaced takes its members with it.
+rewriteGroupSource:
+UPDATE OR REPLACE merged_groups
+SET main_source = :newSourceId
+WHERE main_source = :oldSourceId;
+
+rewriteMemberSource:
+UPDATE OR REPLACE merged_members
+SET member_source = :newSourceId
+WHERE member_source = :oldSourceId;
+
+-- Raises every live copy of a recognised number any copy has read, one statement for the whole
+-- group (design/plans/merged-entries.md section 4). It only raises, and only the read flag: page
+-- progress and bookmarks stay per copy. Each IN is read once, before the first row is written, and
+-- each row's triggers are constant (library_summary_chapter_flags moves the counts by the row's own
+-- change), so a group costs its unread chapters times a lookup, with no read of the chapters per row.
+reconcileRead:
+UPDATE chapters
+SET read = 1
+WHERE read = 0 AND deleted_at IS NULL AND chapter_number >= 0
+    AND manga_id IN (
+        SELECT A._id
+        FROM merged_members M
+        CROSS JOIN mangas A ON A.source = M.member_source AND A.url = M.member_url
+        WHERE M.group_id = :groupId AND A.favorite = 1 AND A.deleted_at IS NULL
+    )
+    AND chapter_number IN (
+        SELECT C.chapter_number
+        FROM chapters C
+        WHERE C.read = 1 AND C.deleted_at IS NULL AND C.chapter_number >= 0 AND C.manga_id IN (
+            SELECT A._id
+            FROM merged_members M
+            CROSS JOIN mangas A ON A.source = M.member_source AND A.url = M.member_url
+            WHERE M.group_id = :groupId AND A.favorite = 1 AND A.deleted_at IS NULL
+        )
+    );
+
+-- Sync. An apply writes a group whole, with the row's latch raised so no trigger logs or stamps, as
+-- for a manga.
+syncInsertGroup:
+INSERT INTO merged_groups(main_source, main_url, show_all, modified_at, is_syncing)
+VALUES (:mainSource, :mainUrl, :showAll, :modifiedAt, 1);
+
+syncUpdateGroup:
+UPDATE merged_groups
+SET show_all = :showAll, modified_at = :modifiedAt
+WHERE _id = :groupId;
+
+syncSetIsSyncing:
+UPDATE merged_groups
+SET is_syncing = :isSyncing
+WHERE _id = :groupId;
+
+resetIsSyncing:
+UPDATE merged_groups
+SET is_syncing = 0
+WHERE is_syncing = 1;

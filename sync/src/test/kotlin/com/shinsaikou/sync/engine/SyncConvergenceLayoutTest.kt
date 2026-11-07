@@ -328,7 +328,7 @@ class SyncConvergenceLayoutTest {
         val bPushed = b.preferences.lastPushedSeq.get()
 
         repeat(2) {
-            shouldThrow<NewerFormatException> { b.sync() }.found shouldBe 3
+            shouldThrow<NewerFormatException> { b.sync() }.found shouldBe 4
             // The readable segment before it applied; the cursor stops before the newer one.
             b.preferences.pullCursors.get()[a.deviceId] shouldBe after
             b.long("SELECT read FROM chapters WHERE url = '/series/1/chapter/11'") shouldBe 1
@@ -342,7 +342,7 @@ class SyncConvergenceLayoutTest {
         val bytes = ByteArrayOutputStream()
         GZIPOutputStream(bytes).bufferedWriter().use { writer ->
             writer.write(
-                """{"format":3,"deviceId":"$deviceId","scope":{"kind":"segment","afterSeq":$afterSeq,""" +
+                """{"format":4,"deviceId":"$deviceId","scope":{"kind":"segment","afterSeq":$afterSeq,""" +
                     """"lastSeq":${afterSeq + 1},"rawRows":1},"counts":{"manga_v2":1}}""",
             )
             writer.write("\n")

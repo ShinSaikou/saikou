@@ -74,12 +74,18 @@ internal fun SyncTestDevice.library(): Map<String, List<List<String?>>> = mapOf(
         "SELECT C.url, N.page_index, N.note, N.date_added FROM bookmark_notes N JOIN chapters C ON C._id = N.chapter_id ORDER BY 1, 2",
         4,
     ),
+    "merged groups" to rows("SELECT main_source, main_url, show_all, modified_at FROM merged_groups ORDER BY 1, 2", 4),
+    "merged members" to rows(
+        "SELECT G.main_url, M.member_source, M.member_url, M.position, M.check_updates " +
+            "FROM merged_members M JOIN merged_groups G ON G._id = M.group_id ORDER BY 1, 2, 3",
+        5,
+    ),
 )
 
 internal fun SyncTestDevice.latchesRaised(): Long = long(
     """
     SELECT (SELECT count(*) FROM mangas WHERE is_syncing = 1) + (SELECT count(*) FROM chapters WHERE is_syncing = 1) +
-        (SELECT count(*) FROM categories WHERE is_syncing = 1)
+        (SELECT count(*) FROM categories WHERE is_syncing = 1) + (SELECT count(*) FROM merged_groups WHERE is_syncing = 1)
     """,
 )!!
 
@@ -105,6 +111,13 @@ internal fun SyncTestDevice.buildLibrary() {
     exec("INSERT INTO bookmark_notes(chapter_id, page_index, note, date_added) VALUES (10, 3, 'note', 8000)")
     exec("UPDATE mangas SET notes = 'owner notes', viewer = 2, manual_position = 4 WHERE _id = 1")
     exec("UPDATE mangas SET title_override = 'Edited title', description_override = 'Edited text' WHERE _id = 1")
+    exec("INSERT INTO merged_groups(main_source, main_url, modified_at) VALUES (${SyncTestDevice.SOURCE}, '/series/1', 9000)")
+    exec(
+        """
+        INSERT INTO merged_members(member_source, member_url, group_id, position)
+        VALUES (${SyncTestDevice.SOURCE}, '/series/1', 1, 0)
+        """,
+    )
 }
 
 /**

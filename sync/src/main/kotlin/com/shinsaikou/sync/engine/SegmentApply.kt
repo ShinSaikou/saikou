@@ -18,6 +18,7 @@ import com.shinsaikou.sync.format.HistoryRow
 import com.shinsaikou.sync.format.MangaCategoriesRow
 import com.shinsaikou.sync.format.MangaKey
 import com.shinsaikou.sync.format.MangaRow
+import com.shinsaikou.sync.format.MergedGroupRow
 import com.shinsaikou.sync.format.RowKind
 import com.shinsaikou.sync.format.ScanlatorPriorityRow
 import com.shinsaikou.sync.format.SyncRow
@@ -38,9 +39,13 @@ import com.shinsaikou.sync.merge.ChapterRecord
  * side of a row this device changed since it last pulled ([LocalChanges]) is reported as a
  * conflict.
  *
+ * A `merged_group` line has no parent to want (R163): it names entries by key and is stored whether
+ * or not this device holds them, so it is never skipped.
+ *
  * The result also names the live chapters inserted and the entries that arrived in the library,
  * inserted or turned favourite, so the pull can hand new chapters to auto-download once the
- * transaction has committed (phase 3 unit AD).
+ * transaction has committed (phase 3 unit AD), and the entries and merged groups whose rows it wrote,
+ * for the read reconcile that also runs once it has (R163).
  *
  * A chapter inserted into an entry this device already held takes the sender's source order, which
  * counts from the top of the sender's list while the entry's other rows keep this device's own
@@ -55,8 +60,7 @@ internal class SegmentApply(
 
     suspend fun apply(rows: List<SyncRow>, local: LocalChanges = LocalChanges.NONE): ApplyResult {
         // Resolved before the transaction opens: the walk is its own reads, one per hop.
-        val sources = rows.mapNotNull { it.parentManga?.source }.toSet()
-            .associateWith { sourceAliases.resolve(it) }
+        val sources = rows.flatMap { it.sources() }.toSet().associateWith { sourceAliases.resolve(it) }
         return store.apply {
             val scope = Scope(this, local) { key -> key.copy(source = sources[key.source] ?: key.source) }
             rows.forEach { scope.apply(it) }
@@ -67,8 +71,16 @@ internal class SegmentApply(
                 conflicts = scope.conflicts,
                 insertedChapters = scope.insertedChapters,
                 arrivedManga = scope.arrivedManga,
+                touchedMangaIds = scope.touchedMangaIds.toList(),
+                touchedGroupIds = scope.touchedGroupIds.toList(),
             )
         }
+    }
+
+    /** The source ids of the keys [this] names, each to resolve through the aliases. */
+    private fun SyncRow.sources(): List<Long> = when (this) {
+        is MergedGroupRow -> members.map { it.manga.source } + main.source
+        else -> listOfNotNull(parentManga?.source)
     }
 
     private inner class Scope(
@@ -81,6 +93,10 @@ internal class SegmentApply(
         val conflicts = mutableListOf<SyncConflict>()
         val insertedChapters = mutableListOf<InsertedChapter>()
         val arrivedManga = mutableSetOf<MangaKey>()
+
+        /** The entries that came into the library or had a chapter written, by id here. */
+        val touchedMangaIds = mutableSetOf<Long>()
+        val touchedGroupIds = mutableSetOf<Long>()
 
         /** The entries this apply inserted, whose chapters all carry the sender's order. */
         private val insertedMangaIds = mutableSetOf<Long>()
@@ -100,6 +116,7 @@ internal class SegmentApply(
                 is ChapterRemovedRow -> chapterRemoved(row)
                 is HistoryRow -> history(row)
                 is BookmarkNotesRow -> notes(row)
+                is MergedGroupRow -> mergedGroup(row)
             }
             if (wrote) written++
         }
@@ -141,7 +158,9 @@ internal class SegmentApply(
             val key = resolve(row.key)
             val local = db.manga(key.source, key.url)
             if (local == null) {
-                insertedMangaIds += db.insertManga(row.toRecord(key).toStored(id = 0))
+                val id = db.insertManga(row.toRecord(key).toStored(id = 0))
+                insertedMangaIds += id
+                touchedMangaIds += id
                 arrivedManga += key
                 return true
             }
@@ -156,7 +175,10 @@ internal class SegmentApply(
             val merged = merge.mergeManga(localRecord, remote)
             if (!merged.changed) return false
             db.updateManga(merged.value.toStored(local.id))
-            if (!local.favorite && merged.value.favorite) arrivedManga += key
+            if (!local.favorite && merged.value.favorite) {
+                arrivedManga += key
+                touchedMangaIds += local.id
+            }
             report(RowKind.MANGA, SyncEntity.MANGA, local.id, merged.fieldsFromRemote, local.displayTitle)
             return true
         }
@@ -235,6 +257,7 @@ internal class SegmentApply(
                     merge.mergeChapter(remote.copy(deletedAt = removedAt, restoredAt = null), remote).value
                 } ?: remote
                 val id = db.insertChapter(inserted.toStored(id = 0, mangaId = manga.id, sourceOrder = row.sourceOrder))
+                touchedMangaIds += manga.id
                 if (inserted.deletedAt == null) {
                     insertedChapters += InsertedChapter(manga.key, id)
                     if (manga.id !in insertedMangaIds) {
@@ -266,6 +289,7 @@ internal class SegmentApply(
         ): Boolean {
             if (!merged.changed) return false
             db.updateChapter(merged.value.toStored(local.id, local.mangaId, local.sourceOrder))
+            touchedMangaIds += manga.id
             report(kind, SyncEntity.CHAPTER, local.id, merged.fieldsFromRemote, manga.displayTitle, local.name)
             return true
         }
@@ -299,6 +323,42 @@ internal class SegmentApply(
                 RowKind.BOOKMARK_NOTES, SyncEntity.BOOKMARK_NOTE, chapter.id, merged.fieldsFromRemote,
                 manga.displayTitle, chapter.name,
             )
+            return true
+        }
+
+        /**
+         * The line against the group stored under its main entry, then each member the winner names
+         * against the other group that holds it, if one does. A member lost that way is left out of
+         * the row written, and one won leaves the other group, whose clock stays. Nothing here looks
+         * for a member's own row.
+         */
+        private suspend fun mergedGroup(row: MergedGroupRow): Boolean {
+            val remote = row.toRecord(resolve)
+            val stored = db.mergedGroup(remote.main.source, remote.main.url)
+            val merged = stored?.let { merge.mergeMergedGroup(it.toRecord(), remote) }
+            val line = merged?.value ?: remote
+
+            val claims = line.members.map { member ->
+                member to db.mergedGroupOfMember(member.key.source, member.key.url)?.takeIf { it.key != line.main }
+            }
+            val kept = claims.filter { (_, holder) -> holder == null || merge.takesMember(line, holder.toRecord()) }
+            val settled = line.copy(members = kept.map { (member, _) -> member })
+            if (settled == stored?.toRecord()) return false
+
+            kept.forEach { (member, holder) ->
+                if (holder != null) db.removeMergedMember(member.key.source, member.key.url)
+            }
+            val id = if (stored == null) {
+                db.insertMergedGroup(settled.toStored(id = 0))
+            } else {
+                db.updateMergedGroup(settled.toStored(stored.id))
+                stored.id
+            }
+            touchedGroupIds += id
+            merged?.let {
+                val title = db.manga(line.main.source, line.main.url)?.displayTitle ?: line.main.url
+                report(RowKind.MERGED_GROUP, SyncEntity.MERGED_GROUP, id, it.fieldsFromRemote, title)
+            }
             return true
         }
 
@@ -351,7 +411,9 @@ internal class SegmentApply(
  * What one apply did: [written] rows changed, [skipped] rows could not be stored for want of a
  * parent, and [conflicts] name the rows where a remote value replaced one this device had changed.
  * [insertedChapters] are the live chapter rows it inserted, and [arrivedManga] the entries it
- * inserted or turned favourite, by the key this device holds them under.
+ * inserted or turned favourite, by the key this device holds them under. [touchedMangaIds] are the
+ * entries that came into the library or had a chapter written and [touchedGroupIds] the merged groups
+ * it wrote, each by id here; lists, so adding up a whole library's chunks stays a copy of the array.
  */
 internal data class ApplyResult(
     val written: Int,
@@ -359,6 +421,8 @@ internal data class ApplyResult(
     val conflicts: List<SyncConflict>,
     val insertedChapters: List<InsertedChapter> = emptyList(),
     val arrivedManga: Set<MangaKey> = emptySet(),
+    val touchedMangaIds: List<Long> = emptyList(),
+    val touchedGroupIds: List<Long> = emptyList(),
 ) {
     operator fun plus(other: ApplyResult) = ApplyResult(
         written + other.written,
@@ -366,6 +430,8 @@ internal data class ApplyResult(
         conflicts + other.conflicts,
         insertedChapters + other.insertedChapters,
         arrivedManga + other.arrivedManga,
+        touchedMangaIds + other.touchedMangaIds,
+        touchedGroupIds + other.touchedGroupIds,
     )
 
     /** The same result with no chapter counted as new: a snapshot's, or a first pull's export. */

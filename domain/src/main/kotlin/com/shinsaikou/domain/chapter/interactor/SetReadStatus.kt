@@ -1,6 +1,7 @@
 package com.shinsaikou.domain.chapter.interactor
 
 import com.shinsaikou.domain.download.ReadChapterCleanup
+import com.shinsaikou.domain.merged.interactor.GetMergedGroup
 import com.shinsaikou.domain.preferences.DownloadPreferences
 import dev.zacsweers.metro.Inject
 import logcat.LogPriority
@@ -26,6 +27,11 @@ import tachiyomi.domain.manga.repository.MangaRepository
  * the delete runs on the application's scope, so a slow or failing one neither holds the caller nor
  * keeps the tracker push that follows it from reading the rows written. Marking unread deletes
  * nothing.
+ *
+ * In a merged entry, read state is written to every copy (`design/plans/merged-entries.md` section
+ * 4): a mark, read or unread, expands to the other live copies of the same recognised numbers,
+ * which count as written. [GetMergedGroup] returns nothing while the Experimental switch is
+ * off, so nothing expands.
  */
 @Inject
 class SetReadStatus(
@@ -33,6 +39,7 @@ class SetReadStatus(
     private val mangaRepository: MangaRepository,
     private val downloadPreferences: DownloadPreferences,
     private val readChapterCleanup: ReadChapterCleanup,
+    private val getMergedGroup: GetMergedGroup,
 ) {
 
     private fun toUpdate(chapter: Chapter, read: Boolean) = ChapterUpdate(
@@ -53,8 +60,13 @@ class SetReadStatus(
         vararg chapters: Chapter,
         removeDownloads: Boolean = true,
     ): Result = withNonCancellableContext {
-        val chaptersToUpdate = chapters.filter {
-            if (read) !it.read else it.read || it.lastPageRead > 0
+        val chaptersToUpdate = try {
+            (chapters.toList() + copiesOf(chapters.asList())).filter {
+                if (read) !it.read else it.read || it.lastPageRead > 0
+            }
+        } catch (e: Exception) {
+            logcat(LogPriority.ERROR, e)
+            return@withNonCancellableContext Result.InternalError(e)
         }
         if (chaptersToUpdate.isEmpty()) {
             return@withNonCancellableContext Result.NoChapters
@@ -70,6 +82,23 @@ class SetReadStatus(
         if (read && removeDownloads) removeDownloadsOf(chaptersToUpdate)
 
         Result.Success(chaptersToUpdate)
+    }
+
+    /**
+     * The other live copies of [chapters]' recognised numbers across each live group they belong to,
+     * one read of each member's list however many chapters were marked.
+     */
+    private suspend fun copiesOf(chapters: List<Chapter>): List<Chapter> {
+        val marked = chapters.groupBy { it.mangaId }
+        val named = chapters.mapTo(HashSet()) { it.id }
+        return marked.keys.mapNotNull { getMergedGroup.await(it) }.distinctBy { it.id }.flatMap { group ->
+            val numbers = group.members.flatMap { marked[it.mangaId].orEmpty() }
+                .filter { it.isRecognizedNumber }
+                .mapTo(HashSet()) { it.chapterNumber }
+            if (numbers.isEmpty()) return@flatMap emptyList()
+            group.members.flatMap { chapterRepository.getChapterByMangaId(it.mangaId) }
+                .filter { it.chapterNumber in numbers && it.id !in named }
+        }
     }
 
     /** Upstream's `SetReadStatus` lines 49-57, fire and forget; a throw is logged, never returned. */

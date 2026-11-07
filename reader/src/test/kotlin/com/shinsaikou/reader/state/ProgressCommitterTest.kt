@@ -5,6 +5,7 @@ import com.shinsaikou.domain.chapter.ChapterReplacements
 import com.shinsaikou.domain.chapter.interactor.SetReadStatus
 import com.shinsaikou.domain.download.AutoDownload
 import com.shinsaikou.domain.download.ReadChapterCleanup
+import com.shinsaikou.domain.merged.interactor.GetMergedGroup
 import com.shinsaikou.domain.preferences.DownloadPreferences
 import com.shinsaikou.domain.preferences.LibraryPreferences
 import com.shinsaikou.domain.preferences.TrackPreferences
@@ -493,7 +494,10 @@ class ProgressCommitterTest {
             scope = this,
             updateChapter = UpdateChapter(chapterRepository),
             upsertHistory = UpsertHistory(historyRepository),
-            setReadStatus = SetReadStatus(chapterRepository, mangaRepository, DownloadPreferences(downloadStore), cleanup),
+            setReadStatus = SetReadStatus(
+                chapterRepository, mangaRepository, DownloadPreferences(downloadStore), cleanup,
+                GetMergedGroup(mockk(), LibraryPreferences(store)),
+            ),
             getChaptersByMangaId = GetChaptersByMangaId(chapterRepository),
             libraryPreferences = LibraryPreferences(store),
             trackPreferences = TrackPreferences(trackStore),

@@ -17,8 +17,12 @@ object SyncFormat {
      * Raised whenever a row or a field is added; every older value keeps a written rule. Format 2
      * (phase 5 unit ED) adds the manga line's `titleOverride`, `descriptionOverride` and
      * `detailsModifiedAt`; a format 1 line, which has none of them, reads as an entry never edited.
+     * Format 3 (R163) adds the `merged_group` line. A file of format 1 or 2 has none and says nothing
+     * about merges, so it leaves every group as it is. A build older than format 3 stops at the header
+     * of a format 3 file, and it runs push and compaction only after a pull that returned, so it never
+     * rewrites a snapshot without these lines.
      */
-    const val CURRENT: Int = 2
+    const val CURRENT: Int = 3
 
     /** The most raw change log rows one segment folds: `SyncChangeLogRepositoryImpl.MAX_LIMIT` (Q3). */
     const val MAX_RAW_ROWS: Int = 5_000

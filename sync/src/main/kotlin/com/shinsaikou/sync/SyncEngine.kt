@@ -1,6 +1,7 @@
 package com.shinsaikou.sync
 
 import com.shinsaikou.domain.download.AutoDownload
+import com.shinsaikou.domain.merged.interactor.ReconcileMergedRead
 import com.shinsaikou.domain.preferences.SyncRestorePreferences
 import com.shinsaikou.domain.source.repository.SourceAliasRepository
 import com.shinsaikou.domain.sync.model.SyncDeletedKey
@@ -8,6 +9,7 @@ import com.shinsaikou.domain.sync.model.SyncEntity
 import com.shinsaikou.domain.sync.model.SyncLibraryCounts
 import com.shinsaikou.domain.sync.repository.SyncChangeLogRepository
 import com.shinsaikou.domain.sync.repository.SyncStore
+import com.shinsaikou.sync.engine.ApplyResult
 import com.shinsaikou.sync.engine.LocalChanges
 import com.shinsaikou.sync.engine.SegmentApply
 import com.shinsaikou.sync.engine.SyncCompaction
@@ -56,7 +58,8 @@ import kotlin.uuid.Uuid
  * every transaction that holds them has committed and so outside the `is_syncing` latch: what the
  * library update on the other device would have downloaded there is downloaded here (phase 3 unit
  * AD). [SyncPull.newChapterIds] leaves out a snapshot's rows, a first pull's export and entries new
- * to the library.
+ * to the library. The same moment runs the merged read reconcile over the groups the pull touched
+ * (R163), and what it raises goes out in this run's own push.
  */
 @SingleIn(AppScope::class)
 @Inject
@@ -68,6 +71,7 @@ class SyncEngine(
     private val restorePreferences: SyncRestorePreferences,
     merge: MergeEngine,
     private val autoDownload: AutoDownload,
+    private val reconcileMergedRead: ReconcileMergedRead,
 ) {
 
     private val mutex = Mutex()
@@ -88,6 +92,7 @@ class SyncEngine(
                 timings.time(SyncTimings.Step.PULL) { pull.run() }
             } finally {
                 queuePulledChapters(pull.newChapterIds)
+                reconcileMerged(pull.result)
             }
             if (pull.result.skipped > 0) preferences.skippedRows.set(true)
 
@@ -183,6 +188,18 @@ class SyncEngine(
             throw e
         } catch (e: Exception) {
             logcat(LogPriority.WARN) { "Could not queue ${chapterIds.size} pulled chapters: ${e.javaClass.name}" }
+        }
+    }
+
+    /** As [queuePulledChapters]: the next entry open reconciles a group again. */
+    private suspend fun reconcileMerged(result: ApplyResult) {
+        if (result.touchedGroupIds.isEmpty() && result.touchedMangaIds.isEmpty()) return
+        try {
+            reconcileMergedRead.await(result.touchedGroupIds.toSet(), result.touchedMangaIds.toSet())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logcat(LogPriority.WARN) { "Could not reconcile the pulled merged entries: ${e.javaClass.name}" }
         }
     }
 

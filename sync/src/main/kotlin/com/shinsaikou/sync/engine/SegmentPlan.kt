@@ -52,6 +52,7 @@ internal class SegmentFold(batch: List<SyncChange>) {
             .map { it.entityId }
             .toSet(),
         removedChapters = removedChapters,
+        mergedGroupIds = ids(SyncEntity.MERGED_GROUP),
     )
 }
 
@@ -60,7 +61,8 @@ internal class SegmentFold(batch: List<SyncChange>) {
  * every count (R81 item 5). The file is self-contained (Q4): every category line comes first, each
  * after its parent's, then each manga's line followed by the lines that belong to it. A chapter's
  * line also precedes its history and notes, which a receiver cannot store without the chapter
- * (R81 carry-over 5). A row the fold names that is gone by now is left out.
+ * (R81 carry-over 5). The merged group lines come last; they want no parent. A row the fold names
+ * that is gone by now is left out.
  */
 internal fun planSegment(fold: SegmentFold, stored: SyncPushRows): List<SyncRow> {
     val request = fold.request
@@ -122,6 +124,7 @@ internal fun planSegment(fold: SegmentFold, stored: SyncPushRows): List<SyncRow>
             rows += ChapterRemovedRow(key = key, removedAt = removedAt.getValue(key))
         }
     }
+    stored.mergedGroups.values.sortedBy { it.id }.forEach { rows += it.toRecord().toRow() }
     return rows
 }
 

@@ -11,6 +11,8 @@ import com.shinsaikou.domain.sync.model.StoredCategory
 import com.shinsaikou.domain.sync.model.StoredChapter
 import com.shinsaikou.domain.sync.model.StoredHistory
 import com.shinsaikou.domain.sync.model.StoredManga
+import com.shinsaikou.domain.sync.model.StoredMergedGroup
+import com.shinsaikou.domain.sync.model.StoredMergedMember
 import com.shinsaikou.domain.sync.model.StoredNote
 import com.shinsaikou.domain.sync.model.StoredTrack
 import com.shinsaikou.domain.sync.model.SyncLibraryCounts
@@ -28,6 +30,8 @@ import tachiyomi.data.Database
 import tachiyomi.data.History
 import tachiyomi.data.Manga_sync
 import tachiyomi.data.Mangas
+import tachiyomi.data.Merged_groups
+import tachiyomi.data.Merged_members
 import tachiyomi.data.SyncGetAll
 import java.util.Date
 
@@ -80,6 +84,9 @@ class SyncStoreImpl(
             notes = notes,
             history = history,
             categories = categoriesQueries.syncGetAll().awaitAsList().mapNotNull { it.toStored() }.associateBy { it.id },
+            mergedGroups = request.mergedGroupIds.mapNotNull { id ->
+                merged_groupsQueries.getGroupById(id).awaitAsOneOrNull()?.let { it.toStored(membersOf(it._id)) }
+            }.associateBy { it.id },
         )
     }
 
@@ -131,6 +138,13 @@ class SyncStoreImpl(
         )
     }
 
+    override suspend fun mergedGroups(): List<StoredMergedGroup> = handler.await(inTransaction = true) {
+        val members = merged_groupsQueries.getAllMembers().awaitAsList().groupBy { it.group_id }
+        merged_groupsQueries.getAllGroups().awaitAsList().map { group ->
+            group.toStored(members[group._id].orEmpty().map { it.toStored() })
+        }
+    }
+
     override suspend fun beginExport(pushedSeq: Long): Long = handler.await(inTransaction = true) {
         // The counter's row appears with the log's first insert.
         val counter = driver.executeQuery(
@@ -171,13 +185,15 @@ class SyncStoreImpl(
     /**
      * One apply's reads and writes. Each write raises the latch of the row whose triggers it fires
      * and remembers it; [lowerLatches] lowers every one before the transaction commits. The manga's
-     * latch covers its history, tracks and collections, the chapter's its notes (R85 item 1).
+     * latch covers its history, tracks and collections, the chapter's its notes (R85 item 1), and a
+     * merged group's its members.
      */
     private class ApplyScope(private val db: Database) : SyncApplyScope {
 
         private val raisedMangas = mutableSetOf<Long>()
         private val raisedChapters = mutableSetOf<Long>()
         private val raisedCategories = mutableSetOf<Long>()
+        private val raisedGroups = mutableSetOf<Long>()
 
         /** Every category this apply wrote, by id, with the parent key its line carries. */
         private val categoryParentKeys = linkedMapOf<Long, String?>()
@@ -218,6 +234,15 @@ class SyncStoreImpl(
 
         override suspend fun history(chapterId: Long): StoredHistory? =
             db.historyQueries.syncGetByChapterId(chapterId).awaitAsOneOrNull()?.toStored()
+
+        override suspend fun mergedGroup(mainSource: Long, mainUrl: String): StoredMergedGroup? =
+            db.merged_groupsQueries.getGroupByMain(mainSource, mainUrl).awaitAsOneOrNull()
+                ?.let { it.toStored(db.membersOf(it._id)) }
+
+        override suspend fun mergedGroupOfMember(source: Long, url: String): StoredMergedGroup? =
+            db.merged_groupsQueries.getMember(source, url).awaitAsOneOrNull()?.let { member ->
+                db.merged_groupsQueries.getGroupById(member.group_id).awaitAsOne().toStored(db.membersOf(member.group_id))
+            }
 
         override suspend fun insertManga(manga: StoredManga): Long {
             db.mangasQueries.syncInsert(
@@ -466,6 +491,49 @@ class SyncStoreImpl(
             )
         }
 
+        override suspend fun insertMergedGroup(group: StoredMergedGroup): Long {
+            db.merged_groupsQueries.syncInsertGroup(
+                mainSource = group.mainSource,
+                mainUrl = group.mainUrl,
+                showAll = group.showAll,
+                modifiedAt = group.modifiedAt,
+            )
+            // Inserted with the latch raised, so the insert trigger stayed quiet.
+            val id = db.merged_groupsQueries.getGroupByMain(group.mainSource, group.mainUrl).awaitAsOne()._id
+            raisedGroups += id
+            insertMembers(id, group.members)
+            return id
+        }
+
+        override suspend fun updateMergedGroup(group: StoredMergedGroup) {
+            raiseGroup(group.id)
+            db.merged_groupsQueries.syncUpdateGroup(
+                showAll = group.showAll,
+                modifiedAt = group.modifiedAt,
+                groupId = group.id,
+            )
+            db.merged_groupsQueries.deleteMembersByGroupId(group.id)
+            insertMembers(group.id, group.members)
+        }
+
+        override suspend fun removeMergedMember(source: Long, url: String) {
+            val member = db.merged_groupsQueries.getMember(source, url).awaitAsOneOrNull() ?: return
+            raiseGroup(member.group_id)
+            db.merged_groupsQueries.deleteMember(source, url)
+        }
+
+        private suspend fun insertMembers(groupId: Long, members: List<StoredMergedMember>) {
+            members.forEach { member ->
+                db.merged_groupsQueries.insertMember(
+                    memberSource = member.source,
+                    memberUrl = member.url,
+                    groupId = groupId,
+                    position = member.position,
+                    checkUpdates = member.checkUpdates,
+                )
+            }
+        }
+
         /**
          * The apply's last pass over its categories (phase 5 unit CT, challenge c2 g3 C point 3),
          * once every category line it holds is stored. A line's parent may come after it: a cycle
@@ -500,6 +568,7 @@ class SyncStoreImpl(
             raisedMangas.forEach { db.mangasQueries.syncSetIsSyncing(isSyncing = 0, mangaId = it) }
             raisedChapters.forEach { db.chaptersQueries.syncSetIsSyncing(isSyncing = 0, chapterId = it) }
             raisedCategories.forEach { db.categoriesQueries.syncSetIsSyncing(isSyncing = 0, categoryId = it) }
+            raisedGroups.forEach { db.merged_groupsQueries.syncSetIsSyncing(isSyncing = 0, groupId = it) }
         }
 
         private suspend fun raiseManga(id: Long) {
@@ -512,6 +581,10 @@ class SyncStoreImpl(
 
         private suspend fun raiseCategory(id: Long) {
             if (raisedCategories.add(id)) db.categoriesQueries.syncSetIsSyncing(isSyncing = 1, categoryId = id)
+        }
+
+        private suspend fun raiseGroup(id: Long) {
+            if (raisedGroups.add(id)) db.merged_groupsQueries.syncSetIsSyncing(isSyncing = 1, groupId = id)
         }
 
         /**
@@ -547,6 +620,25 @@ private suspend fun Database.notesOf(chapterId: Long): List<StoredNote> =
     bookmark_notesQueries.getByChapterId(chapterId).awaitAsList().map {
         StoredNote(pageIndex = it.page_index, note = it.note, dateAdded = it.date_added)
     }
+
+private suspend fun Database.membersOf(groupId: Long): List<StoredMergedMember> =
+    merged_groupsQueries.getMembersByGroupId(groupId).awaitAsList().map { it.toStored() }
+
+private fun Merged_groups.toStored(members: List<StoredMergedMember>) = StoredMergedGroup(
+    id = _id,
+    mainSource = main_source,
+    mainUrl = main_url,
+    showAll = show_all,
+    modifiedAt = modified_at,
+    members = members,
+)
+
+private fun Merged_members.toStored() = StoredMergedMember(
+    source = member_source,
+    url = member_url,
+    position = position,
+    checkUpdates = check_updates,
+)
 
 private fun Mangas.toStored() = StoredManga(
     id = _id,

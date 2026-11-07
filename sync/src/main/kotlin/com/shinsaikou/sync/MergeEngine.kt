@@ -7,7 +7,10 @@ import com.shinsaikou.sync.merge.CategoryRecord
 import com.shinsaikou.sync.merge.ChapterRecord
 import com.shinsaikou.sync.merge.HistoryRecord
 import com.shinsaikou.sync.merge.MangaRecord
+import com.shinsaikou.sync.merge.MergedGroupRecord
+import com.shinsaikou.sync.merge.MergedMemberRecord
 import com.shinsaikou.sync.merge.TrackRecord
+import com.shinsaikou.sync.merge.compareEncoded
 import com.shinsaikou.sync.merge.higherEncoding
 import dev.zacsweers.metro.Inject
 import kotlinx.serialization.json.JsonObject
@@ -299,6 +302,38 @@ class MergeEngine {
         return mergedCollection(local, remote, merged, "bookmarkNotes")
     }
 
+    /**
+     * One main entry's group, a whole line: the newer clock's. On equal clocks a line with members
+     * beats an empty one, since changing the main entry writes the old main's empty line and the new
+     * main's set under one clock and a concurrent edit of the old set must not lose to it; two lines
+     * that both hold members, or both none, take the higher encoding. What the line holds is settled
+     * after this, one member at a time, by [takesMember].
+     */
+    fun mergeMergedGroup(local: MergedGroupRecord, remote: MergedGroupRecord): Merged<MergedGroupRecord> {
+        require(local.main == remote.main) { "Cannot merge two groups: ${local.main} and ${remote.main}" }
+        val merged = byClock(local.modifiedAt, remote.modifiedAt, local, remote) { a, b ->
+            when {
+                a.members.isEmpty() && b.members.isNotEmpty() -> b
+                b.members.isEmpty() && a.members.isNotEmpty() -> a
+                else -> higherEncoding(a, b) { it.encode(this) }
+            }
+        }
+        return merged(local, remote, merged, MERGED_GROUP_VALUES)
+    }
+
+    /**
+     * Whether [claimant], whose line names a member, takes it from [holder], the other group that
+     * holds it: the newer clock, and on equal clocks the larger main key, so every device lands on
+     * one group whichever line it read first.
+     */
+    fun takesMember(claimant: MergedGroupRecord, holder: MergedGroupRecord): Boolean {
+        val order = compareClocks(claimant.modifiedAt, holder.modifiedAt)
+        if (order != 0) return order > 0
+        val claimantKey = CanonicalWriter().long(claimant.main.source).string(claimant.main.url).toByteArray()
+        val holderKey = CanonicalWriter().long(holder.main.source).string(holder.main.url).toByteArray()
+        return compareEncoded(claimantKey, holderKey) > 0
+    }
+
     internal class Field<T>(val name: String, val get: (T) -> Any?)
 
     internal companion object {
@@ -350,6 +385,10 @@ class MergeEngine {
         val HISTORY_VALUES: List<Field<HistoryRecord>> = listOf(
             Field("readAt") { it.readAt },
             Field("readDuration") { it.readDuration },
+        )
+        val MERGED_GROUP_VALUES: List<Field<MergedGroupRecord>> = listOf(
+            Field("showAll") { it.showAll },
+            Field("members") { it.members },
         )
         val TRACK_VALUES: List<Field<TrackRecord>> = listOf(
             Field("remoteId") { it.remoteId },
@@ -477,6 +516,15 @@ private fun CategoryRecord.values() = CategoryValues(name, order, flags, parentK
 private fun TrackRecord.encode(writer: CanonicalWriter) {
     writer.long(remoteId).nullableLong(libraryId).string(title).double(lastChapterRead).long(totalChapters)
         .long(status).double(score).string(remoteUrl).long(startDate).long(finishDate).boolean(private)
+}
+
+private fun MergedGroupRecord.encode(writer: CanonicalWriter) {
+    writer.boolean(showAll).long(members.size.toLong())
+    members.forEach { it.encode(writer) }
+}
+
+private fun MergedMemberRecord.encode(writer: CanonicalWriter) {
+    writer.long(key.source).string(key.url).long(position).boolean(checkUpdates)
 }
 
 /**

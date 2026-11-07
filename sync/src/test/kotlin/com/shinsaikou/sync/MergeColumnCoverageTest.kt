@@ -7,6 +7,8 @@ import com.shinsaikou.sync.merge.CategoryRecord
 import com.shinsaikou.sync.merge.ChapterRecord
 import com.shinsaikou.sync.merge.HistoryRecord
 import com.shinsaikou.sync.merge.MangaRecord
+import com.shinsaikou.sync.merge.MergedGroupRecord
+import com.shinsaikou.sync.merge.MergedMemberRecord
 import com.shinsaikou.sync.merge.TrackRecord
 import io.kotest.assertions.withClue
 import io.kotest.matchers.collections.shouldBeEmpty
@@ -146,6 +148,23 @@ class MergeColumnCoverageTest {
             ),
             excluded = mapOf("_id" to LOCAL_ID),
         ),
+        Table(
+            "merged_groups",
+            fields = mapOf(
+                "main_source" to "MergedGroupRecord.main", "main_url" to "MergedGroupRecord.main",
+                "show_all" to "MergedGroupRecord.showAll", "modified_at" to "MergedGroupRecord.modifiedAt",
+            ),
+            excluded = mapOf("_id" to LOCAL_ID, "is_syncing" to IS_SYNCING),
+        ),
+        Table(
+            "merged_members",
+            fields = mapOf(
+                "member_source" to "MergedMemberRecord.key", "member_url" to "MergedMemberRecord.key",
+                "group_id" to PARENT, "position" to "MergedMemberRecord.position",
+                "check_updates" to "MergedMemberRecord.checkUpdates",
+            ),
+            excluded = emptyMap(),
+        ),
     )
 
     /** Unit C's columns (Q6's clocks and Q7's key), by table. */
@@ -159,7 +178,7 @@ class MergeColumnCoverageTest {
     )
 
     /** Record fields no column feeds directly: the keys, whose own fields the columns feed. */
-    private val structural = setOf("MangaRecord.key", "ChapterRecord.key", "ChapterKey.manga")
+    private val structural = setOf("MangaRecord.key", "ChapterRecord.key", "ChapterKey.manga", "MergedGroupRecord.members")
 
     private val clocks = mapOf(
         MangaRecord::class.java to setOf(
@@ -169,6 +188,7 @@ class MergeColumnCoverageTest {
         ),
         ChapterRecord::class.java to setOf("version", "restoredAt", "bookmarkNotesModifiedAt"),
         CategoryRecord::class.java to setOf("modifiedAt", "restoredAt"),
+        MergedGroupRecord::class.java to setOf("modifiedAt"),
     )
 
     @Test
@@ -193,7 +213,7 @@ class MergeColumnCoverageTest {
         val records = listOf(
             MangaKey::class.java, ChapterKey::class.java, MangaRecord::class.java, TrackRecord::class.java,
             ChapterRecord::class.java, BookmarkNoteRecord::class.java, CategoryRecord::class.java,
-            HistoryRecord::class.java,
+            HistoryRecord::class.java, MergedGroupRecord::class.java, MergedMemberRecord::class.java,
         )
         val declared = records.flatMap { type -> fieldsOf(type).map { "${type.simpleName}.$it" } }.toSet()
 

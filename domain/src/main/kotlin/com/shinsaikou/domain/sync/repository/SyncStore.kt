@@ -4,6 +4,7 @@ import com.shinsaikou.domain.sync.model.StoredCategory
 import com.shinsaikou.domain.sync.model.StoredChapter
 import com.shinsaikou.domain.sync.model.StoredHistory
 import com.shinsaikou.domain.sync.model.StoredManga
+import com.shinsaikou.domain.sync.model.StoredMergedGroup
 import com.shinsaikou.domain.sync.model.StoredNote
 import com.shinsaikou.domain.sync.model.StoredTrack
 import com.shinsaikou.domain.sync.model.SyncLibraryCounts
@@ -39,6 +40,13 @@ interface SyncStore {
      * is every keyed category, as for a push.
      */
     suspend fun readLibrary(mangaIds: Collection<Long>): SyncPushRows
+
+    /**
+     * Every merged group, tombstones included, read in one transaction: a group is named by keys, so
+     * it belongs to no entry a page of [readLibrary] reads, and a full export or a snapshot carries
+     * it once.
+     */
+    suspend fun mergedGroups(): List<StoredMergedGroup>
 
     /**
      * Fixes the seq a full export ends at, in one transaction: the highest seq the change log has
@@ -85,6 +93,12 @@ interface SyncApplyScope {
     suspend fun notes(chapterId: Long): List<StoredNote>
 
     suspend fun history(chapterId: Long): StoredHistory?
+
+    /** The group whose main entry is that key, with its members, tombstones included. */
+    suspend fun mergedGroup(mainSource: Long, mainUrl: String): StoredMergedGroup?
+
+    /** The group that holds the member with that key, with all its members. */
+    suspend fun mergedGroupOfMember(source: Long, url: String): StoredMergedGroup?
 
     /** Inserts [manga] and returns its id. */
     suspend fun insertManga(manga: StoredManga): Long
@@ -143,4 +157,13 @@ interface SyncApplyScope {
     suspend fun setNotes(chapterId: Long, notes: List<StoredNote>, modifiedAt: Long?)
 
     suspend fun setHistory(history: StoredHistory)
+
+    /** Inserts [group] and its members, whose keys no other group holds, and returns its id. */
+    suspend fun insertMergedGroup(group: StoredMergedGroup): Long
+
+    /** Writes every value and member of [group] over the row with its id. */
+    suspend fun updateMergedGroup(group: StoredMergedGroup)
+
+    /** Takes the member with that key out of whatever group holds it; the group's clock stays. */
+    suspend fun removeMergedMember(source: Long, url: String)
 }

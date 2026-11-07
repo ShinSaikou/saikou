@@ -77,6 +77,15 @@ class LibraryPreferences(private val preferenceStore: PreferenceStore) {
     val customUpdateInterval: Preference<Boolean> =
         preferenceStore.getBoolean(Preference.appStateKey("library_custom_update_interval"), false)
 
+    /**
+     * Experimental: the kill switch of merged entries (R163). While off every lookup of a group
+     * returns nothing, so each member shows as its own entry, and read expansion and the reconcile
+     * stand aside. The rows stay and still sync. App state, so it stays on the device and out of
+     * backups.
+     */
+    val mergedEntries: Preference<Boolean> =
+        preferenceStore.getBoolean(Preference.appStateKey("library_merged_entries"), false)
+
     val autoUpdateMetadata: Preference<Boolean> = preferenceStore.getBoolean("auto_update_metadata", false)
 
     val showContinueReadingButton: Preference<Boolean> =

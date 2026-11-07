@@ -11,6 +11,8 @@ import app.cash.sqldelight.async.coroutines.awaitAsOne
 import com.shinsaikou.SaikouApp
 import com.shinsaikou.di.AppGraph
 import com.shinsaikou.domain.download.AutoDownload
+import com.shinsaikou.domain.merged.interactor.ReconcileMergedRead
+import com.shinsaikou.domain.preferences.LibraryPreferences
 import com.shinsaikou.domain.preferences.SyncRestorePreferences
 import com.shinsaikou.domain.sync.model.SyncChange
 import com.shinsaikou.domain.sync.model.SyncEntity
@@ -154,6 +156,7 @@ class SyncLatchDeviceTest {
             SyncRestorePreferences(preferenceStore) { key, value -> preferenceStore.getBoolean(key, false).set(value) },
             MergeEngine(),
             NoAutoDownload,
+            ReconcileMergedRead(graph.mergedGroupRepository, LibraryPreferences(preferenceStore)),
         )
         return Engine(engine, preferences)
     }

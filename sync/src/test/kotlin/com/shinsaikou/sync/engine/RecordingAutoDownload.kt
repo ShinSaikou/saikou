@@ -31,6 +31,6 @@ internal class RecordingAutoDownload(private val device: SyncTestDevice) : AutoD
     ): Int = 0
 
     private companion object {
-        val LATCHED_TABLES = listOf("mangas", "chapters", "categories")
+        val LATCHED_TABLES = listOf("mangas", "chapters", "categories", "merged_groups")
     }
 }

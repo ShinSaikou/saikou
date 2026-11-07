@@ -39,9 +39,9 @@ class IndexAuditTest {
     }
 
     @Test
-    fun `the allow-list covers exactly the twenty-six findings no index serves`() {
+    fun `the allow-list covers exactly the twenty-eight findings no index serves`() {
         val allowlist = Allowlist.read()
-        allowlist.entries.keys.size shouldBe 26
+        allowlist.entries.keys.size shouldBe 28
         allowlist.entries.keys shouldContain "view/historyView.sq:history:mangas.title"
         allowlist.entries.keys shouldContain "mangas.sq:getDuplicateLibraryManga:mangas.title"
         allowlist.entries.keys shouldContain "chapters.sq:getScanlatorsByMangaId:chapters.scanlator"
@@ -75,6 +75,9 @@ class IndexAuditTest {
         // The folder-name read that replaced three whole-manifest reads, until a schema version indexes it.
         allowlist.entries.keys shouldContain
             "downloads_manifest.sq:getByChapterDirNames:downloads_manifest.chapter_dir_name"
+        // Schema version 5's read reconcile, whose number no index serves on purpose.
+        allowlist.entries.keys shouldContain "merged_groups.sq:reconcileRead:chapters.chapter_number"
+        allowlist.entries.keys shouldContain "merged_groups.sq:reconcileRead:chapters.read"
     }
 
     @Test

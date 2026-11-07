@@ -123,5 +123,20 @@ data class CategoryRecord(
     val restoredAt: Long?,
 )
 
+/**
+ * One `merged_groups` row with its members, by position then key, so two devices that hold the same
+ * rows hold equal values. Empty [members] are an unmerge's tombstone. Unlike the other clocks,
+ * [modifiedAt] is never null: a group has one from the write that made it.
+ */
+data class MergedGroupRecord(
+    val main: MangaKey,
+    val showAll: Boolean,
+    val modifiedAt: Long,
+    val members: List<MergedMemberRecord>,
+)
+
+/** One `merged_members` row. */
+data class MergedMemberRecord(val key: MangaKey, val position: Long, val checkUpdates: Boolean)
+
 /** One `history` row: when the chapter was last read, and for how long. */
 data class HistoryRecord(val chapter: ChapterKey, val readAt: Long?, val readDuration: Long)

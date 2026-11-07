@@ -109,9 +109,25 @@ data class StoredTrack(
 data class StoredNote(val pageIndex: Long, val note: String, val dateAdded: Long)
 
 /**
+ * One `merged_groups` row with its member rows. Everything is named by source and url, because a
+ * member's own row may not be here yet. Empty [members] are an unmerge's tombstone. On an insert [id]
+ * is ignored.
+ */
+data class StoredMergedGroup(
+    val id: Long,
+    val mainSource: Long,
+    val mainUrl: String,
+    val showAll: Boolean,
+    val modifiedAt: Long,
+    val members: List<StoredMergedMember>,
+)
+
+data class StoredMergedMember(val source: Long, val url: String, val position: Long, val checkUpdates: Boolean)
+
+/**
  * What a push reads, by local id, as the change log names the rows (R85 item 1): the manga rows, each
  * manga collection by its manga, the chapter rows, each chapter's notes, the history rows by chapter,
- * the category rows, and the manga that each hard-deleted chapter belonged to.
+ * the category rows, the manga that each hard-deleted chapter belonged to, and the merged groups.
  */
 data class SyncPushRequest(
     val mangaIds: Set<Long> = emptySet(),
@@ -123,6 +139,7 @@ data class SyncPushRequest(
     val noteChapterIds: Set<Long> = emptySet(),
     val historyChapterIds: Set<Long> = emptySet(),
     val removedChapters: Set<SyncDeletedKey.Chapter> = emptySet(),
+    val mergedGroupIds: Set<Long> = emptySet(),
 )
 
 /**
@@ -130,7 +147,8 @@ data class SyncPushRequest(
  * every manga a returned chapter, note set, history row or collection belongs to, and the manga of
  * each removed chapter that is still stored; [chapters] also holds the chapter of every returned
  * note set and history row. [categories] is every keyed category, deleted ones included, since a
- * category set or a parent may name any of them. Collections are keyed by their parent's id.
+ * category set or a parent may name any of them. Collections are keyed by their parent's id, and
+ * [mergedGroups] by the group's.
  */
 data class SyncPushRows(
     val mangas: Map<Long, StoredManga>,
@@ -142,6 +160,7 @@ data class SyncPushRows(
     val notes: Map<Long, List<StoredNote>>,
     val history: Map<Long, StoredHistory>,
     val categories: Map<Long, StoredCategory>,
+    val mergedGroups: Map<Long, StoredMergedGroup> = emptyMap(),
 )
 
 /**

@@ -33,6 +33,7 @@ import com.shinsaikou.data.DatabaseInitializer
 import com.shinsaikou.domain.library.interactor.GetLibraryItems
 import com.shinsaikou.domain.manga.interactor.RefreshMangaFromSource
 import com.shinsaikou.domain.manga.interactor.UpdateManga
+import com.shinsaikou.domain.merged.repository.MergedGroupRepository
 import com.shinsaikou.domain.source.interactor.GetSourceMangaPage
 import com.shinsaikou.domain.category.interactor.SetCategoryParent
 import com.shinsaikou.domain.chapter.interactor.SetReadStatus
@@ -422,6 +423,7 @@ interface AppGraph : MetroViewModelMultibindings {
     val extensionStoreRepository: ExtensionStoreRepository
     val historyRepository: HistoryRepository
     val mangaRepository: MangaRepository
+    val mergedGroupRepository: MergedGroupRepository
     val scanlatorPriorityRepository: ScanlatorPriorityRepository
     val sourceAliasRepository: SourceAliasRepository
     val stubSourceRepository: StubSourceRepository

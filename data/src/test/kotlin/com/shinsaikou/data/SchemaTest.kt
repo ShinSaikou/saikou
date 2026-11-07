@@ -29,7 +29,7 @@ import java.util.Properties
 import com.shinsaikou.source.model.UpdateStrategy
 
 /**
- * The current schema, version 4, created fresh on the JVM driver: the DDL the `.sq` files create,
+ * The current schema, version 5, created fresh on the JVM driver: the DDL the `.sq` files create,
  * the seeds, the foreign keys, the triggers, the views, the query plans and the column adapters
  * (05-data section 6.2). The migrations are [MigrationTest]'s, [MigrationToVersion3Test]'s and
  * [MigrationToVersion4Test]'s.
@@ -64,8 +64,8 @@ class SchemaTest {
     // 1. Creates -------------------------------------------------------------------------------
 
     @Test
-    fun `the schema creates at version 4 with every declared object`() {
-        scalar("PRAGMA user_version") shouldBe "4"
+    fun `the schema creates at version 5 with every declared object`() {
+        scalar("PRAGMA user_version") shouldBe "5"
 
         names("table") shouldContainExactly EXPECTED_TABLES.sorted()
         names("view") shouldContainExactly listOf("historyView", "libraryView", "updatesView")
@@ -460,13 +460,14 @@ class SchemaTest {
 
         /**
          * The fifteen tables of 05-data 2.1 to 2.15, the library's per-entry counts of schema
-         * version 3 (phase 5 unit SC4), and the AUTOINCREMENT bookkeeping table.
+         * version 3 (phase 5 unit SC4), the merged entries of version 5 (R163), and the AUTOINCREMENT
+         * bookkeeping table.
          */
         val EXPECTED_TABLES = listOf(
             "bookmark_notes", "categories", "chapters", "download_queue", "downloads_manifest",
             "excluded_scanlators", "extension_store", "history", "library_summary", "manga_sync", "mangas",
-            "mangas_categories", "scanlator_priority", "source_alias", "sources", "sqlite_sequence",
-            "sync_change_log",
+            "mangas_categories", "merged_groups", "merged_members", "scanlator_priority", "source_alias",
+            "sources", "sqlite_sequence", "sync_change_log",
         )
 
         val EXPECTED_INDEXES = listOf(
@@ -499,6 +500,8 @@ class SchemaTest {
             "idx_mangas_next_update",
             "idx_mangas_source_url",
             "idx_mangas_url",
+            "idx_merged_groups_is_syncing",
+            "idx_merged_members_group_id_position",
             "idx_scanlator_priority_manga_id_priority",
             "idx_source_alias_new_source_id",
             "idx_sync_change_log_changed_at",
@@ -514,6 +517,7 @@ class SchemaTest {
             "delete_history_change",
             "delete_manga_category_update_version",
             "delete_manga_change",
+            "delete_merged_member_change",
             "delete_scanlator_priority_change",
             "delete_track_change",
             "insert_category_change",
@@ -521,6 +525,8 @@ class SchemaTest {
             "insert_excluded_scanlator_change",
             "insert_manga_category_update_version",
             "insert_manga_change",
+            "insert_merged_group_change",
+            "insert_merged_member_change",
             "insert_scanlator_priority_change",
             "library_summary_chapter_delete",
             "library_summary_chapter_flags",
@@ -553,6 +559,8 @@ class SchemaTest {
             "update_manga_restored_at",
             "update_manga_version",
             "update_manga_version_from_chapter",
+            "update_merged_group_change",
+            "update_merged_member_change",
             "update_scanlator_priority_change",
             "update_track_change",
             "upsert_bookmark_note_change",
@@ -699,6 +707,21 @@ class SchemaTest {
                 scanlator|TEXT|1||0
                 priority|INTEGER|1|0|0
             """,
+            "merged_groups" to """
+                _id|INTEGER|1||1
+                main_source|INTEGER|1||0
+                main_url|TEXT|1||0
+                show_all|INTEGER|1|0|0
+                modified_at|INTEGER|1||0
+                is_syncing|INTEGER|1|0|0
+            """,
+            "merged_members" to """
+                member_source|INTEGER|1||1
+                member_url|TEXT|1||2
+                group_id|INTEGER|1||0
+                position|INTEGER|1||0
+                check_updates|INTEGER|1|1|0
+            """,
             "bookmark_notes" to """
                 _id|INTEGER|1||1
                 chapter_id|INTEGER|1||0
@@ -773,6 +796,11 @@ class SchemaTest {
             "manga_sync.sq:getTracks scans [manga_sync]",
             "mangas.sq:getAllManga scans [mangas]",
             "mangas.sq:resetViewerFlags scans [mangas]",
+            "merged_groups.sq:getAllGroups scans [merged_groups]",
+            "merged_groups.sq:getAllMembers scans [merged_members]",
+            // Every group, once: read from the members, which are few, in the index's own order, each
+            // finding its entry by key. Merged entries cost what is merged, not the library.
+            "merged_groups.sq:getLiveMembers scans [merged_members]",
             "source_alias.sq:getAll scans [source_alias]",
             "sources.sq:findAll scans [sources]",
             // "read = 1 OR last_page_read != 0" is a disjunction of two partial indexes, which

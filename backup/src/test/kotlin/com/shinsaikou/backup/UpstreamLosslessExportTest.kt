@@ -569,6 +569,9 @@ class UpstreamLosslessExportTest {
                 "the file names sources from the registry",
             "source_alias" to "Saikou only: source migration aliases",
             "scanlator_priority" to "Saikou only: the scanlator ranking, a sync entity",
+            "merged_groups" to "Saikou only: merged entries, a sync entity (F10, R163 item 4); a restore loses " +
+                "only the grouping, since every member is an ordinary favourite in the file",
+            "merged_members" to "Saikou only: the members of a merged entry, as merged_groups",
             "bookmark_notes" to "Saikou only: page bookmark notes, a sync entity",
             "download_queue" to "Saikou only: this device's download queue",
             "downloads_manifest" to "Saikou only: this device's downloaded files",

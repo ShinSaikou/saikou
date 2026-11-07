@@ -73,22 +73,31 @@ class SegmentCodecTest {
     }
 
     /**
-     * The fixture is format 2 as a text editor shows it once gunzipped. Encoding the sample rows must
+     * The fixture is format 3 as a text editor shows it once gunzipped. Encoding the sample rows must
      * give it byte for byte, so a renamed property or row is a failing test rather than a new wire,
-     * and a build still writing format 1 fails here: format 2's manga line carries the edit (phase 5
-     * unit ED), which a format 1 reader must refuse (R81 item 10) rather than read and drop.
+     * and a build still writing an older format fails here: format 3 carries the merged group line
+     * (R163), which an older reader must refuse (R81 item 10) rather than read and drop.
      */
     @Test
-    fun `format 2 encodes exactly as its fixture and the fixture decodes to the sample rows`() {
+    fun `format 3 encodes exactly as its fixture and the fixture decodes to the sample rows`() {
         val fixture = fixtureText()
         val header = segmentHeader(SampleRows.full)
 
         gunzip(encode(header, SampleRows.full)) shouldBe fixture
-        fixture.lineSequence().first() shouldContain "\"format\":2,"
+        fixture.lineSequence().first() shouldContain "\"format\":3,"
 
         val (readHeader, rows) = decode(gzip(fixture))
         readHeader shouldBe header
         rows shouldContainExactly SampleRows.full
+    }
+
+    /** Format 2's fixture, kept as it was written (Q4): it has no merged group line and says nothing of merges. */
+    @Test
+    fun `format 2's fixture still decodes, with no merged group line`() {
+        val (readHeader, rows) = decode(gzip(fixtureText("format2.jsonl")))
+
+        readHeader shouldBe segmentHeader(olderRows).copy(format = 2)
+        rows shouldContainExactly olderRows
     }
 
     /**
@@ -99,8 +108,8 @@ class SegmentCodecTest {
     fun `format 1's fixture still decodes, its manga line an entry never edited`() {
         val (readHeader, rows) = decode(gzip(fixtureText("format1.jsonl")))
 
-        readHeader shouldBe segmentHeader(SampleRows.full).copy(format = 1)
-        rows shouldContainExactly SampleRows.full.map {
+        readHeader shouldBe segmentHeader(olderRows).copy(format = 1)
+        rows shouldContainExactly olderRows.map {
             if (it is MangaRow) it.copy(titleOverride = null, descriptionOverride = null, detailsModifiedAt = null) else it
         }
     }
@@ -164,7 +173,7 @@ class SegmentCodecTest {
         val lines = gunzip(encode(header, SampleRows.full)).lines().filter { it.isNotEmpty() }
 
         val short = shouldThrow<MalformedSyncFileException> { decode(gzip(lines.dropLast(1).joinToString("\n"))) }
-        short.message shouldContain "BOOKMARK_NOTES"
+        short.message shouldContain "MERGED_GROUP"
 
         val extra = lines + lines.last()
         shouldThrow<MalformedSyncFileException> { decode(gzip(extra.joinToString("\n"))) }
@@ -186,7 +195,8 @@ class SegmentCodecTest {
     @Test
     fun `a row that names a manga the file has not written is refused, for every kind that has one`() {
         val children = SampleRows.full.filter { it !is MangaRow && it.parentManga != null }
-        children.map { it.kind }.toSet() shouldBe RowKind.entries.toSet() - RowKind.MANGA - RowKind.CATEGORY
+        children.map { it.kind }.toSet() shouldBe
+            RowKind.entries.toSet() - RowKind.MANGA - RowKind.CATEGORY - RowKind.MERGED_GROUP
 
         for (child in children) {
             val header = segmentHeader(listOf(child))
@@ -256,7 +266,10 @@ class SegmentCodecTest {
 
     // endregion
 
-    private fun fixtureText(name: String = "format2.jsonl"): String =
+    /** The sample rows a format before 3 can carry. */
+    private val olderRows = SampleRows.full.filterNot { it is MergedGroupRow }
+
+    private fun fixtureText(name: String = "format3.jsonl"): String =
         requireNotNull(javaClass.getResourceAsStream("/$name")) { "$name is missing" }
             .use { it.readBytes().decodeToString() }
 

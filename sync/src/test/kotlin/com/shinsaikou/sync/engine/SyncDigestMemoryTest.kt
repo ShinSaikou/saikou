@@ -2,6 +2,7 @@ package com.shinsaikou.sync.engine
 
 import com.shinsaikou.domain.sync.model.StoredChapter
 import com.shinsaikou.domain.sync.model.StoredManga
+import com.shinsaikou.domain.sync.model.StoredMergedGroup
 import com.shinsaikou.domain.sync.model.SyncLibraryCounts
 import com.shinsaikou.domain.sync.model.SyncPushRequest
 import com.shinsaikou.domain.sync.model.SyncPushRows
@@ -49,6 +50,8 @@ class SyncDigestMemoryTest {
 
         override suspend fun libraryMangaIds(afterId: Long, limit: Long): List<Long> =
             ((afterId + 1)..minOf(afterId + limit, entries.toLong())).toList()
+
+        override suspend fun mergedGroups(): List<StoredMergedGroup> = emptyList()
 
         override suspend fun readLibrary(mangaIds: Collection<Long>): SyncPushRows {
             pagesRead++

@@ -51,7 +51,8 @@ class MigrationToVersion4Test {
         migrate()
 
         scalar("PRAGMA user_version") shouldBe Database.Schema.version.toString()
-        rows("SELECT type, name, sql FROM sqlite_master ORDER BY type, name", 3) shouldContainExactly
+        rows("SELECT type, name, sql FROM sqlite_master ORDER BY type, name", 3)
+            .filterNot { MERGED_ENTRIES in it[1].orEmpty() } shouldContainExactly
             objectsBefore.filterNot { it[0] == "index" && it[1] in DROPPED }
         objectsBefore.map { it[1] }.filter { it in DROPPED } shouldContainExactly DROPPED.sorted()
         TABLES.associateWith { scalar("SELECT count(*) FROM $it") } shouldBe countsBefore
@@ -217,6 +218,9 @@ class MigrationToVersion4Test {
 
         const val SEED = 20_261_014L
         const val MANGAS = 40L
+
+        /** What every object of schema version 5, which the migration runs on to, has in its name. */
+        const val MERGED_ENTRIES = "merged_"
 
         val DROPPED = listOf(
             "idx_chapters_date_fetch", "idx_chapters_last_page_read", "idx_chapters_manga_id",

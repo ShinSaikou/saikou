@@ -113,6 +113,7 @@ internal class SyncCompaction(
                 ids.forEach { id -> planLibraryManga(id, stored)?.forEach(spool::add) }
                 after = ids.last()
             }
+            store.mergedGroups().forEach { spool.add(it.toRecord().toRow()) }
             val file = spool.finish(planCategories(categories.keys, categories.values)) { counts ->
                 SyncHeader(
                     format = SyncFormat.CURRENT,

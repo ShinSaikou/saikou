@@ -1,6 +1,9 @@
 package com.shinsaikou.domain.chapter.interactor
 
 import com.shinsaikou.domain.download.ReadChapterCleanup
+import com.shinsaikou.domain.merged.interactor.GetMergedGroup
+import com.shinsaikou.domain.merged.model.MergedGroup
+import com.shinsaikou.domain.merged.model.MergedMember
 import com.shinsaikou.domain.preferences.DownloadPreferences
 import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
@@ -29,7 +32,8 @@ class SetReadStatusTest {
     private val mangaRepository = mockk<MangaRepository>()
     private val downloadPreferences = DownloadPreferences(InMemoryPreferenceStore())
     private val cleanup = RecordingCleanup()
-    private val setReadStatus = SetReadStatus(chapterRepository, mangaRepository, downloadPreferences, cleanup)
+    private val getMergedGroup = mockk<GetMergedGroup> { coEvery { await(any()) } returns null }
+    private val setReadStatus = SetReadStatus(chapterRepository, mangaRepository, downloadPreferences, cleanup, getMergedGroup)
 
     private fun chapter(number: Long, read: Boolean = false) = Chapter.create().copy(
         id = number,
@@ -38,6 +42,52 @@ class SetReadStatusTest {
         sourceOrder = number,
         read = read,
     )
+
+    private val group = MergedGroup(
+        id = 1,
+        mainMangaId = MANGA_ID,
+        showAll = false,
+        members = listOf(MANGA_ID, OTHER_MEMBER).map {
+            MergedMember(mangaId = it, source = it, url = "/$it", position = it, checkUpdates = true)
+        },
+    )
+
+    private fun copy(id: Long, number: Double, read: Boolean = false) =
+        Chapter.create().copy(id = id, mangaId = OTHER_MEMBER, chapterNumber = number, read = read)
+
+    private fun mergedWith(vararg copies: Chapter) {
+        coEvery { getMergedGroup.await(any()) } returns group
+        coEvery { chapterRepository.getChapterByMangaId(MANGA_ID) } returns emptyList()
+        coEvery { chapterRepository.getChapterByMangaId(OTHER_MEMBER) } returns copies.toList()
+    }
+
+    @Test
+    fun `in a merged entry a mark reaches the other copies of the number, and no others`() = runTest {
+        mergedWith(copy(101, 1.0), copy(102, 2.0), copy(103, -1.0))
+        val marked = chapter(1)
+
+        val result = setReadStatus.await(read = true, marked)
+
+        result shouldBe SetReadStatus.Result.Success(listOf(marked, copy(101, 1.0)))
+    }
+
+    @Test
+    fun `marking unread reaches the copies too`() = runTest {
+        mergedWith(copy(101, 1.0, read = true))
+        val marked = chapter(1, read = true)
+
+        val result = setReadStatus.await(read = false, marked)
+
+        result shouldBe SetReadStatus.Result.Success(listOf(marked, copy(101, 1.0, read = true)))
+    }
+
+    @Test
+    fun `a chapter with no recognised number has no copies`() = runTest {
+        mergedWith(copy(101, -1.0))
+        val marked = chapter(1).copy(chapterNumber = -1.0)
+
+        setReadStatus.await(read = true, marked) shouldBe SetReadStatus.Result.Success(listOf(marked))
+    }
 
     @Test
     fun `marking read reports only the chapters it wrote`() = runTest {
@@ -173,5 +223,6 @@ class SetReadStatusTest {
 
     private companion object {
         const val MANGA_ID = 5L
+        const val OTHER_MEMBER = 6L
     }
 }

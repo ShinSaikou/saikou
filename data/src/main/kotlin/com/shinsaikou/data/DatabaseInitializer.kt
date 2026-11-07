@@ -35,6 +35,7 @@ class DatabaseInitializer(
             mangasQueries.resetIsSyncing()
             chaptersQueries.resetIsSyncing()
             categoriesQueries.resetIsSyncing()
+            merged_groupsQueries.resetIsSyncing()
             historyQueries.removeResettedHistory()
             backfillCategorySyncKeys()
             mergeDuplicateExtensionStores()

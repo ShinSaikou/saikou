@@ -1,0 +1,39 @@
+package com.shinsaikou.domain.merged
+
+import com.shinsaikou.domain.merged.model.MergedGroup
+import tachiyomi.domain.chapter.model.Chapter
+
+/** Which chapters of a merged entry show (`design/plans/merged-entries.md` section 4). */
+object MergedChapters {
+
+    /**
+     * [chapters] with one copy of each number, in the order given. A number's winner is the highest
+     * member in the group's order that has it, an uninstalled source last; order is the only rule.
+     * Every row of the winning member stays, so scanlators inside one source behave as they do
+     * alone. A chapter with no recognised number is always kept, a chapter of no member ranks last,
+     * and [MergedGroup.showAll] skips the pass.
+     *
+     * A downloaded copy never outranks the order: members refresh concurrently, so a lower source's
+     * chapter can land first, be auto-downloaded and then pin that source for good, and a row would
+     * change identity under an open reader when a download finishes. Under Downloaded only, the
+     * caller's downloaded filter has already run, so a number whose winner is not downloaded keeps
+     * the copy that is.
+     */
+    fun visible(chapters: List<Chapter>, group: MergedGroup, installedSources: Set<Long>): List<Chapter> {
+        if (group.showAll) return chapters
+
+        val order = group.members.sortedWith(compareBy({ it.source !in installedSources }, { it.position }))
+        val ranks = order.withIndex().associate { (rank, member) -> member.mangaId to rank }
+
+        fun rankOf(chapter: Chapter): Int = ranks[chapter.mangaId] ?: ranks.size
+
+        val winners = HashMap<Double, Int>()
+        for (chapter in chapters) {
+            if (!chapter.isRecognizedNumber) continue
+            val rank = rankOf(chapter)
+            val best = winners[chapter.chapterNumber]
+            if (best == null || rank < best) winners[chapter.chapterNumber] = rank
+        }
+        return chapters.filter { !it.isRecognizedNumber || rankOf(it) == winners[it.chapterNumber] }
+    }
+}

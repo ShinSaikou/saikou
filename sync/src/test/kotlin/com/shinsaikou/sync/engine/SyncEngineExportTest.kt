@@ -10,6 +10,7 @@ import com.shinsaikou.sync.format.ExportDone
 import com.shinsaikou.sync.format.MangaCategoriesRow
 import com.shinsaikou.sync.format.MangaRow
 import com.shinsaikou.sync.format.RemoteName
+import com.shinsaikou.sync.format.SyncFormat
 import com.shinsaikou.sync.format.SyncLayout
 import com.shinsaikou.sync.format.SyncScope
 import io.kotest.assertions.throwables.shouldThrow
@@ -80,7 +81,7 @@ class SyncEngineExportTest {
         result.exported shouldBe true
         result.segmentsPushed shouldBe 0
         val exportId = exports(a).single()
-        done(a, exportId) shouldBe ExportDone(format = 2, parts = 1, lastSeq = latest)
+        done(a, exportId) shouldBe ExportDone(format = SyncFormat.CURRENT, parts = 1, lastSeq = latest)
         a.logCount() shouldBe 0
         a.preferences.lastPushedSeq.get() shouldBe latest
         a.preferences.exportedBackend.get() shouldBe backend.id
@@ -186,7 +187,7 @@ class SyncEngineExportTest {
         runBlocking { a.engine.run(flaky) }.shouldNotBeNull().exported shouldBe true
 
         exports(a) shouldBe listOf(progress.exportId)
-        done(a, progress.exportId) shouldBe ExportDone(format = 2, parts = 2, lastSeq = lastSeq)
+        done(a, progress.exportId) shouldBe ExportDone(format = SyncFormat.CURRENT, parts = 2, lastSeq = lastSeq)
         flaky.writes[SyncLayout.exportPartPath(a.deviceId, progress.exportId, 1)] shouldBe 1
         flaky.writes[SyncLayout.exportPartPath(a.deviceId, progress.exportId, 2)] shouldBe 2
         a.preferences.lastPushedSeq.get() shouldBe a.latestSeqPushed()

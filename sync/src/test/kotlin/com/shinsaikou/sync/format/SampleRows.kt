@@ -116,6 +116,15 @@ internal object SampleRows {
             notes = listOf(NoteEntry(pageIndex = 3, note = "Panel", dateAdded = 1_600_000_000_016)),
             bookmarkNotesModifiedAt = 1_600_000_000_017,
         ),
+        MergedGroupRow(
+            main = manga,
+            members = listOf(
+                MergedMemberEntry(manga, position = 1, checkUpdates = true),
+                MergedMemberEntry(MangaKey(source = 5, url = "/other/42"), position = 0, checkUpdates = false),
+            ),
+            showAll = true,
+            modifiedAt = 1_600_000_000_018,
+        ),
     )
 
     /** [full] with every nullable field null and every collection empty. */
@@ -147,6 +156,7 @@ internal object SampleRows {
             is ExcludedScanlatorsRow -> row.copy(scanlators = emptySet(), exclusionsModifiedAt = null)
             is ScanlatorPriorityRow -> row.copy(priorities = emptyList(), priorityModifiedAt = null)
             is BookmarkNotesRow -> row.copy(notes = emptyList(), bookmarkNotesModifiedAt = null)
+            is MergedGroupRow -> row.copy(members = emptyList())
         }
     }
 

@@ -30,3 +30,6 @@ view/updatesView.sq:getRecentUpdatesWithFilters:chapters.date_fetch # sorted in 
 view/updatesView.sq:updatesView:chapters.date_fetch # the view's own order; its one query, getRecentUpdatesWithFilters, states its own ORDER BY and sorts in a temp B-tree
 # The migrate-downloads follow-up narrowed three whole-manifest reads to this one; an index on the folder name waits for the next schema version.
 downloads_manifest.sq:getByChapterDirNames:downloads_manifest.chapter_dir_name # no index on the folder name yet: SQLite reads the manifest once per folder a download, a copy or a migration takes (once per entry for a migration), and builds only the matching rows, where each used to build every row
+# The merged read reconcile (schema version 5). An index on the number would tax every chapter insert, and the plan rules it out on purpose (design/plans/merged-entries.md section 4).
+merged_groups.sq:reconcileRead:chapters.chapter_number # manga_id finds the group's chapters; the number is an IN over a list built once and a residual filter on those rows
+merged_groups.sq:reconcileRead:chapters.read # each member's read and unread rows are a (manga_id, read) search of idx_chapters_manga_id_read

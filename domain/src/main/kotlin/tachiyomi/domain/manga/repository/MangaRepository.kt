@@ -105,7 +105,10 @@ interface MangaRepository {
      */
     suspend fun deleteNonLibraryMangaByIds(mangaIds: List<Long>, keepReadManga: Boolean)
 
-    /** Rewrites mangas.source (and nothing else) for every row of oldSourceId; used with source_alias. */
+    /**
+     * Rewrites mangas.source for every row of oldSourceId, and the merged tables that name those rows
+     * by source, in one transaction; used with source_alias. Returns how many manga rows moved.
+     */
     suspend fun rewriteSourceId(oldSourceId: Long, newSourceId: Long): Long
 
     /** Source ids with the count of favourites in each. */

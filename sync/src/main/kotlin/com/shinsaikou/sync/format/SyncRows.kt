@@ -5,14 +5,14 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 
 /*
- * The rows of format 2 (Q4; format 1 plus the manga line's edit of phase 5 unit ED). Local ids never
- * leave the device (Q5): every row names what it is about by natural key, and a child collection
- * travels whole, keyed by its parent and decided by its own clock (Q6). Clocks are epoch
- * milliseconds; a null clock is a value the owner never set.
+ * The rows of format 3 (Q4; format 1 plus the manga line's edit of phase 5 unit ED and the merged
+ * group line of R163). Local ids never leave the device (Q5): every row names what it is about by
+ * natural key, and a child collection travels whole, keyed by its parent and decided by its own
+ * clock (Q6). Clocks are epoch milliseconds; a null clock is a value the owner never set.
  *
- * Property names are the JSON keys. Renaming one changes the wire, which `format1.jsonl` and
- * `format2.jsonl` in the tests pin; a field or row added later raises [SyncFormat.CURRENT] and gets
- * a written rule for rows of the older formats.
+ * Property names are the JSON keys. Renaming one changes the wire, which `format1.jsonl`,
+ * `format2.jsonl` and `format3.jsonl` in the tests pin; a field or row added later raises
+ * [SyncFormat.CURRENT] and gets a written rule for rows of the older formats.
  */
 
 /** A manga across devices: its source id and its url on that source. */
@@ -55,6 +55,9 @@ enum class RowKind {
 
     @SerialName("bookmark_notes")
     BOOKMARK_NOTES,
+
+    @SerialName("merged_group")
+    MERGED_GROUP,
 }
 
 /** One line of a segment, export part or snapshot after the header. */
@@ -62,7 +65,10 @@ enum class RowKind {
 sealed class SyncRow {
     abstract val kind: RowKind
 
-    /** The manga this row belongs to, which a file must carry before this row (Q4); null for a category. */
+    /**
+     * The manga this row belongs to, which a file must carry before this row (Q4); null for a category
+     * and for a merged group, which belongs to none.
+     */
     abstract val parentManga: MangaKey?
 }
 
@@ -264,3 +270,27 @@ data class BookmarkNotesRow(
 /** One page's note, keyed within its set by [pageIndex]. */
 @Serializable
 data class NoteEntry(val pageIndex: Long, val note: String, val dateAdded: Long)
+
+/**
+ * A merged entry's whole set of members, keyed by the main entry (R163). No member, the main one
+ * included, has to be stored on the device that reads it: the line is stored as it stands and a
+ * member that has not arrived is inert until it does, so it is never skipped, which is why the
+ * tables name entries by key (`design/plans/merged-entries.md` section 3). An unmerge is an empty
+ * line with a newer clock. The clock decides per main entry, and between two groups that claim one
+ * member, as [com.shinsaikou.sync.MergeEngine.mergeMergedGroup] says.
+ */
+@Serializable
+@SerialName("merged_group")
+data class MergedGroupRow(
+    val main: MangaKey,
+    val members: List<MergedMemberEntry>,
+    val showAll: Boolean,
+    val modifiedAt: Long,
+) : SyncRow() {
+    override val kind: RowKind get() = RowKind.MERGED_GROUP
+    override val parentManga: MangaKey? get() = null
+}
+
+/** One member of a merged group, in chapter order by [position], the main entry among them. */
+@Serializable
+data class MergedMemberEntry(val manga: MangaKey, val position: Long, val checkUpdates: Boolean)

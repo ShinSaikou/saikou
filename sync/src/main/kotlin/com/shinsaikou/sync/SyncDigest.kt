@@ -4,6 +4,8 @@ import com.shinsaikou.domain.sync.model.StoredCategory
 import com.shinsaikou.domain.sync.repository.SyncStore
 import com.shinsaikou.sync.engine.planCategories
 import com.shinsaikou.sync.engine.planLibraryManga
+import com.shinsaikou.sync.engine.toRecord
+import com.shinsaikou.sync.engine.toRow
 import com.shinsaikou.sync.format.ChapterRemovedRow
 import com.shinsaikou.sync.format.ChapterRow
 import com.shinsaikou.sync.format.ExcludedScanlatorsRow
@@ -15,11 +17,12 @@ import java.security.MessageDigest
 /**
  * One hash over everything this device syncs (phase 3 unit I, fix round 1): the rows a full export
  * of its library would carry, planned from the database by the export's own mapping
- * ([planLibraryManga], [planCategories]) and encoded as the wire encodes them. Every value the wire
- * carries and the merge takes is in it, and a column the wire gains later joins it with no edit
- * here; local ids, latches and anything else the wire leaves out never enter. The one column the
- * wire carries that no merge rule takes, [ChapterRow.sourceOrder], is left out (see [encode]). Two
- * devices that converged give the same [Result.sha256]. [ChapterRemovedRow] never enters: it is a
+ * ([planLibraryManga], [planCategories], the merged groups' lines) and encoded as the wire encodes
+ * them. Every value the wire carries and the merge takes is in it, and a column the wire gains later
+ * joins it with no edit here; local ids, latches and anything else the wire leaves out never enter.
+ * The one column the wire carries that no merge rule takes, [ChapterRow.sourceOrder], is left out
+ * (see [encode]). Two devices that converged give the same [Result.sha256]. [ChapterRemovedRow]
+ * never enters: it is a
  * deletion event a segment carries, and an export writes state, so the plan never makes one.
  *
  * The order a device's local ids put rows in does not count (phase 5 unit SC1). Each unordered set a
@@ -64,6 +67,7 @@ object SyncDigest {
             afterId = ids.last()
         }
         planCategories(categories.keys, categories.values).forEach { sum.add(encode(rewrite(it))) }
+        store.mergedGroups().forEach { sum.add(encode(rewrite(it.toRecord().toRow()))) }
         val bytes = MessageDigest.getInstance("SHA-256").digest(sum.bytes)
         return Result(sha256 = bytes.joinToString("") { "%02x".format(it) }, rows = sum.lines)
     }

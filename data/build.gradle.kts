@@ -17,12 +17,12 @@ sqldelight {
             packageName.set("tachiyomi.data")
             dialect(libs.sqldelight.sqliteDialect338)
             schemaOutputDirectory.set(project.file("src/main/sqldelight/schemas"))
-            // The .sq files are the current schema, version 4. Version 1 shipped at 49c3732 and is
+            // The .sq files are the current schema, version 5. Version 1 shipped at 49c3732 and is
             // the committed schemas/1.db; migrations/1.sqm takes it to 2 (phase 3 unit C),
-            // migrations/2.sqm to 3 (phase 5 unit SC4) and migrations/3.sqm to 4 (the chapter index
-            // diet). Verification applies every migration to each committed snapshot and diffs the
-            // result against the .sq files, so schemas/2.db, 3.db and 4.db are committed beside 1.db
-            // and a drift fails.
+            // migrations/2.sqm to 3 (phase 5 unit SC4), migrations/3.sqm to 4 (the chapter index
+            // diet) and migrations/4.sqm to 5 (merged entries). Verification applies every migration
+            // to each committed snapshot and diffs the result against the .sq files, so schemas/2.db
+            // to 5.db are committed beside 1.db and a drift fails.
             verifyMigrations.set(true)
             generateAsync.set(true)
         }

@@ -15,6 +15,7 @@ import com.shinsaikou.core.common.oauth.LoopbackPortInUseException
 import com.shinsaikou.core.common.oauth.LoopbackTimeoutException
 import com.shinsaikou.domain.error.ErrorKey
 import com.shinsaikou.domain.sync.model.StoredCategory
+import com.shinsaikou.domain.sync.model.StoredMergedGroup
 import com.shinsaikou.domain.sync.model.SyncLibraryCounts
 import com.shinsaikou.domain.sync.model.SyncPushRequest
 import com.shinsaikou.domain.sync.model.SyncPushRows
@@ -1260,6 +1261,8 @@ private class FingerprintStore(private val snapshots: RecordingSnapshot) : SyncS
             tracks = emptyMap(), chapters = emptyMap(), notes = emptyMap(), history = emptyMap(), categories = categories,
         )
     }
+
+    override suspend fun mergedGroups(): List<StoredMergedGroup> = emptyList()
 
     override suspend fun readForPush(request: SyncPushRequest): SyncPushRows = error("the fingerprint only reads the library")
 

@@ -16,6 +16,7 @@ internal object MergeFixtures {
     val MANGA_KEY = MangaKey(source = 1L, url = "/manga/1")
     val CHAPTER_KEY = ChapterKey(MANGA_KEY, url = "/manga/1/chapter/1")
     const val CATEGORY_KEY = "category-key"
+    val GROUP_MAIN = MangaKey(source = 1L, url = "/m/a")
 
     val manga = MangaRecord(
         key = MANGA_KEY,

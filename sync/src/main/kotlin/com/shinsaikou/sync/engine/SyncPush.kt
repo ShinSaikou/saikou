@@ -218,7 +218,8 @@ internal class SyncPush(
      * The next part: the manga after [ExportProgress.lastMangaId] until adding one more would pass
      * [PART_LINES] (a part holds at least one), after the categories their sets name. Null once
      * every manga is written; the first part is written even for an empty library, since an export
-     * has at least one part (R81 item 8).
+     * has at least one part (R81 item 8). The first part also ends with every merged group, tombstones
+     * included: a group belongs to no entry, and it wants none of them read first.
      */
     private suspend fun planPart(progress: ExportProgress): Part? {
         val blocks = mutableListOf<SyncRow>()
@@ -243,7 +244,8 @@ internal class SyncPush(
         } else {
             blocks.filterIsInstance<MangaCategoriesRow>().flatMapTo(mutableSetOf()) { it.categories }
         }
-        return Part(planCategories(keys, categories.values) + blocks, lastMangaId)
+        val groups = if (progress.parts == 0) store.mergedGroups().map { it.toRecord().toRow() } else emptyList()
+        return Part(planCategories(keys, categories.values) + blocks + groups, lastMangaId)
     }
 
     private companion object {

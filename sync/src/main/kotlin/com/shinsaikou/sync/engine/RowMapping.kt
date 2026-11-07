@@ -4,6 +4,8 @@ import com.shinsaikou.domain.sync.model.StoredCategory
 import com.shinsaikou.domain.sync.model.StoredChapter
 import com.shinsaikou.domain.sync.model.StoredHistory
 import com.shinsaikou.domain.sync.model.StoredManga
+import com.shinsaikou.domain.sync.model.StoredMergedGroup
+import com.shinsaikou.domain.sync.model.StoredMergedMember
 import com.shinsaikou.domain.sync.model.StoredNote
 import com.shinsaikou.domain.sync.model.StoredTrack
 import com.shinsaikou.source.model.UpdateStrategy
@@ -16,6 +18,8 @@ import com.shinsaikou.sync.format.HistoryRow
 import com.shinsaikou.sync.format.MangaCategoriesRow
 import com.shinsaikou.sync.format.MangaKey
 import com.shinsaikou.sync.format.MangaRow
+import com.shinsaikou.sync.format.MergedGroupRow
+import com.shinsaikou.sync.format.MergedMemberEntry
 import com.shinsaikou.sync.format.NoteEntry
 import com.shinsaikou.sync.format.PriorityEntry
 import com.shinsaikou.sync.format.ScanlatorPriorityRow
@@ -26,6 +30,8 @@ import com.shinsaikou.sync.merge.CategoryRecord
 import com.shinsaikou.sync.merge.ChapterRecord
 import com.shinsaikou.sync.merge.HistoryRecord
 import com.shinsaikou.sync.merge.MangaRecord
+import com.shinsaikou.sync.merge.MergedGroupRecord
+import com.shinsaikou.sync.merge.MergedMemberRecord
 import com.shinsaikou.sync.merge.TrackRecord
 
 /*
@@ -364,6 +370,48 @@ internal fun TracksRow.toRecords(): Map<Long, TrackRecord> = tracks.associate { 
 }
 
 internal fun ScanlatorPriorityRow.toRanking(): Map<String, Long> = priorities.associate { it.scanlator to it.priority }
+
+/** The order a [MergedGroupRecord] holds its members in. */
+private val MEMBER_ORDER = compareBy<MergedMemberRecord>({ it.position }, { it.key.source }, { it.key.url })
+
+internal val StoredMergedGroup.key: MangaKey get() = MangaKey(mainSource, mainUrl)
+
+internal fun StoredMergedGroup.toRecord(): MergedGroupRecord = MergedGroupRecord(
+    main = key,
+    showAll = showAll,
+    modifiedAt = modifiedAt,
+    members = members.map { MergedMemberRecord(MangaKey(it.source, it.url), it.position, it.checkUpdates) }
+        .sortedWith(MEMBER_ORDER),
+)
+
+internal fun MergedGroupRecord.toStored(id: Long): StoredMergedGroup = StoredMergedGroup(
+    id = id,
+    mainSource = main.source,
+    mainUrl = main.url,
+    showAll = showAll,
+    modifiedAt = modifiedAt,
+    members = members.map { StoredMergedMember(it.key.source, it.key.url, it.position, it.checkUpdates) },
+)
+
+internal fun MergedGroupRecord.toRow(): MergedGroupRow = MergedGroupRow(
+    main = main,
+    members = members.map { MergedMemberEntry(it.key, it.position, it.checkUpdates) },
+    showAll = showAll,
+    modifiedAt = modifiedAt,
+)
+
+/**
+ * The line as this device holds it: each key through [resolve], since an alias can make one entry of
+ * two the sender kept apart, and then the first of them is the member.
+ */
+internal fun MergedGroupRow.toRecord(resolve: (MangaKey) -> MangaKey): MergedGroupRecord = MergedGroupRecord(
+    main = resolve(main),
+    showAll = showAll,
+    modifiedAt = modifiedAt,
+    members = members.map { MergedMemberRecord(resolve(it.manga), it.position, it.checkUpdates) }
+        .sortedWith(MEMBER_ORDER)
+        .distinctBy { it.key },
+)
 
 internal fun ChapterRecord.toRow(sourceOrder: Long): ChapterRow = ChapterRow(
     key = key,

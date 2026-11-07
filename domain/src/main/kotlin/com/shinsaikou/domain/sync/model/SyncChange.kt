@@ -10,6 +10,7 @@ enum class SyncEntity(val key: String) {
     EXCLUDED_SCANLATOR("excluded_scanlator"),
     SCANLATOR_PRIORITY("scanlator_priority"),
     BOOKMARK_NOTE("bookmark_note"),
+    MERGED_GROUP("merged_group"),
     ;
 
     companion object {
@@ -31,7 +32,8 @@ enum class SyncChangeType(val key: String) {
  * One log row. [entityId] is the row's own id for a manga, chapter, category or history row (the
  * chapter's id for history), and the parent's id for a child collection: the manga's for its
  * categories, excluded scanlators, scanlator priority and tracks, the chapter's for its bookmark
- * notes. A child collection travels whole, so a child delete is logged as an upsert of its parent.
+ * notes, and the group's for a merged group's members. A child collection travels whole, so a child
+ * delete is logged as an upsert of its parent.
  */
 data class SyncChange(
     val seq: Long,
