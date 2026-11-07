@@ -10,6 +10,7 @@ import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -52,7 +53,13 @@ class UpcomingViewModelTest {
         KotlinxDispatchers.resetMain()
     }
 
-    private fun viewModel() = UpcomingViewModel(getLibraryManga, libraryPreferences, uiPreferences, appDispatchers)
+    private fun viewModel() = UpcomingViewModel(
+        getLibraryManga,
+        mockk { every { subscribe() } returns flowOf(emptyList()) },
+        libraryPreferences,
+        uiPreferences,
+        appDispatchers,
+    )
 
     private fun due(id: Long) = LibraryManga(
         manga = Manga.create().copy(

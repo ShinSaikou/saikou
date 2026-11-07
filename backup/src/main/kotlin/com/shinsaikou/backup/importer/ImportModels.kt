@@ -57,6 +57,7 @@ data class ImportError(
         UNKNOWN_TRACKER_SKIPPED,
         BATCH_FALLBACK,
         EXTENSION_INSTALL,
+        MERGED_TITLE,
     }
 }
 
@@ -106,7 +107,30 @@ data class ImportReport(
      * was stopped first, or an older build wrote the report.
      */
     val extensionInstalls: ExtensionInstalls? = null,
+    /**
+     * What became of a TachiyomiSY file's merged entries: null for a file with none, a run that did
+     * not restore the library, one stopped first, or an older build's report.
+     */
+    val mergedTitles: MergedTitles? = null,
 ) {
+    /**
+     * [merged] titles are one group here, this run's or an earlier one's for the same members, which
+     * show as one only while [switchOn]. [unmerged] are the titles left as separate entries, fewer
+     * than two of their sources being free to merge, by the file's title. [missing] are the sources a
+     * title names that the file does not hold.
+     */
+    @Serializable
+    data class MergedTitles(
+        val merged: Int = 0,
+        val switchOn: Boolean = true,
+        val unmerged: List<String> = emptyList(),
+        val missing: List<MissingSource> = emptyList(),
+    )
+
+    /** A source of [title] the restore left out, by the file's name for the source and the entry's url. */
+    @Serializable
+    data class MissingSource(val title: String, val source: String, val url: String)
+
     /**
      * Extensions by name, as the indexes name them, except [notFound], which is the sources by the
      * backup's names, so the owner knows what to search for. Each of [failed] has its reason among

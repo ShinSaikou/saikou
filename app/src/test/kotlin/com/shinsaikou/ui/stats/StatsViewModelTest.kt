@@ -1,5 +1,9 @@
 package com.shinsaikou.ui.stats
 
+import com.shinsaikou.domain.merged.model.MergedGroup
+import com.shinsaikou.domain.merged.model.MergedGroupCounts
+import com.shinsaikou.domain.merged.model.MergedMember
+import com.shinsaikou.domain.merged.model.MergedTitle
 import com.shinsaikou.domain.preferences.LibraryPreferences
 import com.shinsaikou.downloads.DownloadManifest
 import com.shinsaikou.libraryupdate.FlatLibraryUpdate
@@ -73,6 +77,8 @@ class StatsViewModelTest {
     private var library: List<LibraryManga> = emptyList()
     private var tracks: List<Track> = emptyList()
     private var downloads: Map<Long, Long> = emptyMap()
+    private var mergedTitles: List<MergedTitle> = emptyList()
+    private var mergedGroups: List<MergedGroup> = emptyList()
 
     @BeforeEach
     fun setUp() {
@@ -99,7 +105,7 @@ class StatsViewModelTest {
         updateManga = mockk(),
         fetchInterval = fetchInterval,
         libraryPreferences = libraryPreferences,
-        getMergedGroups = mockk { coEvery { await() } returns emptyList() },
+        getMergedGroups = mockk { coEvery { await() } answers { mergedGroups } },
         reconcileMergedRead = mockk(relaxed = true),
         autoDownload = mockk(),
         dispatchers = dispatchers,
@@ -108,6 +114,7 @@ class StatsViewModelTest {
 
     private fun viewModel(trackers: List<Tracker> = listOf(tenPoint, hundredPoint, signedOut)) = StatsViewModel(
         getLibraryManga = getLibraryManga,
+        getMergedGroups = mockk { every { subscribeTitles() } answers { flowOf(mergedTitles) } },
         getTotalReadDuration = getTotalReadDuration,
         trackRepository = trackRepository,
         trackerManager = TrackerManager(trackers.toSet()),
@@ -116,6 +123,102 @@ class StatsViewModelTest {
         fetchInterval = fetchInterval,
         dispatchers = dispatchers,
     )
+
+    /** [main] and [other] as one title, with what the group's own query counts for it. */
+    private fun merge(main: Long, other: Long, checkOther: Boolean = true, counts: MergedGroupCounts) {
+        val group = MergedGroup(
+            id = counts.groupId,
+            mainMangaId = main,
+            showAll = false,
+            members = listOf(
+                MergedMember(main, source = main, url = "/$main", position = 0, checkUpdates = true),
+                MergedMember(other, source = other, url = "/$other", position = 1, checkUpdates = checkOther),
+            ),
+        )
+        mergedGroups = mergedGroups + group
+        mergedTitles = mergedTitles + MergedTitle(group, counts)
+    }
+
+    @Test
+    fun `a merged title is one title and counts its chapters by number`() = runTest(testDispatcher) {
+        seedFixture()
+        downloads = mapOf(A to 10L, D to 4L)
+        merge(A, D, counts = MergedGroupCounts(1L, total = 11, read = 9, bookmarked = 0, downloaded = 10))
+
+        val state = viewModel().also { advanceUntilIdle() }.state.value as StatsScreenState.Success
+
+        state.overview.libraryMangaCount shouldBe 7
+        state.chapters.totalChapterCount shouldBe (10 + 5 + 3 + 4 + 6 + 0 + 8 + 2) - (10 + 4) + 11
+        state.chapters.readChapterCount shouldBe (10 + 5 + 3 + 2 + 6 + 0 + 0 + 2) - (10 + 2) + 9
+        state.chapters.downloadCount shouldBe 10
+    }
+
+    @Test
+    fun `the update tile leaves out a member with Check for updates off`() = runTest(testDispatcher) {
+        seedFixture()
+        val before = (viewModel().also { advanceUntilIdle() }.state.value as StatsScreenState.Success)
+            .titles.globalUpdateItemCount
+        merge(A, F, checkOther = false, counts = MergedGroupCounts(1L, total = 10, read = 10, bookmarked = 0, downloaded = 0))
+
+        val after = (viewModel().also { advanceUntilIdle() }.state.value as StatsScreenState.Success)
+            .titles.globalUpdateItemCount
+
+        after shouldBe before - 1
+    }
+
+    @Test
+    fun `a merged title is one started title`() = runTest(testDispatcher) {
+        seedFixture()
+        merge(A, D, counts = MergedGroupCounts(1L, total = 11, read = 9, bookmarked = 0, downloaded = 0))
+
+        val state = viewModel().also { advanceUntilIdle() }.state.value as StatsScreenState.Success
+
+        // A, B, C, D, E and H are started; A and D are one title.
+        state.titles.startedMangaCount shouldBe 5
+    }
+
+    @Test
+    fun `a title whose copies overlap in some numbers counts the downloaded numbers once`() = runTest(testDispatcher) {
+        seedFixture()
+        downloads = mapOf(A to 3L, D to 4L)
+        // Seven copies on disk, five distinct numbers.
+        merge(A, D, counts = MergedGroupCounts(1L, total = 11, read = 9, bookmarked = 0, downloaded = 5))
+
+        val state = viewModel().also { advanceUntilIdle() }.state.value as StatsScreenState.Success
+
+        state.chapters.downloadCount shouldBe 5
+    }
+
+    @Test
+    fun `a title the counts query has not reached leaves the download count as the manifest has it`() = runTest(testDispatcher) {
+        seedFixture()
+        downloads = mapOf(A to 3L, D to 4L)
+        val group = MergedGroup(
+            id = 1L,
+            mainMangaId = A,
+            showAll = false,
+            members = listOf(A, D).mapIndexed { index, id ->
+                MergedMember(id, source = id, url = "/$id", position = index.toLong(), checkUpdates = true)
+            },
+        )
+        mergedTitles = listOf(MergedTitle(group, counts = null))
+
+        val state = viewModel().also { advanceUntilIdle() }.state.value as StatsScreenState.Success
+
+        state.chapters.downloadCount shouldBe 7
+    }
+
+    @Test
+    fun `a title whose main entry is not in the library folds nothing`() = runTest(testDispatcher) {
+        seedFixture()
+        val before = (viewModel().also { advanceUntilIdle() }.state.value as StatsScreenState.Success)
+        merge(NOT_IN_LIBRARY, A, counts = MergedGroupCounts(1L, total = 99, read = 99, bookmarked = 0, downloaded = 0))
+
+        val after = (viewModel().also { advanceUntilIdle() }.state.value as StatsScreenState.Success)
+
+        after.overview.libraryMangaCount shouldBe before.overview.libraryMangaCount
+        after.chapters.totalChapterCount shouldBe before.chapters.totalChapterCount
+    }
 
     /** The fixture: eight entries, as the comments on each say. */
     private fun seedFixture() {

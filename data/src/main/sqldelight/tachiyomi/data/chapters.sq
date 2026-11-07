@@ -13,7 +13,8 @@
 -- so that query went too; manga_id alone, a prefix of (manga_id, read) and (manga_id, url), which
 -- take every one of its lookups and scans; the partial last_page_read, which no plan used; and
 -- read and date_fetch, which served only updatesView.sq's getUpdatesByReadStatus and
--- getRecentUpdates, deleted with them because nothing called them.
+-- getRecentUpdates, deleted with them because nothing called them. getChaptersByMangaIdsAndNumbers
+-- is merged entries', for the Updates tab.
 
 import kotlin.Boolean;
 import kotlinx.serialization.json.JsonObject;
@@ -126,6 +127,16 @@ SELECT C.*
 FROM chapters C
 LEFT JOIN excluded_scanlators ES ON C.manga_id = ES.manga_id AND C.scanlator = ES.scanlator
 WHERE C.manga_id = :mangaId AND C.deleted_at IS NULL
+  AND (:applyScanlatorFilter = 0 OR ES.scanlator IS NULL);
+
+-- The chapters of a merged title's members with one of the numbers, for one row per number in the
+-- Updates tab (FoldMergedUpdates). manga_id finds the members' chapters and the number is a residual
+-- filter on them, so a title costs its own chapters in SQLite and only these copies in Kotlin.
+getChaptersByMangaIdsAndNumbers:
+SELECT C.*
+FROM chapters C
+LEFT JOIN excluded_scanlators ES ON C.manga_id = ES.manga_id AND C.scanlator = ES.scanlator
+WHERE C.manga_id IN :mangaIds AND C.chapter_number IN :numbers AND C.deleted_at IS NULL
   AND (:applyScanlatorFilter = 0 OR ES.scanlator IS NULL);
 
 -- getChaptersByMangaId with applyScanlatorFilter 0 for a page of entries (phase 5 unit SC2). The

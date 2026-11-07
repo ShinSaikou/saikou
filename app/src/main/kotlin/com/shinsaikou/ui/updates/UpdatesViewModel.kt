@@ -8,6 +8,8 @@ import com.shinsaikou.domain.chapter.interactor.SetReadStatus
 import com.shinsaikou.domain.chapter.interactor.ToggleBookmark
 import com.shinsaikou.domain.download.DownloadedChapters
 import com.shinsaikou.domain.download.model.DownloadQueueEntry
+import com.shinsaikou.domain.merged.interactor.FoldMergedUpdates
+import com.shinsaikou.domain.merged.interactor.GetMergedGroups
 import com.shinsaikou.domain.preferences.LibraryPreferences
 import com.shinsaikou.domain.preferences.LibraryUpdateSkipCounts
 import com.shinsaikou.domain.preferences.UiPreferences
@@ -58,6 +60,7 @@ import tachiyomi.core.common.preference.toggle
 import tachiyomi.domain.category.interactor.GetCategories
 import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.chapter.interactor.GetChapter
+import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.domain.manga.interactor.GetManga
 import tachiyomi.domain.manga.model.applyFilter
 import tachiyomi.domain.updates.interactor.GetUpdates
@@ -84,6 +87,11 @@ import kotlin.time.Instant
  *
  * Each row carries upstream's download control (plan 2.6, unit ID3), drawn from [State.downloaded] and
  * [State.queued], which follow only the chapters the list shows.
+ *
+ * A merged title has one row per chapter number, under its main entry ([FoldMergedUpdates]). The
+ * rows stay chapters of their own entries, so every action here reaches the row's own copy and
+ * `SetReadStatus` takes a mark on to the others. While Merged entries is off this reads only the
+ * preference.
  */
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModel>())
 @ViewModelKey(UpdatesViewModel::class)
@@ -104,6 +112,8 @@ class UpdatesViewModel(
     private val downloadManifest: DownloadManifest,
     private val getManga: GetManga,
     private val getCategories: GetCategories,
+    private val getMergedGroups: GetMergedGroups,
+    private val foldMergedUpdates: FoldMergedUpdates,
     private val dispatchers: Dispatchers,
     clock: Clock,
 ) : StateViewModel<UpdatesViewModel.State>(State()) {
@@ -197,6 +207,16 @@ class UpdatesViewModel(
         val hasActiveFilters: Boolean
             get() = listOf(downloaded, unread, started, bookmarked).any { it != TriState.DISABLED }
 
+        /** The query's unread, started and bookmarked tests, for a chapter it did not list. */
+        fun shows(chapter: Chapter): Boolean =
+            applyFilter(unread) { !chapter.read } &&
+                applyFilter(bookmarked) { chapter.bookmark } &&
+                when (started) {
+                    TriState.DISABLED -> true
+                    TriState.ENABLED_IS -> !chapter.read && chapter.lastPageRead > 0
+                    TriState.ENABLED_NOT -> !chapter.read && chapter.lastPageRead == 0L
+                }
+
         /** A category's row in the dialog: included, excluded, or neither, read as upstream's dialog reads it. */
         fun categoryState(categoryId: Long): TriState = when (categoryId) {
             in includedCategories -> TriState.ENABLED_IS
@@ -238,8 +258,16 @@ class UpdatesViewModel(
         libraryPreferences.newUpdatesCount.set(0)
 
         viewModelScope.launch {
-            combine(rows(), downloadedFilter()) { rows, downloaded ->
-                rows.filter { row -> applyFilter(downloaded.state) { row.chapterId in downloaded.ids } }
+            combine(rows(), downloadedFilter(), getMergedGroups.subscribe()) { rows, downloaded, groups ->
+                foldMergedUpdates.await(
+                    rows = rows.rows.filter { row -> applyFilter(downloaded.state) { row.chapterId in downloaded.ids } },
+                    groups = groups,
+                    hideExcludedScanlators = rows.filters.excludedScanlators,
+                    memberShown = { mangaId -> inFilteredCategories(mangaId, rows.filters) },
+                    copyShown = { chapter ->
+                        rows.filters.shows(chapter) && applyFilter(downloaded.state) { chapter.id in downloaded.ids }
+                    },
+                )
             }
                 .flowOn(dispatchers.io)
                 .collect { visible ->
@@ -570,7 +598,7 @@ class UpdatesViewModel(
      * `hideExcludedScanlators = false`) ends here, the stored switch going in as upstream's does.
      */
     @OptIn(ExperimentalCoroutinesApi::class)
-    private fun rows(): Flow<List<UpdatesWithRelations>> =
+    private fun rows(): Flow<FilteredRows> =
         filters()
             .map { it.copy(downloaded = TriState.DISABLED) }
             .distinctUntilChanged()
@@ -583,8 +611,19 @@ class UpdatesViewModel(
                     hideExcludedScanlators = filters.excludedScanlators,
                     includedCategories = filters.includedCategories,
                     excludedCategories = filters.excludedCategories,
-                )
+                ).map { FilteredRows(it, filters) }
             }
+
+    /** The query's answer with the filters it ran under, which a merged title's copies are put to. */
+    private data class FilteredRows(val rows: List<UpdatesWithRelations>, val filters: Filters)
+
+    /** The query's category test for an entry it did not list; the default category is no rows at all. */
+    private suspend fun inFilteredCategories(mangaId: Long, filters: Filters): Boolean {
+        if (filters.includedCategories.isEmpty() && filters.excludedCategories.isEmpty()) return true
+        val categories = getCategories.await(mangaId).map { it.id }.ifEmpty { listOf(Category.UNCATEGORIZED_ID) }
+        return categories.none { it in filters.excludedCategories } &&
+            (filters.includedCategories.isEmpty() || categories.any { it in filters.includedCategories })
+    }
 
     /**
      * The Downloaded filter with the ids it tests against. The ids are the manifest's, a row whose

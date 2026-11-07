@@ -1,5 +1,7 @@
 package com.shinsaikou.ui.upcoming
 
+import com.shinsaikou.domain.merged.model.MergedGroup
+import com.shinsaikou.domain.merged.model.MergedMember
 import com.shinsaikou.source.model.MangaStatus
 import com.shinsaikou.source.model.UpdateStrategy
 import io.kotest.matchers.collections.shouldBeEmpty
@@ -160,6 +162,91 @@ class UpcomingUiModelTest {
             .map { it.date to it.count } shouldContainExactly listOf(today to 1, LocalDate(2026, 11, 11) to 1)
         upcomingUiModels(listOf(late, early), TimeZone.of("Asia/Tokyo")).filterIsInstance<UpcomingUiModel.Header>()
             .map { it.date to it.count } shouldContainExactly listOf(LocalDate(2026, 11, 11) to 2)
+    }
+
+    private fun group(main: Long, vararg members: Pair<Long, Boolean>) = MergedGroup(
+        id = main,
+        mainMangaId = main,
+        showAll = false,
+        members = members.mapIndexed { index, (id, checkUpdates) ->
+            MergedMember(id, source = id, url = "/$id", position = index.toLong(), checkUpdates = checkUpdates)
+        },
+    )
+
+    @Test
+    fun `a merged title is one row, under its main entry, at the earliest date of its members`() {
+        val library = listOf(
+            item(1L, nextUpdate = startOfToday + 3 * day),
+            item(2L, nextUpdate = startOfToday + day),
+            item(3L, nextUpdate = startOfToday + 2 * day),
+        )
+
+        val entries = upcomingEntries(
+            library,
+            emptySet(),
+            emptySet(),
+            startOfToday,
+            listOf(group(1L, 1L to true, 2L to true)),
+        )
+
+        entries.map { it.id } shouldContainExactly listOf(1L, 3L)
+        entries.first().nextUpdate shouldBe startOfToday + day
+    }
+
+    @Test
+    fun `a member with Check for updates off does not count toward the date`() {
+        val library = listOf(item(1L, nextUpdate = startOfToday + 3 * day), item(2L, nextUpdate = startOfToday + day))
+
+        val entries = upcomingEntries(
+            library,
+            emptySet(),
+            emptySet(),
+            startOfToday,
+            listOf(group(1L, 1L to true, 2L to false)),
+        )
+
+        entries.map { it.id to it.nextUpdate } shouldContainExactly listOf(1L to startOfToday + 3 * day)
+    }
+
+    @Test
+    fun `a main entry that fails the rules still names the row a member earned`() {
+        val library = listOf(item(1L, strategy = UpdateStrategy.ONLY_FETCH_ONCE), item(2L, nextUpdate = startOfToday + 2 * day))
+
+        val entries = upcomingEntries(
+            library,
+            emptySet(),
+            emptySet(),
+            startOfToday,
+            listOf(group(1L, 1L to true, 2L to true)),
+        )
+
+        entries.map { it.id to it.nextUpdate } shouldContainExactly listOf(1L to startOfToday + 2 * day)
+    }
+
+    @Test
+    fun `a title with no member left to check has no row`() {
+        val library = listOf(item(1L, status = MangaStatus.COMPLETED), item(2L))
+
+        upcomingEntries(
+            library,
+            emptySet(),
+            emptySet(),
+            startOfToday,
+            listOf(group(1L, 1L to true, 2L to false)),
+        ).shouldBeEmpty()
+    }
+
+    @Test
+    fun `a main entry not in the library yet leaves its members as they are`() {
+        val library = listOf(item(2L), item(3L))
+
+        upcomingEntries(
+            library,
+            emptySet(),
+            emptySet(),
+            startOfToday,
+            listOf(group(1L, 1L to true, 2L to true)),
+        ).map { it.id } shouldContainExactly listOf(2L, 3L)
     }
 
     @Test

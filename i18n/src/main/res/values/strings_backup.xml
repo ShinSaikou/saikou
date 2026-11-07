@@ -58,6 +58,16 @@
     <string name="import_report_errors">Errors</string>
     <string name="import_report_nothing_missing">Nothing is missing</string>
     <string name="import_report_none">No restore has finished on this device yet</string>
+    <string name="import_report_merged">Merged entries</string>
+    <plurals name="import_report_merged_count">
+        <item quantity="one">%d merged title restored</item>
+        <item quantity="other">%d merged titles restored</item>
+    </plurals>
+    <string name="import_report_merged_switch_off">Each shows as one entry once you turn on Merged entries in Settings > Experimental. Until then its sources show separately.</string>
+    <string name="import_report_merged_unmerged">Left as separate entries</string>
+    <string name="import_report_merged_unmerged_detail">Fewer than two of their sources could be merged</string>
+    <string name="import_report_merged_missing">Sources not in this backup</string>
+    <string name="import_report_merged_missing_format">%1$s: %2$s, %3$s</string>
     <string name="import_report_copy_downloads_detail">A backup holds no downloads. Copy them from another reader\'s downloads folder, or a Saikou export; the folder is only read</string>
     <string name="import_export_error_log_saved">Error log saved.</string>
     <string name="import_export_error_log_failed">The error log could not be saved. Try again, or choose another place.</string>

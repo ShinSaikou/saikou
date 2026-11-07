@@ -50,9 +50,9 @@ internal fun foldStartsExpanded(size: Int): Boolean = size <= 3
 /**
  * The list for [items], which the query answers newest fetch first. A [UpdatesUiModel.Header] goes
  * before the first row of each day, the day read from `dateFetch` in [zone] as upstream's
- * `getUiModel` reads it. Inside a day, a run of consecutive rows of one entry becomes a
- * [UpdatesUiModel.Fold] when it holds two or more. An entry that updated on two days has a fold, or
- * a row, under each.
+ * `getUiModel` reads it. Inside a day, a run of consecutive rows of one entry, or of one merged title,
+ * becomes a [UpdatesUiModel.Fold] when it holds two or more. An entry that updated on two days has a
+ * fold, or a row, under each.
  *
  * [expanded] holds the owner's choices by chapter id: a tap on a fold writes its choice for every
  * chapter the fold holds. A fold takes the choice of its newest chapter that has one, or
@@ -74,9 +74,9 @@ fun updatesUiModels(
         if (start == 0 || days[start - 1] != date) {
             models += UpdatesUiModel.Header(date)
         }
-        val mangaId = items[start].mangaId
+        val titleId = items[start].titleId
         var end = start + 1
-        while (end < items.size && items[end].mangaId == mangaId && days[end] == date) end++
+        while (end < items.size && items[end].titleId == titleId && days[end] == date) end++
         val run = items.subList(start, end)
         if (run.size == 1) {
             models += UpdatesUiModel.Item(run.single())

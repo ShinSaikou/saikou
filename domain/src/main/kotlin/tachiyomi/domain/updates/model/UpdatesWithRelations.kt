@@ -3,7 +3,11 @@ package tachiyomi.domain.updates.model
 
 import tachiyomi.domain.manga.model.MangaCover
 
-/** Modified: [displayTitle], the entry's edit over [mangaTitle], the source's (phase 5 unit ED). */
+/**
+ * Modified: [displayTitle], the entry's edit over [mangaTitle], the source's (phase 5 unit ED), and
+ * [mergedMainId], the main entry a merged title's row stands under, whose title and cover it then
+ * carries. [mangaId] and [sourceId] stay the owner of [chapterId].
+ */
 data class UpdatesWithRelations(
     val mangaId: Long,
     val mangaTitle: String,
@@ -18,4 +22,8 @@ data class UpdatesWithRelations(
     val sourceId: Long,
     val dateFetch: Long,
     val coverData: MangaCover,
-)
+    val mergedMainId: Long? = null,
+) {
+    /** The entry the row opens: the merged title's main entry, or the row's own. */
+    val titleId: Long get() = mergedMainId ?: mangaId
+}

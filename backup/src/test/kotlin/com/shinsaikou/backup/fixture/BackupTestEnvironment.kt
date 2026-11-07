@@ -16,8 +16,11 @@ import com.shinsaikou.backup.importer.PreferenceRestorer
 import com.shinsaikou.data.AndroidDatabaseHandler
 import com.shinsaikou.data.DatabaseHandler
 import com.shinsaikou.data.extension.ExtensionStoreRepositoryImpl
+import com.shinsaikou.data.merged.MergedGroupRepositoryImpl
 import com.shinsaikou.data.source.SourceAliasRepositoryImpl
 import com.shinsaikou.domain.manga.interactor.UpdateManga
+import com.shinsaikou.domain.merged.interactor.CarryMergedTracks
+import com.shinsaikou.domain.merged.interactor.ReconcileMergedRead
 import com.shinsaikou.domain.preferences.BackupPreferences
 import com.shinsaikou.domain.preferences.LibraryPreferences
 import com.shinsaikou.domain.preferences.SyncRestorePreferences
@@ -34,10 +37,10 @@ import eu.kanade.tachiyomi.data.backup.BackupFileValidator
 import eu.kanade.tachiyomi.data.backup.BackupHeader
 import eu.kanade.tachiyomi.data.backup.create.BackupOptions
 import eu.kanade.tachiyomi.data.backup.models.Backup
-import com.shinsaikou.domain.merged.interactor.ReconcileMergedRead
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.spyk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.protobuf.ProtoBuf
@@ -154,6 +157,11 @@ class BackupTestEnvironment(
     )
     val extensionStoreRepository = ExtensionStoreRepositoryImpl(handler)
     val sourceAliasRepository = SourceAliasRepositoryImpl(handler)
+    val mergedGroupRepository = MergedGroupRepositoryImpl(handler)
+    /** The importer's merged read reconcile, real, and spied on so a test can see it asked. */
+    val reconcileMergedRead: ReconcileMergedRead by lazy {
+        spyk(ReconcileMergedRead(mergedGroupRepository, libraryPreferences))
+    }
 
     val decoder = decoderFactory(BackupDecoder(context, ProtoBuf))
     val validator = BackupFileValidator(decoder, sourceManager, trackerManager)
@@ -168,8 +176,6 @@ class BackupTestEnvironment(
 
     private val fetchInterval = FetchInterval(GetChaptersByMangaId(chapterRepository))
 
-    /** What the importer's merged read reconcile is asked to do; it writes nothing here. */
-    val reconcileMergedRead: ReconcileMergedRead = mockk(relaxed = true)
 
     val importer = BackupImporter(
         decoder = decoder,
@@ -191,6 +197,8 @@ class BackupTestEnvironment(
         syncRestorePreferences = syncRestorePreferences,
         sourceExtensionInstaller = sourceExtensionInstaller,
         reconcileMergedRead = reconcileMergedRead,
+        mergedGroupRepository = mergedGroupRepository,
+        carryMergedTracks = CarryMergedTracks(trackRepository),
         json = json,
     )
 

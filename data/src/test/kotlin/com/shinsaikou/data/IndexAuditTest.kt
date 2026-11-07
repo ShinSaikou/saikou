@@ -39,9 +39,9 @@ class IndexAuditTest {
     }
 
     @Test
-    fun `the allow-list covers exactly the twenty-eight findings no index serves`() {
+    fun `the allow-list covers exactly the twenty-nine findings no index serves`() {
         val allowlist = Allowlist.read()
-        allowlist.entries.keys.size shouldBe 28
+        allowlist.entries.keys.size shouldBe 29
         allowlist.entries.keys shouldContain "view/historyView.sq:history:mangas.title"
         allowlist.entries.keys shouldContain "mangas.sq:getDuplicateLibraryManga:mangas.title"
         allowlist.entries.keys shouldContain "chapters.sq:getScanlatorsByMangaId:chapters.scanlator"

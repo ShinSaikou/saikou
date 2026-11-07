@@ -44,6 +44,7 @@ import com.shinsaikou.ui.settings.STORAGE_ROOT_HINT
 import dev.zacsweers.metrox.viewmodel.metroViewModel
 import tachiyomi.presentation.core.components.HeadingItem
 import tachiyomi.presentation.core.components.material.Scaffold
+import tachiyomi.presentation.core.i18n.pluralStringResource
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.EmptyScreen
 import tachiyomi.presentation.core.screens.LoadingScreen
@@ -138,6 +139,7 @@ fun ImportReportScreen() {
                     }
                 }
                 trackerLines(report)
+                mergedTitles(report)
                 item { HeadingItem(R.string.settings_section_downloads) }
                 item {
                     CopyDownloadsRow(state.adoption, onPick = { pickTree.launch(STORAGE_ROOT_HINT.toUri()) })
@@ -307,6 +309,43 @@ private fun LazyListScope.trackerLines(report: ImportReport) {
     }
 }
 
+/**
+ * What came of a TachiyomiSY file's merged entries: how many stand as one, with how to see them while
+ * Merged entries is off, the titles left as separate entries, and the sources not in the file.
+ */
+private fun LazyListScope.mergedTitles(report: ImportReport) {
+    val titles = report.mergedTitles ?: return
+    item { HeadingItem(R.string.import_report_merged) }
+    item {
+        ListRowLayout {
+            ListRowTitle(pluralStringResource(R.plurals.import_report_merged_count, titles.merged, titles.merged))
+            if (titles.merged > 0 && !titles.switchOn) {
+                ListRowDetail(stringResource(R.string.import_report_merged_switch_off), maxLines = Int.MAX_VALUE)
+            }
+        }
+    }
+    item {
+        Column {
+            NamesRow(
+                R.string.import_report_merged_unmerged,
+                titles.unmerged,
+                hintRes = R.string.import_report_merged_unmerged_detail,
+            )
+            if (titles.missing.isNotEmpty()) {
+                ListRowLayout {
+                    ListRowTitle(stringResource(R.string.import_report_merged_missing))
+                    titles.missing.forEach { source ->
+                        ListRowDetail(
+                            stringResource(R.string.import_report_merged_missing_format, source.title, source.source, source.url),
+                            maxLines = Int.MAX_VALUE,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 /** A heading per kind, then its errors, one lazy row each. */
 private fun LazyListScope.errorGroups(groups: List<Pair<ImportError.Kind, List<ImportError>>>) {
     groups.forEach { (kind, errors) ->
@@ -334,4 +373,5 @@ private fun ImportError.Kind.labelRes(): Int = when (this) {
     ImportError.Kind.UNKNOWN_TRACKER_SKIPPED -> R.string.import_error_kind_unknown_tracker
     ImportError.Kind.BATCH_FALLBACK -> R.string.import_error_kind_batch_fallback
     ImportError.Kind.EXTENSION_INSTALL -> R.string.backup_option_install_extensions
+    ImportError.Kind.MERGED_TITLE -> R.string.import_report_merged
 }

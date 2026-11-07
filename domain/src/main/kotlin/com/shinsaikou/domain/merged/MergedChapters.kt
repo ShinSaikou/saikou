@@ -50,6 +50,17 @@ object MergedChapters {
     }
 
     /**
+     * [manga] with the sort its merged list really has, for the sheet that shows and changes it: a
+     * stored sort by source is the sort by number [sort] answers, in the same direction.
+     */
+    fun sorted(manga: Manga): Manga = when (manga.sorting) {
+        Manga.CHAPTER_SORTING_SOURCE -> manga.copy(
+            chapterFlags = (manga.chapterFlags and Manga.CHAPTER_SORTING_MASK.inv()) or Manga.CHAPTER_SORTING_NUMBER,
+        )
+        else -> manga
+    }
+
+    /**
      * The rows of [shown] whose number has a copy [shown] left out with its files on disk, of
      * [all] the group's chapters. A row badged here can be read offline through Show every copy.
      */

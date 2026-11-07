@@ -1,8 +1,9 @@
-// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupDecoder.kt (modified: yes) streamed, and can pass over an entry that does not decode
+// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupDecoder.kt (modified: yes) streamed, can pass over an entry that does not decode, and lists a file's merged entries
 package eu.kanade.tachiyomi.data.backup
 
 import android.content.Context
 import android.net.Uri
+import com.shinsaikou.source.SourceIds
 import dev.zacsweers.metro.Inject
 import eu.kanade.tachiyomi.data.backup.models.Backup
 import eu.kanade.tachiyomi.data.backup.models.BackupManga
@@ -34,6 +35,9 @@ import java.io.IOException
  * so the walk goes on past it: [header] lists it, and [entries] can pass over it, so a restore keeps
  * every other entry and reports the one. A file whose frames themselves break (cut short, a tag or a
  * length that cannot be) is still refused, since nothing after the break can be found.
+ *
+ * [header] keeps a TachiyomiSY file's synthetic merged entries, so a restore knows them whatever
+ * their place in the file; there are few, and their chapter lists are dropped on the way.
  */
 @Inject
 class BackupDecoder(
@@ -68,19 +72,26 @@ class BackupDecoder(
      * frames break is refused here, before a restore writes anything. An entry that does not decode
      * is listed in [BackupHeader.undecodable]; a file none of whose entries decode is refused, since
      * it is no backup (or bytes that happen to frame). Fields the vendored model does not know are
-     * kept for the parser, which ignores them as it does in [decode].
+     * kept for the parser, which ignores them as it does in [decode]. A synthetic merged entry is
+     * kept too, in [BackupHeader.syMerged].
      */
     fun header(source: Source): BackupHeader = open(source).use { stream ->
         malformedOnFailure {
             val rest = Buffer()
             val trackerIds = LinkedHashSet<Long>()
             val undecodable = mutableListOf<Int>()
+            val syMerged = mutableListOf<BackupManga>()
             var count = 0
             val frames = FrameReader(stream)
             while (frames.next()) {
                 if (frames.field == MANGA_FIELD) {
                     val entry = decodeEntryOrNull(frames.readEntry())
-                    if (entry == null) undecodable += count else entry.tracking.mapTo(trackerIds) { it.syncId.toLong() }
+                    if (entry == null) {
+                        undecodable += count
+                    } else {
+                        entry.tracking.mapTo(trackerIds) { it.syncId.toLong() }
+                        if (entry.source == SourceIds.SY_MERGED) syMerged += entry.apply { chapters = emptyList() }
+                    }
                     count++
                 } else {
                     frames.copyTo(rest)
@@ -94,6 +105,7 @@ class BackupDecoder(
                 mangaCount = count,
                 trackerIds = trackerIds.toList(),
                 undecodable = undecodable,
+                syMerged = syMerged,
             )
         }
     }
@@ -284,6 +296,8 @@ class BackupHeader(
     val trackerIds: List<Long>,
     /** The index, among the field 1 frames, of each entry that does not decode, lowest first. */
     val undecodable: List<Int> = emptyList(),
+    /** The file's TachiyomiSY synthetic merged entries, in file order, less their chapters. */
+    val syMerged: List<BackupManga> = emptyList(),
 )
 
 /**

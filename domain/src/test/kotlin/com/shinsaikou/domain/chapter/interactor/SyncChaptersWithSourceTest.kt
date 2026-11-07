@@ -821,6 +821,12 @@ class SyncChaptersWithSourceTest {
 
         override suspend fun getChaptersByIds(ids: List<Long>): List<Chapter> = stored.filter { it.id in ids }
 
+        override suspend fun getChaptersByNumbers(
+            mangaIds: List<Long>,
+            numbers: List<Double>,
+            applyScanlatorFilter: Boolean,
+        ): List<Chapter> = stored.filter { it.mangaId in mangaIds && it.chapterNumber in numbers }
+
         override suspend fun softDelete(chapterIds: List<Long>, now: Long) {
             softDeleted += chapterIds
             stored.replaceAll { if (it.id in chapterIds) it.copy(deletedAt = now) else it }

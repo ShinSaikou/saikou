@@ -11,6 +11,12 @@ object SourceIds {
     const val LOCAL: Long = 0L
 
     /**
+     * TachiyomiSY's `MERGED_SOURCE_ID`, the source of the synthetic entry it writes for a merged
+     * entry. No provider serves it and no row here carries it: a restore turns that entry into a group.
+     */
+    const val SY_MERGED: Long = 6969L
+
+    /**
      * Reproduces HttpSource.generateId from the extension ABI byte for byte: MD5 of
      * "<name.lowercase()>/<lang>/<versionId>", first 8 bytes big-endian, sign bit cleared.
      * Only name is lowercased; lang is used as-is. Use it for source_alias rows and backup

@@ -148,6 +148,56 @@ class ImportReportViewModelTest {
         }
 
     @Test
+    fun `a report's merged titles reach the state with the report, as the file left them`() = runTest(testDispatcher) {
+        val titles = ImportReport.MergedTitles(
+            merged = 2,
+            switchOn = false,
+            unmerged = listOf("A title"),
+            missing = listOf(ImportReport.MissingSource("A title", "A source", "/gone")),
+        )
+        stored = report().copy(mergedTitles = titles)
+
+        val state = viewModel().state.value
+
+        state.report?.mergedTitles shouldBe titles
+    }
+
+    @Test
+    fun `a merged title's missing source is something missing, and merged titles with no missing source are not`() =
+        runTest(testDispatcher) {
+            val gap = ImportReport.MissingSource("A title", "A source", "/gone")
+
+            stored = report().copy(mergedTitles = ImportReport.MergedTitles(merged = 1, unmerged = listOf("A title"), missing = listOf(gap)))
+            viewModel().state.value.nothingMissing shouldBe false
+
+            stored = report().copy(mergedTitles = ImportReport.MergedTitles(merged = 2, unmerged = listOf("A title")))
+            viewModel().state.value.nothingMissing shouldBe true
+        }
+
+    @Test
+    fun `a report with no merged titles reaches the state with none`() = runTest(testDispatcher) {
+        stored = report()
+
+        viewModel().state.value.report?.mergedTitles.shouldBeNull()
+    }
+
+    @Test
+    fun `a merged title that could not be written is its own group of errors, after the kinds before it`() =
+        runTest(testDispatcher) {
+            val merged = error(ImportError.Kind.MERGED_TITLE, "A title", at = 3L, sourceLabel = null)
+            val chapters = error(ImportError.Kind.CHAPTERS, "An entry", at = 4L)
+            stored = report(errors = listOf(merged, chapters))
+
+            val state = viewModel().state.value
+
+            state.errorGroups shouldContainExactly listOf(
+                ImportError.Kind.CHAPTERS to listOf(chapters),
+                ImportError.Kind.MERGED_TITLE to listOf(merged),
+            )
+            ImportReportViewModel.errorSubject(merged) shouldBe "A title"
+        }
+
+    @Test
     fun `a tracker signed in and a source installed since the restore leave the report`() = runTest(testDispatcher) {
         stored = report(missingSources = listOf(SOURCE_LISTED), trackersNotSignedIn = listOf(TRACKER_ID))
         val viewModel = viewModel()

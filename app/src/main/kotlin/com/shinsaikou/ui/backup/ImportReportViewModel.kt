@@ -87,7 +87,8 @@ class ImportReportViewModel(
                 trackers.isEmpty() &&
                 errorGroups.isEmpty() &&
                 report?.unsupportedTrackers.isNullOrEmpty() &&
-                report?.unknownTrackers.isNullOrEmpty()
+                report?.unknownTrackers.isNullOrEmpty() &&
+                report?.mergedTitles?.missing.isNullOrEmpty()
     }
 
     data class TrackerRow(val id: Long, val name: String)

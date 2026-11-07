@@ -2,6 +2,7 @@ package com.shinsaikou.domain.library.interactor
 
 import com.shinsaikou.domain.download.repository.DownloadManifestRepository
 import com.shinsaikou.domain.library.model.LibraryItem
+import com.shinsaikou.domain.merged.MergedLibrary
 import com.shinsaikou.domain.merged.interactor.GetMergedGroups
 import com.shinsaikou.domain.merged.model.MergedTitle
 import com.shinsaikou.source.SourceIds
@@ -9,7 +10,6 @@ import com.shinsaikou.source.SourceManager
 import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
-import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.manga.interactor.GetLibraryManga
 
 /**
@@ -41,53 +41,16 @@ class GetLibraryItems(
                 sourceLanguage = languageBySourceId[libraryManga.manga.source].orEmpty(),
             )
         }
-        if (titles.isEmpty()) items else folded(items, titles)
+        if (titles.isEmpty()) items else MergedLibrary.folded(items, titles, LibraryItem::id, ::fold)
     }
 
-    /**
-     * [items] with each title's main entry standing for it and the other members gone. A title
-     * whose rows have not all reached this read yet folds what it can, and one left with fewer than
-     * two rows hides nothing, so no entry can vanish between two queries.
-     */
-    private fun folded(items: List<LibraryItem>, titles: List<MergedTitle>): List<LibraryItem> {
-        val byId = items.associateBy { it.id }
-        val folded = HashMap<Long, LibraryItem>()
-        val hidden = HashSet<Long>()
-        titles.forEach { title ->
-            val main = byId[title.group.mainMangaId] ?: return@forEach
-            val members = title.group.members.mapNotNull { byId[it.mangaId] }
-            if (members.size < 2) return@forEach
-            folded[main.id] = fold(main, members, title)
-            members.mapTo(hidden) { it.id }
-            hidden -= main.id
-        }
-        return items.filterNot { it.id in hidden }.map { folded[it.id] ?: it }
-    }
-
-    /**
-     * The counts are the group's own query, each number once. The dates are the latest of any
-     * member, so a chapter from the second source moves the title in a date sort. A member in no
-     * category has no tab to keep, so it reads as the default category only when every member does.
-     */
+    /** [MergedLibrary.fold]'s row, with what a Library row adds to it. */
     private fun fold(main: LibraryItem, members: List<LibraryItem>, title: MergedTitle): LibraryItem {
-        val rows = members.map { it.libraryManga }
-        val categories = rows.flatMap { it.categories }.distinct()
-        val counts = title.counts
-        val total = counts?.total ?: main.libraryManga.totalChapters
-        val read = counts?.read ?: main.libraryManga.readCount
+        val row = MergedLibrary.fold(main.libraryManga, members.map { it.libraryManga }, title)
         return main.copy(
-            libraryManga = main.libraryManga.copy(
-                manga = main.manga.copy(lastUpdate = rows.maxOf { it.manga.lastUpdate }),
-                categories = (categories - Category.UNCATEGORIZED_ID).ifEmpty { categories },
-                totalChapters = total,
-                readCount = read,
-                bookmarkCount = counts?.bookmarked ?: main.libraryManga.bookmarkCount,
-                latestUpload = rows.maxOf { it.latestUpload },
-                chapterFetchedAt = rows.maxOf { it.chapterFetchedAt },
-                lastRead = rows.maxOf { it.lastRead },
-            ),
-            downloadCount = counts?.downloaded ?: main.downloadCount,
-            unreadCount = total - read,
+            libraryManga = row,
+            downloadCount = title.counts?.downloaded ?: main.downloadCount,
+            unreadCount = row.unreadCount,
             isLocal = members.all { it.isLocal },
             members = members.map { it.manga },
         )

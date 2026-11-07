@@ -3,6 +3,8 @@ package com.shinsaikou.backup
 import com.shinsaikou.source.model.UpdateStrategy
 import eu.kanade.tachiyomi.data.backup.models.Backup
 import eu.kanade.tachiyomi.data.backup.models.BackupManga
+import eu.kanade.tachiyomi.data.backup.models.BackupMergeSettings
+import eu.kanade.tachiyomi.data.backup.models.BackupMergedEntry
 import io.kotest.assertions.withClue
 import io.kotest.matchers.shouldBe
 import kotlinx.serialization.KSerializer
@@ -42,8 +44,9 @@ import java.io.File
  * `PreferenceValue`), which is why serial names are compared too.
  *
  * The one allowed difference is [IMPORT_ONLY]: fields other readers of the format write, which Saikou
- * reads on import and never writes (R162 item 8). They are left out of the comparison and held by a
- * test of their own to numbers upstream does not use.
+ * reads on import and never writes (R162 item 8, R163 item 4). They are left out of the comparison,
+ * and of the walk, so the messages only they reach are not expected in the file, and held by a test
+ * of their own to numbers upstream does not use.
  *
  * Phase 3 unit R2, part 1; the `IndexFieldNumbersTest` pattern.
  */
@@ -71,7 +74,7 @@ class UpstreamBackupFieldsTest {
                     }
                 } else {
                     for (index in 0 until descriptor.elementsCount) {
-                        walk(descriptor.getElementDescriptor(index), null, into)
+                        if (!isImportOnly(descriptor, index)) walk(descriptor.getElementDescriptor(index), null, into)
                     }
                 }
             }
@@ -125,7 +128,7 @@ class UpstreamBackupFieldsTest {
     }
 
     @Test
-    fun `the import-only fields are optional strings at numbers upstream does not use`() {
+    fun `the import-only fields are optional and empty by default, at numbers upstream does not use`() {
         for ((message, fields) in IMPORT_ONLY) {
             val descriptor = reachable.getValue(message).descriptor
             val upstreamNumbers = recorded.getValue(message).jsonObject["fields"]!!.jsonArray
@@ -136,14 +139,37 @@ class UpstreamBackupFieldsTest {
                     val index = descriptor.getElementIndex(name)
                     val annotated = descriptor.getElementAnnotations(index).filterIsInstance<ProtoNumber>().single()
                     annotated.number shouldBe number
-                    descriptor.getElementDescriptor(index).kind shouldBe PrimitiveKind.STRING
-                    descriptor.getElementDescriptor(index).isNullable shouldBe true
-                    applied[name] shouldBe JsonNull
+                    descriptor.isElementOptional(index) shouldBe true
+                    applied[name] shouldBe if (name in IMPORT_ONLY_LISTS) JsonArray(emptyList()) else JsonNull
                     upstreamNumbers.contains(number) shouldBe false
                 }
             }
         }
     }
+
+    @Test
+    fun `TachiyomiSY's two messages keep the numbers its files write`() {
+        numbers(BackupMergedEntry.serializer().descriptor) shouldBe mapOf(
+            "isInfoManga" to 1,
+            "fetchChapterUpdates" to 2,
+            "chapterSortMode" to 3,
+            "chapterPriority" to 4,
+            "downloadChapters" to 5,
+            "mangaUrl" to 7,
+            "mangaSourceId" to 8,
+        )
+        numbers(BackupMergeSettings.serializer().descriptor) shouldBe mapOf(
+            "chapterSortMode" to 1,
+            "infoMangaUrl" to 2,
+            "infoMangaSourceId" to 3,
+        )
+    }
+
+    private fun numbers(descriptor: SerialDescriptor): Map<String, Int> =
+        (0 until descriptor.elementsCount).associate { index ->
+            descriptor.getElementName(index) to
+                descriptor.getElementAnnotations(index).filterIsInstance<ProtoNumber>().single().number
+        }
 
     private fun isImportOnly(descriptor: SerialDescriptor, index: Int): Boolean =
         IMPORT_ONLY[simpleName(descriptor)]?.containsValue(descriptor.getElementName(index)) == true
@@ -294,6 +320,16 @@ class UpstreamBackupFieldsTest {
         val ENUM_ENTRY = Regex("""[A-Z]\w*\.[A-Z][A-Z0-9_]*""")
 
         /** By message, the number and name of each field Saikou reads on import only. */
-        val IMPORT_ONLY = mapOf("BackupManga" to mapOf(800 to "customTitle", 804 to "customDescription"))
+        val IMPORT_ONLY = mapOf(
+            "BackupManga" to mapOf(
+                600 to "mergedEntries",
+                604 to "mergeSettings",
+                800 to "customTitle",
+                804 to "customDescription",
+            ),
+        )
+
+        /** The one of [IMPORT_ONLY] that defaults to an empty list, the others to null. */
+        val IMPORT_ONLY_LISTS = setOf("mergedEntries")
     }
 }

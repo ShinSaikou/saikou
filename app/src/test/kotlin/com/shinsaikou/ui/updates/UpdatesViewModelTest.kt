@@ -7,6 +7,10 @@ import com.shinsaikou.domain.download.DownloadedChapters
 import com.shinsaikou.domain.download.model.DownloadQueueEntry
 import com.shinsaikou.domain.download.model.DownloadState
 import com.shinsaikou.domain.error.ErrorKey
+import com.shinsaikou.domain.merged.interactor.FoldMergedUpdates
+import com.shinsaikou.domain.merged.interactor.GetMergedChapters
+import com.shinsaikou.domain.merged.model.MergedGroup
+import com.shinsaikou.domain.merged.model.MergedMember
 import com.shinsaikou.domain.preferences.LibraryPreferences
 import com.shinsaikou.domain.preferences.UiPreferences
 import com.shinsaikou.domain.preferences.UpdatesPreferences
@@ -50,6 +54,7 @@ import tachiyomi.domain.category.interactor.GetCategories
 import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.chapter.interactor.GetChapter
 import tachiyomi.domain.chapter.model.Chapter
+import tachiyomi.domain.chapter.repository.ChapterRepository
 import tachiyomi.domain.manga.interactor.GetManga
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.manga.model.MangaCover
@@ -88,6 +93,9 @@ class UpdatesViewModelTest {
     private val downloadManifest = mockk<DownloadManifest>(relaxed = true)
     private val getManga = mockk<GetManga>()
     private val getCategories = mockk<GetCategories>()
+    private val chapterRepository = mockk<ChapterRepository>()
+    private val getMergedChapters = mockk<GetMergedChapters>()
+    private val mergedGroups = MutableStateFlow<List<MergedGroup>>(emptyList())
 
     /** The queue's rows, and the downloaded answer for the shown chapters, for the rows' controls. */
     private val queueFlow = MutableStateFlow<List<DownloadQueueEntry>>(emptyList())
@@ -181,6 +189,8 @@ class UpdatesViewModelTest {
         downloadManifest = downloadManifest,
         getManga = getManga,
         getCategories = getCategories,
+        getMergedGroups = mockk { every { subscribe() } returns mergedGroups },
+        foldMergedUpdates = FoldMergedUpdates(chapterRepository, getManga, getMergedChapters),
         dispatchers = AppDispatchers(
             io = testDispatcher,
             default = testDispatcher,
@@ -681,6 +691,90 @@ class UpdatesViewModelTest {
     // ---- The stored filters (phase 4 unit UF) ----
 
     private fun category(id: Long) = Category(id = id, name = "Category $id", order = id, flags = 0L)
+
+    /** Entry 1, the main one, and entry 2, each with chapter 5; the merged title of the next tests. */
+    private fun merged(showAll: Boolean = false): List<Chapter> {
+        every { getMergedChapters.visible(any(), any()) } answers {
+            firstArg<List<Chapter>>().let { copies -> if (showAll) copies else copies.filter { it.mangaId == 1L } }
+        }
+        coEvery { getManga.await(1L) } returns Manga.create().copy(id = 1L, source = 1L, title = "Main")
+        val copies = listOf(
+            Chapter.create().copy(id = 1L, mangaId = 1L, chapterNumber = 5.0),
+            Chapter.create().copy(id = 2L, mangaId = 2L, chapterNumber = 5.0),
+        )
+        coEvery { chapterRepository.getChaptersByIds(any()) } returns copies
+        coEvery { chapterRepository.getChaptersByNumbers(any(), any(), any()) } returns copies
+        mergedGroups.value = listOf(
+            MergedGroup(
+                id = 7L,
+                mainMangaId = 1L,
+                showAll = showAll,
+                members = listOf(1L, 2L).map { MergedMember(it, it, "/$it", it, checkUpdates = true) },
+            ),
+        )
+        return copies
+    }
+
+    @Test
+    fun `a merged title's copies of one number are one row under the main entry`() = runTest(testDispatcher) {
+        merged()
+        rowsFlow.value = listOf(update(chapterId = 1L), update(chapterId = 2L).copy(mangaId = 2L, sourceId = 2L))
+
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        val row = viewModel.state.value.items.single()
+        row.chapterId shouldBe 1L
+        row.titleId shouldBe 1L
+        row.displayTitle shouldBe "Main"
+    }
+
+    @Test
+    fun `the second source's chapter opens the main entry and downloads under its own entry`() = runTest(testDispatcher) {
+        val owner = Manga.create().copy(id = 2L, source = 2L)
+        val (_, copy) = merged(showAll = true)
+        coEvery { getManga.await(2L) } returns owner
+        coEvery { getChapter.await(2L) } returns copy
+        rowsFlow.value = listOf(update(chapterId = 2L).copy(mangaId = 2L, sourceId = 2L))
+
+        val viewModel = viewModel()
+        advanceUntilIdle()
+        val row = viewModel.state.value.items.single()
+        row.titleId shouldBe 1L
+        viewModel.runChapterDownloadAction(row, ChapterDownloadAction.START)
+        advanceUntilIdle()
+
+        coVerify { downloadQueue.enqueue(owner, listOf(copy), autoStart = true) }
+    }
+
+    @Test
+    fun `marking a merged row reaches SetReadStatus with the row's own chapter`() = runTest(testDispatcher) {
+        val (_, copy) = merged(showAll = true)
+        coEvery { getChapter.await(2L) } returns copy
+        coEvery { setReadStatus.await(true, copy) } returns SetReadStatus.Result.Success(listOf(copy))
+        rowsFlow.value = listOf(update(chapterId = 2L).copy(mangaId = 2L, sourceId = 2L))
+
+        val viewModel = viewModel()
+        advanceUntilIdle()
+        viewModel.markRead(viewModel.state.value.items.single(), read = true)
+        advanceUntilIdle()
+
+        coVerify { setReadStatus.await(true, copy) }
+    }
+
+    @Test
+    fun `the downloaded filter runs before the fold, so a hidden copy on disk keeps its row`() = runTest(testDispatcher) {
+        merged()
+        every { getMergedChapters.visible(any(), any()) } answers { firstArg() }
+        updatesPreferences.filterDownloaded.set(TriState.ENABLED_IS)
+        downloadedFlow.value = setOf(2L)
+        rowsFlow.value = listOf(update(chapterId = 1L), update(chapterId = 2L).copy(mangaId = 2L, sourceId = 2L))
+
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        viewModel.state.value.items.map { it.chapterId } shouldContainExactly listOf(2L)
+    }
 
     @Test
     fun `the unread filter goes into the query and its rows reach state`() = runTest(testDispatcher) {

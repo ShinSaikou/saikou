@@ -2,6 +2,7 @@
 package eu.kanade.tachiyomi.data.backup
 
 import android.net.Uri
+import com.shinsaikou.source.SourceIds
 import com.shinsaikou.source.SourceManager
 import com.shinsaikou.tracking.TrackerIds
 import com.shinsaikou.tracking.TrackerManager
@@ -16,7 +17,7 @@ import kotlinx.coroutines.flow.first
  * restore-report), so the restore report can offer Sign in for each after the run. `validate`
  * suspends until the source registry has loaded, so a run the system started cold does not call
  * every installed source missing. Both overloads read a [BackupHeader] (phase 5 unit SC2), never
- * the whole decoded file.
+ * the whole decoded file. TachiyomiSY's merged source is no source to install, so it is not missing.
  */
 @Inject
 class BackupFileValidator(
@@ -34,7 +35,7 @@ class BackupFileValidator(
 
         val sources = header.backup.backupSources.associate { it.sourceId to it.name }
         val missingSources = sources
-            .filterKeys { sourceManager.get(it) == null }
+            .filterKeys { it != SourceIds.SY_MERGED && sourceManager.get(it) == null }
             .values
             .map { name ->
                 val id = name.toLongOrNull()

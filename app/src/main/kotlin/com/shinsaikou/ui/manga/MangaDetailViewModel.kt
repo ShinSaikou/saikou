@@ -262,6 +262,10 @@ class MangaDetailViewModel(
             fun chapterSort(sortDescending: Boolean = manga.sortDescending()): (Chapter, Chapter) -> Int =
                 if (merged == null) getChapterSort(manga, sortDescending) else MergedChapters.sort(manga, sortDescending)
 
+            /** [manga] with the sort the list really has, for the sheet that shows and changes it. */
+            val sortedManga: Manga
+                get() = if (merged == null) manga else MergedChapters.sorted(manga)
+
             /** The source a row names; only in a merged title, where a row can come from any. */
             fun sourceNameOf(chapter: Chapter): String? =
                 merged?.sources?.firstOrNull { it.mangaId == chapter.mangaId }?.sourceName
@@ -1746,10 +1750,11 @@ class MangaDetailViewModel(
     /**
      * The tapped field's own constant, never `manga.sorting`. The interactor flips the direction
      * when the two match and switches the field when they do not, so passing the current sorting
-     * back in is how the old flip-only control could never change the field at all.
+     * back in is how the old flip-only control could never change the field at all. A merged title
+     * passes [State.Success.sortedManga], so the number row it shows as active flips like any other.
      */
     fun setChapterSort(sorting: Long) {
-        val manga = (state.value as? State.Success)?.manga ?: return
+        val manga = (state.value as? State.Success)?.sortedManga ?: return
         viewModelScope.launch { setMangaChapterFlags.awaitSetSortingModeOrFlipOrder(manga, sorting) }
     }
 

@@ -14,6 +14,7 @@ import eu.kanade.tachiyomi.data.backup.restore.RestoreOptions
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.nulls.shouldBeNull
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
@@ -113,6 +114,49 @@ class RestoreReportTest {
                 .writeText(appJson.encodeToString(ImportReport.serializer(), written))
 
             env.checkpoints.loadReport() shouldBe written
+        }
+    }
+
+    @Test
+    fun `a report an older build wrote has no merged titles`() = runTest {
+        BackupTestEnvironment(tempDir).use { env ->
+            env.checkpoints.reportFile.apply { parentFile?.mkdirs() }.writeText(OLDER_REPORT)
+
+            env.checkpoints.loadReport()!!.mergedTitles.shouldBeNull()
+        }
+    }
+
+    @Test
+    fun `a report with merged titles round trips by the app's Json`() = runTest {
+        BackupTestEnvironment(tempDir).use { env ->
+            val appJson = Json {
+                ignoreUnknownKeys = true
+                explicitNulls = false
+            }
+            val titles = ImportReport.MergedTitles(
+                merged = 2,
+                switchOn = false,
+                unmerged = listOf("A title", "Another"),
+                missing = listOf(ImportReport.MissingSource("A title", "Fixture Source A", "/gone")),
+            )
+            val written = report().copy(mergedTitles = titles)
+            env.checkpoints.reportFile.apply { parentFile?.mkdirs() }
+                .writeText(appJson.encodeToString(ImportReport.serializer(), written))
+
+            env.checkpoints.loadReport() shouldBe written
+            env.checkpoints.loadReport()!!.mergedTitles shouldBe titles
+        }
+    }
+
+    @Test
+    fun `merged titles written with only a count read the rest as the defaults`() = runTest {
+        BackupTestEnvironment(tempDir).use { env ->
+            val withTitles = OLDER_REPORT.removeSuffix("}") + ""","mergedTitles":{"merged":3}}"""
+            env.checkpoints.reportFile.apply { parentFile?.mkdirs() }.writeText(withTitles)
+
+            val titles = env.checkpoints.loadReport()!!.mergedTitles.shouldNotBeNull()
+
+            titles shouldBe ImportReport.MergedTitles(merged = 3, switchOn = true, unmerged = emptyList(), missing = emptyList())
         }
     }
 

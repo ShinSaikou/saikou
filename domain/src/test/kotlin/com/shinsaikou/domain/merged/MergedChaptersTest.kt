@@ -57,6 +57,23 @@ class MergedChaptersTest {
     fun `after the downloaded filter, a lower copy stands in for the winner it removed`() {
         visible(chapter(2, 2, 1.0)) shouldContainExactly listOf(2)
     }
+
+    @Test
+    fun `a stored sort by source reads as the number sort, in the same direction`() {
+        val stored = Manga.create().copy(chapterFlags = Manga.CHAPTER_SORTING_SOURCE or Manga.CHAPTER_SORT_ASC)
+
+        val sorted = MergedChapters.sorted(stored)
+
+        sorted.sorting shouldBe Manga.CHAPTER_SORTING_NUMBER
+        sorted.sortDescending() shouldBe stored.sortDescending()
+    }
+
+    @Test
+    fun `any other stored sort stays`() {
+        val stored = Manga.create().copy(chapterFlags = Manga.CHAPTER_SORTING_UPLOAD_DATE)
+
+        MergedChapters.sorted(stored) shouldBe stored
+    }
 }
 
 /** The merged list's sort and the hidden-download badge (section 4). */

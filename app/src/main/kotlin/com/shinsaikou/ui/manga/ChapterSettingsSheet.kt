@@ -154,24 +154,26 @@ private fun ColumnScope.FilterPage(
 /**
  * The four fields `getChapterSort` knows how to compare, and nothing else: it throws on a sorting
  * value it does not recognise. A row carries an arrow only while its own field is the active one,
- * and tapping the active row is what flips the direction.
+ * and tapping the active row is what flips the direction. A merged title has no one source's order
+ * to offer: its list sorts by number instead, so By source is left out and Number shows as active.
  */
 @Composable
 private fun ColumnScope.SortPage(
     state: MangaDetailViewModel.State.Success,
     onSort: (Long) -> Unit,
 ) {
-    val rows = listOf(
-        Manga.CHAPTER_SORTING_SOURCE to R.string.chapter_sort_source,
+    val manga = state.sortedManga
+    val rows = listOfNotNull(
+        (Manga.CHAPTER_SORTING_SOURCE to R.string.chapter_sort_source).takeIf { state.merged == null },
         Manga.CHAPTER_SORTING_NUMBER to R.string.chapter_sort_number,
         Manga.CHAPTER_SORTING_UPLOAD_DATE to R.string.chapter_sort_upload_date,
         Manga.CHAPTER_SORTING_ALPHABET to R.string.chapter_sort_alphabet,
     )
     rows.forEach { (flag, labelRes) ->
-        val active = state.manga.sorting == flag
+        val active = manga.sorting == flag
         SortItem(
             label = stringResource(labelRes),
-            sortDescending = if (active) state.manga.sortDescending() else null,
+            sortDescending = if (active) manga.sortDescending() else null,
             onClick = { onSort(flag) },
         )
     }

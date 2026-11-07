@@ -1,4 +1,4 @@
-// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/tachiyomi/data/backup/models/BackupManga.kt (modified: yes) adds the import-only fields 800 and 804
+// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/tachiyomi/data/backup/models/BackupManga.kt (modified: yes) adds the import-only fields 600, 604, 800 and 804
 package eu.kanade.tachiyomi.data.backup.models
 
 import com.shinsaikou.source.model.UpdateStrategy
@@ -14,7 +14,9 @@ import tachiyomi.domain.manga.model.Manga
  * [customTitle] and [customDescription] are the edited title and description that TachiyomiSY,
  * TachiyomiJ2K and Komikku write at numbers upstream does not use (R162 item 8). The import reads them
  * into the entry's overrides; the export never fills them, so the file Saikou writes keeps only
- * upstream's fields (decision F10).
+ * upstream's fields (decision F10). [mergedEntries] and [mergeSettings] are TachiyomiSY's merged
+ * entries, on a synthetic entry whose [source] is `SourceIds.SY_MERGED`, and go by the same rule: the
+ * import makes a group of them (R163 item 4).
  */
 @Suppress("DEPRECATION")
 @Serializable
@@ -56,6 +58,8 @@ class BackupManga(
     @ProtoNumber(111) var initialized: Boolean = false,
     @ProtoNumber(112) var memo: ByteArray = JsonObjectEmptyBytes,
     // Read on import only, never written.
+    @ProtoNumber(600) var mergedEntries: List<BackupMergedEntry> = emptyList(),
+    @ProtoNumber(604) var mergeSettings: BackupMergeSettings? = null,
     @ProtoNumber(800) var customTitle: String? = null,
     @ProtoNumber(804) var customDescription: String? = null,
 ) {

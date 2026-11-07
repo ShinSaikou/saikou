@@ -82,6 +82,8 @@ import tachiyomi.domain.manga.interactor.GetMangaWithChapters
 import tachiyomi.domain.manga.interactor.SetMangaChapterFlags
 import tachiyomi.domain.manga.interactor.UpdateMangaNotes
 import tachiyomi.domain.manga.model.Manga
+import tachiyomi.domain.manga.model.MangaUpdate
+import tachiyomi.domain.manga.repository.MangaRepository
 import tachiyomi.domain.track.model.Track
 import tachiyomi.domain.track.repository.TrackRepository
 import com.shinsaikou.core.common.coroutines.Dispatchers as AppDispatchers
@@ -128,6 +130,7 @@ class MangaDetailViewModelMergedTest {
     private val setMergedShowAll = mockk<SetMergedShowAll>(relaxed = true)
     private val removeMergedMember = mockk<RemoveMergedMember>(relaxed = true)
     private val unmergeEntries = mockk<UnmergeEntries>(relaxed = true)
+    private val mangaRepository = mockk<MangaRepository>(relaxed = true)
     private val libraryPreferences = LibraryPreferences(InMemoryPreferenceStore())
     private val trackProgress = mockk<TrackProgress>(relaxed = true)
     private val autoDownload = mockk<AutoDownload>(relaxed = true)
@@ -222,7 +225,7 @@ class MangaDetailViewModelMergedTest {
         sourceManager = sourceManager,
         setReadStatus = setReadStatus,
         toggleBookmark = toggleBookmark,
-        setMangaChapterFlags = mockk<SetMangaChapterFlags>(relaxed = true),
+        setMangaChapterFlags = SetMangaChapterFlags(mangaRepository),
         setMangaDefaultChapterFlags = mockk<SetMangaDefaultChapterFlags>(relaxed = true),
         setMangaViewerFlags = setMangaViewerFlags,
         getExcludedScanlators = getExcludedScanlators,
@@ -917,6 +920,103 @@ class MangaDetailViewModelMergedTest {
             viewModel.success().manga.id shouldBe A
             viewModel.success().ids() shouldContainExactly listOf(301L, 202L, 101L, 100L)
         }
+
+    // ---- The sort sheet over a stored sort by source ----
+
+    private fun seedSorted(flags: Long) = seed(entryOf = { id -> entry(id).copy(chapterFlags = flags) })
+
+    private val bySourceAsc = Manga.CHAPTER_SORTING_SOURCE or Manga.CHAPTER_SORT_ASC
+    private val bySourceDesc = Manga.CHAPTER_SORTING_SOURCE or Manga.CHAPTER_SORT_DESC
+
+    @Test
+    fun `a stored sort by source lists the union by number, ascending`() = runTest(testDispatcher) {
+        seedSorted(bySourceAsc)
+
+        opened().success().ids() shouldContainExactly listOf(100L, 101L, 202L, 301L)
+    }
+
+    @Test
+    fun `a stored sort by source lists the union by number, descending`() = runTest(testDispatcher) {
+        seedSorted(bySourceDesc)
+
+        opened().success().ids() shouldContainExactly listOf(301L, 202L, 101L, 100L)
+    }
+
+    @Test
+    fun `the sheet shows a stored sort by source as the number sort in the same direction`() = runTest(testDispatcher) {
+        seedSorted(bySourceAsc)
+
+        val success = opened().success()
+
+        success.sortedManga.sorting shouldBe Manga.CHAPTER_SORTING_NUMBER
+        success.sortedManga.sortDescending() shouldBe false
+        success.manga.sorting shouldBe Manga.CHAPTER_SORTING_SOURCE
+    }
+
+    @Test
+    fun `the sheet leaves a stored sort by upload date as it is`() = runTest(testDispatcher) {
+        seedSorted(Manga.CHAPTER_SORTING_UPLOAD_DATE or Manga.CHAPTER_SORT_ASC)
+
+        val success = opened().success()
+
+        success.sortedManga shouldBe success.manga
+    }
+
+    @Test
+    fun `the first tap on the active number row flips the direction, from a stored sort by source ascending`() =
+        runTest(testDispatcher) {
+            seedSorted(bySourceAsc)
+            val viewModel = opened()
+
+            viewModel.setChapterSort(Manga.CHAPTER_SORTING_NUMBER)
+            advanceUntilIdle()
+
+            coVerify(exactly = 1) {
+                mangaRepository.update(MangaUpdate(id = A, chapterFlags = Manga.CHAPTER_SORTING_NUMBER or Manga.CHAPTER_SORT_DESC))
+            }
+        }
+
+    @Test
+    fun `the first tap on the active number row flips the direction, from a stored sort by source descending`() =
+        runTest(testDispatcher) {
+            seedSorted(bySourceDesc)
+            val viewModel = opened()
+
+            viewModel.setChapterSort(Manga.CHAPTER_SORTING_NUMBER)
+            advanceUntilIdle()
+
+            coVerify(exactly = 1) {
+                mangaRepository.update(MangaUpdate(id = A, chapterFlags = Manga.CHAPTER_SORTING_NUMBER or Manga.CHAPTER_SORT_ASC))
+            }
+        }
+
+    @Test
+    fun `a tap on another row sets that field ascending`() = runTest(testDispatcher) {
+        seedSorted(bySourceDesc)
+        val viewModel = opened()
+
+        viewModel.setChapterSort(Manga.CHAPTER_SORTING_ALPHABET)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) {
+            mangaRepository.update(MangaUpdate(id = A, chapterFlags = Manga.CHAPTER_SORTING_ALPHABET or Manga.CHAPTER_SORT_ASC))
+        }
+    }
+
+    @Test
+    fun `a single entry keeps its sort by source in the sheet and a tap on it flips the direction`() = runTest(testDispatcher) {
+        seedSorted(bySourceAsc)
+        val viewModel = opened(merged = null)
+
+        viewModel.success().sortedManga shouldBe viewModel.success().manga
+
+        viewModel.setChapterSort(Manga.CHAPTER_SORTING_SOURCE)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) {
+            mangaRepository.update(MangaUpdate(id = A, chapterFlags = Manga.CHAPTER_SORTING_SOURCE or Manga.CHAPTER_SORT_DESC))
+        }
+    }
 
     private fun queueRow(chapterId: Long, mangaId: Long) = com.shinsaikou.domain.download.model.DownloadQueueEntry(
         id = chapterId,

@@ -6,7 +6,9 @@ import com.shinsaikou.domain.extension.ExtensionStoreDuplicates
 import com.shinsaikou.domain.extension.SourceExtensionInstaller
 import com.shinsaikou.domain.extension.repository.ExtensionStoreRepository
 import com.shinsaikou.domain.manga.interactor.UpdateManga
+import com.shinsaikou.domain.merged.interactor.CarryMergedTracks
 import com.shinsaikou.domain.merged.interactor.ReconcileMergedRead
+import com.shinsaikou.domain.merged.repository.MergedGroupRepository
 import com.shinsaikou.domain.preferences.LibraryPreferences
 import com.shinsaikou.domain.preferences.SyncRestorePreferences
 import com.shinsaikou.domain.source.repository.SourceAliasRepository
@@ -21,6 +23,7 @@ import eu.kanade.tachiyomi.data.backup.BackupDecoder
 import eu.kanade.tachiyomi.data.backup.BackupFileValidator
 import eu.kanade.tachiyomi.data.backup.models.Backup
 import eu.kanade.tachiyomi.data.backup.models.BackupManga
+import eu.kanade.tachiyomi.data.backup.models.BackupMergedEntry
 import eu.kanade.tachiyomi.data.backup.restore.RestoreOptions
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +31,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -85,6 +89,8 @@ class BackupImporter(
     private val syncRestorePreferences: SyncRestorePreferences,
     private val sourceExtensionInstaller: SourceExtensionInstaller,
     private val reconcileMergedRead: ReconcileMergedRead,
+    private val mergedGroupRepository: MergedGroupRepository,
+    private val carryMergedTracks: CarryMergedTracks,
     private val json: Json,
 ) {
 
@@ -170,6 +176,7 @@ class BackupImporter(
                 decoder.entries(file.source(), skip = run.startCursor, passOverUndecodable = true).use { entries ->
                     restoreMangaList(entries, run.mangaTotal, options, run, progress)
                 }
+                if (!run.cancelled) restoreMergedTitles(header.syMerged, file, options, run)
                 reconcileMerged()
             }
 
@@ -208,9 +215,9 @@ class BackupImporter(
     }
 
     /**
-     * A file carries no merges (R163 item 4), but it writes `read` on the members of groups already
-     * on the device, one copy at a time. A failure is logged: the library is restored, and an entry's
-     * next open heals it.
+     * Saikou's own files carry no merges (R163 item 4), but any file writes `read` on the members of
+     * groups on the device, one copy at a time. A failure is logged: the library is restored, and an
+     * entry's next open heals it.
      */
     private suspend fun reconcileMerged() {
         try {
@@ -222,9 +229,148 @@ class BackupImporter(
         }
     }
 
+    /**
+     * A TachiyomiSY file's merged entries, once every entry is in. Each [entries] row in the library
+     * becomes a group of the members the file holds, as Merged entries would have merged them, written
+     * whatever the switch says, so they appear when it is turned on. A synthetic entry that is no
+     * favourite was removed from that library, so its members stay what the file says they are.
+     *
+     * A file with none pays nothing. One with some walks its entries a third time, for what it holds:
+     * a member named by a merge can be anywhere, and a resumed run did not see the entries before its
+     * cursor. Nothing here is checkpointed: the groups that stand are left as they are, so a run that
+     * stops part way does the rest when it resumes.
+     */
+    private suspend fun restoreMergedTitles(entries: List<BackupManga>, file: File, options: RestoreOptions, run: Run) {
+        val merges = entries.filter { it.favorite }.map(SyMerge::of)
+        if (merges.isEmpty()) return
+        val held = entriesIn(file, merges.flatMapTo(HashSet()) { merge -> merge.members.map { it.key } })
+        val titles = MergedTitlesTally()
+        merges.forEach { merge ->
+            try {
+                restoreMergedTitle(merge, held, options, run, titles)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                run.record(ImportError.Kind.MERGED_TITLE, merge.entry.title, null, e)
+            }
+        }
+        run.mergedTitles = ImportReport.MergedTitles(
+            merged = titles.merged,
+            switchOn = libraryPreferences.mergedEntries.get(),
+            unmerged = titles.unmerged,
+            missing = titles.missing,
+        )
+        run.flushErrors()
+    }
+
+    /** Which of [wanted] the file holds as entries that decode. */
+    private suspend fun entriesIn(file: File, wanted: Set<EntryKey>): Set<EntryKey> {
+        val held = HashSet<EntryKey>()
+        decoder.entries(file.source(), passOverUndecodable = true).use { entries ->
+            entries.forEach { entry ->
+                currentCoroutineContext().ensureActive()
+                val key = EntryKey(entry.source, entry.url)
+                if (key in wanted) held += key
+            }
+        }
+        return held
+    }
+
+    /**
+     * One merged title, in one transaction, so a title that fails leaves its entries as they were.
+     * A member the file does not hold, or whose entry did not restore, is left out and named. A
+     * group on the device is newer than any file, so it keeps every member it already holds, which
+     * is also what makes a second restore of the file write nothing. With fewer than two members
+     * left for a new group there is none, and those entries stay ordinary; the title still counts
+     * when a group here already holds two of its members.
+     */
+    private suspend fun restoreMergedTitle(
+        merge: SyMerge,
+        held: Set<EntryKey>,
+        options: RestoreOptions,
+        run: Run,
+        titles: MergedTitlesTally,
+    ) {
+        val title = merge.entry.title
+        val found = merge.members.mapNotNull { member ->
+            val row = member.takeIf { it.key in held }
+                ?.let { writer.findManga(it.mangaUrl, sourceAliasRepository.resolve(it.mangaSourceId)) }
+            if (row == null) {
+                titles.missing += ImportReport.MissingSource(title, run.labelOf(member.mangaSourceId), member.mangaUrl)
+            }
+            row?.let { member to it }
+        }
+        val holders = found.associate { (_, row) -> row.id to mergedGroupRepository.getLiveGroup(row.id)?.id }
+        val free = found.filter { (_, row) -> holders[row.id] == null }
+        if (free.size >= 2) {
+            val main = free.firstOrNull { (member, _) -> member.key == merge.info } ?: free.first()
+            handler.await(inTransaction = true) {
+                writeMergedTitle(merge, free, main.second, options, run)
+            }
+            titles.merged++
+        } else if (holders.values.filterNotNull().groupingBy { it }.eachCount().values.any { it >= 2 }) {
+            titles.merged++
+        } else {
+            titles.unmerged += title
+        }
+    }
+
+    /**
+     * The members become favourites by the path a library entry takes in [restoreManga], and the
+     * rows go through the repository, which logs them so sync carries the group. The synthetic
+     * entry stood for the title, so what it held goes to the main entry: its categories join any the
+     * entry has, and its tracks join the members', which the main entry holds for a title.
+     */
+    private suspend fun writeMergedTitle(
+        merge: SyMerge,
+        members: List<Pair<BackupMergedEntry, Manga>>,
+        main: Manga,
+        options: RestoreOptions,
+        run: Run,
+    ) {
+        val now = Clock.System.now().toEpochMilliseconds()
+        members.forEach { (_, row) ->
+            if (row.favorite && row.deletedAt == null) return@forEach
+            writer.updateManga(
+                row.copy(favorite = true, dateAdded = if (row.dateAdded == 0L) now else row.dateAdded),
+                isSyncing = true,
+            )
+            writer.undelete(row.id)
+            writer.resetIsSyncing(row.id)
+        }
+        val ids = members.map { (_, row) -> row.id }
+        mergedGroupRepository.merge(main.id, ids)
+        members.forEach { (member, row) -> mergedGroupRepository.setCheckUpdates(row.id, member.fetchChapterUpdates) }
+        if (merge.showAll) {
+            mergedGroupRepository.getLiveGroup(main.id)?.let { mergedGroupRepository.setShowAll(it.id, true) }
+        }
+        step(run, ImportError.Kind.CATEGORIES_OF_MANGA, merge.entry.title, null) {
+            restoreCategoriesOfTitle(merge.entry, main.id, options, run)
+        }
+        step(run, ImportError.Kind.TRACKING, merge.entry.title, null) {
+            restoreTracking(merge.entry, main.id, run)
+            carryMergedTracks.ontoMain(main.id, ids)
+        }
+    }
+
+    /** As [restoreCategoriesOfManga], but it adds: the main entry can be in tabs of its own. */
+    private suspend fun restoreCategoriesOfTitle(entry: BackupManga, mainId: Long, options: RestoreOptions, run: Run) {
+        if (!options.categories) return
+        val ids = entry.categories.flatMap { run.categoryIdsByBackupOrder[it].orEmpty() }
+        if (ids.isEmpty()) return
+        val own = categoryRepository.getCategoriesByMangaId(mainId).map { it.id }
+        writer.markSyncing(mainId)
+        // The step around this swallows a failed write, so the latch comes down either way.
+        try {
+            writer.setMangaCategories(mainId, (own + ids).distinct())
+        } finally {
+            writer.resetIsSyncing(mainId)
+        }
+    }
+
     private suspend fun rememberStubSources(backup: Backup, run: Run) {
         backup.backupSources.forEach { source ->
-            if (source.sourceId == SourceIds.LOCAL) return@forEach
+            if (source.sourceId == SourceIds.LOCAL || source.sourceId == SourceIds.SY_MERGED) return@forEach
             if (sourceManager.get(source.sourceId) != null) return@forEach
             // Listed whether or not it is named yet: a resumed run finds its own first attempt's
             // stubs already remembered, and its report must still say the extension is missing.
@@ -575,8 +721,12 @@ class BackupImporter(
         }
     }
 
-    /** One manga, inside the chunk transaction. */
+    /**
+     * One manga, inside the chunk transaction. A synthetic merged entry stays out of the database: it
+     * still counts in the cursor, and [restoreMergedTitles] reads it from the header.
+     */
     private suspend fun restoreManga(entry: BackupManga, context: MangaContext) {
+        if (entry.source == SourceIds.SY_MERGED) return
         val run = context.run
         // Before any lookup: the id in the file may belong to a source this install renamed.
         val resolvedSource = sourceAliasRepository.resolve(entry.source)
@@ -927,6 +1077,7 @@ class BackupImporter(
         var sourcePreferenceFilesWritten: Int = 0
         var extensionStoresUpserted: Int = 0
         var extensionInstalls: ImportReport.ExtensionInstalls? = null
+        var mergedTitles: ImportReport.MergedTitles? = null
 
         var sourceLabels: Map<Long, String> = emptyMap()
         var unsupportedTrackers: List<Long> = emptyList()
@@ -1039,7 +1190,15 @@ class BackupImporter(
             trackersNotSignedIn = trackersNotSignedIn,
             missingSources = missingSources.distinct(),
             extensionInstalls = extensionInstalls,
+            mergedTitles = mergedTitles,
         )
+    }
+
+    /** What [restoreMergedTitles] tells the report. */
+    private class MergedTitlesTally {
+        var merged: Int = 0
+        val unmerged: MutableList<String> = mutableListOf()
+        val missing: MutableList<ImportReport.MissingSource> = mutableListOf()
     }
 
     private inner class MangaContext(

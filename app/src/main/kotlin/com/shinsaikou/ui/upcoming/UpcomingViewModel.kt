@@ -3,6 +3,7 @@ package com.shinsaikou.ui.upcoming
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shinsaikou.core.common.coroutines.Dispatchers
+import com.shinsaikou.domain.merged.interactor.GetMergedGroups
 import com.shinsaikou.domain.preferences.LibraryPreferences
 import com.shinsaikou.domain.preferences.UiPreferences
 import com.shinsaikou.presentation.core.viewmodel.StateViewModel
@@ -33,12 +34,15 @@ import kotlin.time.Clock
  *
  * The library is read only while the screen is watched: the reader's progress writes re-run the
  * library query, and this screen left on the back stack under the reader would pay for each one.
+ * A merged title is one row, under its main entry, at the earliest date of its members
+ * ([upcomingEntries]).
  */
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModel>())
 @ViewModelKey(UpcomingViewModel::class)
 @Inject
 class UpcomingViewModel(
     private val getLibraryManga: GetLibraryManga,
+    private val getMergedGroups: GetMergedGroups,
     private val libraryPreferences: LibraryPreferences,
     private val uiPreferences: UiPreferences,
     private val dispatchers: Dispatchers,
@@ -79,7 +83,8 @@ class UpcomingViewModel(
                     getLibraryManga.subscribe(),
                     libraryPreferences.updateCategories.withCurrent(),
                     libraryPreferences.updateCategoriesExclude.withCurrent(),
-                ) { library, included, excluded ->
+                    getMergedGroups.subscribe(),
+                ) { library, included, excluded, groups ->
                     val zone = TimeZone.currentSystemDefault()
                     val today = Clock.System.now().toLocalDateTime(zone).date
                     upcomingUiModels(
@@ -88,6 +93,7 @@ class UpcomingViewModel(
                             included = included.mapNotNullTo(mutableSetOf(), String::toLongOrNull),
                             excluded = excluded.mapNotNullTo(mutableSetOf(), String::toLongOrNull),
                             startOfToday = today.atStartOfDayIn(zone).toEpochMilliseconds(),
+                            groups = groups,
                         ),
                         zone,
                     )

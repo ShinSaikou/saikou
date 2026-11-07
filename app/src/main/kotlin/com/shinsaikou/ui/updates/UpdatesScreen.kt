@@ -237,7 +237,7 @@ fun UpdatesScreen(showErrorsOnArrival: Boolean = false, onErrorsShown: () -> Uni
                                     viewModel.longPressFold(model)
                                 },
                                 onCover = {
-                                    navigator.open(Route.MangaDetail(model.updates.first().mangaId))
+                                    navigator.open(Route.MangaDetail(model.updates.first().titleId))
                                 }.takeUnless { state.selectionMode },
                             )
                             is UpdatesUiModel.Item -> {
@@ -260,7 +260,7 @@ fun UpdatesScreen(showErrorsOnArrival: Boolean = false, onErrorsShown: () -> Uni
                                         viewModel.longPressChapter(update.chapterId)
                                     },
                                     onCover = {
-                                        navigator.open(Route.MangaDetail(update.mangaId))
+                                        navigator.open(Route.MangaDetail(update.titleId))
                                     }.takeUnless { state.selectionMode },
                                     onDownloadAction = { action -> viewModel.runChapterDownloadAction(update, action) },
                                 )

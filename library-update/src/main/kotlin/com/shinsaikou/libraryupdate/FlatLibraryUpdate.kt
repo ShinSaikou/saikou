@@ -6,6 +6,7 @@ import com.shinsaikou.domain.download.AutoDownload
 import com.shinsaikou.domain.manga.interactor.UpdateManga
 import com.shinsaikou.domain.merged.interactor.GetMergedGroups
 import com.shinsaikou.domain.merged.interactor.ReconcileMergedRead
+import com.shinsaikou.domain.merged.model.MergedGroup
 import com.shinsaikou.domain.preferences.LibraryPreferences
 import com.shinsaikou.domain.preferences.LibraryUpdateRestrictions
 import com.shinsaikou.domain.source.toChapterInfo
@@ -154,6 +155,8 @@ class FlatLibraryUpdate(
         val fetchDetails: Boolean,
         val updateTitles: Boolean,
         val window: Pair<Long, Long>,
+        /** The groups this run holds, by each member's id; empty while Merged entries is off. */
+        val groups: Map<Long, MergedGroup>,
     )
 
     /**
@@ -229,12 +232,15 @@ class FlatLibraryUpdate(
 
         val zone = TimeZone.currentSystemDefault()
         val window = fetchInterval.getWindow(Clock.System.now().toLocalDateTime(zone).date, zone)
-        val (queue, skipped) = queueOf(checkedLibrary(), categoryId, automatic, window, mangaIds)
+        val groups = getMergedGroups.await()
+        val library = checked(getLibraryManga.await(), groups)
+        val (queue, skipped) = queueOf(library, categoryId, automatic, window, mangaIds)
         val plan = Plan(
             automatic = automatic,
             fetchDetails = refreshMetadata || (automatic && libraryPreferences.autoUpdateMetadata.get()),
             updateTitles = libraryPreferences.updateMangaTitles.get(),
             window = window,
+            groups = groups.flatMap { group -> group.members.map { it.mangaId to group } }.toMap(),
         )
 
         val results = Results()
@@ -443,8 +449,9 @@ class FlatLibraryUpdate(
             ).also { newChapters ->
                 if (newChapters.isNotEmpty()) {
                     results.updated[index] = fresh.id to newChapters
+                    val rows = newRows(fresh, newChapters, plan)
                     synchronized(newUpdatesLock) {
-                        libraryPreferences.newUpdatesCount.getAndSet { it + newChapters.size }
+                        libraryPreferences.newUpdatesCount.getAndSet { it + rows }
                     }
                 }
             }
@@ -459,6 +466,27 @@ class FlatLibraryUpdate(
             queueNewChapters(fresh, newChapters, results)
         }
         return Turn(Request.COMPLETED)
+    }
+
+    /**
+     * What [newChapters] add to the Updates badge: the rows they add to the list. A merged title has
+     * one row per number, so a number another member already holds adds none, unless the title
+     * shows every copy. The chapters are in the database, so a failed read counts every new chapter
+     * and is logged: the entry's update did not fail.
+     */
+    private suspend fun newRows(manga: Manga, newChapters: List<Chapter>, plan: Plan): Int {
+        val group = plan.groups[manga.id]?.takeUnless { it.showAll } ?: return newChapters.size
+        val held = try {
+            group.members.filter { it.mangaId != manga.id }
+                .flatMap { getChaptersByMangaId.await(it.mangaId) }
+                .mapTo(HashSet()) { it.chapterNumber }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            logcat(LogPriority.WARN, e) { "Library update: could not count the new rows of ${manga.id}" }
+            return newChapters.size
+        }
+        return newChapters.count { !it.isRecognizedNumber || it.chapterNumber !in held }
     }
 
     /** The chapters are in the database, so a failure here is logged: the entry's update did not fail. */
@@ -546,14 +574,13 @@ class FlatLibraryUpdate(
         automatic: Boolean,
         window: Pair<Long, Long>,
         mangaIds: Set<Long>? = null,
-    ): List<LibraryManga> = buildQueue(checkedLibrary(), categoryId, automatic, window, mangaIds)
+    ): List<LibraryManga> = buildQueue(getLibraryManga.await(), categoryId, automatic, window, mangaIds)
 
-    /** The library less the merged members with Check for updates off. */
-    private suspend fun checkedLibrary(): List<LibraryManga> {
-        val resting = getMergedGroups.await()
+    /** [library] less the merged members with Check for updates off. */
+    private fun checked(library: List<LibraryManga>, groups: List<MergedGroup>): List<LibraryManga> {
+        val resting = groups
             .flatMap { group -> group.members.filterNot { it.checkUpdates } }
             .mapTo(HashSet()) { it.mangaId }
-        val library = getLibraryManga.await()
         return if (resting.isEmpty()) library else library.filterNot { it.id in resting }
     }
 
@@ -562,13 +589,14 @@ class FlatLibraryUpdate(
      * holds it, so a caller that has read the library does not read it again (the statistics
      * screen's update tile, phase 5 unit SC5).
      */
-    fun buildQueue(
+    suspend fun buildQueue(
         library: List<LibraryManga>,
         categoryId: Long?,
         automatic: Boolean,
         window: Pair<Long, Long>,
         mangaIds: Set<Long>? = null,
-    ): List<LibraryManga> = queueOf(library, categoryId, automatic, window, mangaIds).first
+    ): List<LibraryManga> =
+        queueOf(checked(library, getMergedGroups.await()), categoryId, automatic, window, mangaIds).first
 
     /** [buildQueue]'s queue, with how many entries each rule kept out of it. */
     private fun queueOf(

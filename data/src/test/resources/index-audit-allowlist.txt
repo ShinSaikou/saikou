@@ -33,3 +33,4 @@ downloads_manifest.sq:getByChapterDirNames:downloads_manifest.chapter_dir_name #
 # The merged read reconcile (schema version 5). An index on the number would tax every chapter insert, and the plan rules it out on purpose (design/plans/merged-entries.md section 4).
 merged_groups.sq:reconcileRead:chapters.chapter_number # manga_id finds the group's chapters; the number is an IN over a list built once and a residual filter on those rows
 merged_groups.sq:reconcileRead:chapters.read # each member's read and unread rows are a (manga_id, read) search of idx_chapters_manga_id_read
+chapters.sq:getChaptersByMangaIdsAndNumbers:chapters.chapter_number # manga_id finds the members' chapters; the number is an IN over a list of at most a page of rows and a residual filter on them

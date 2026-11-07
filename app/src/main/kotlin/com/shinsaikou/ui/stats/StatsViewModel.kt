@@ -4,6 +4,9 @@ package com.shinsaikou.ui.stats
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shinsaikou.core.common.coroutines.Dispatchers
+import com.shinsaikou.domain.merged.MergedLibrary
+import com.shinsaikou.domain.merged.interactor.GetMergedGroups
+import com.shinsaikou.domain.merged.model.MergedTitle
 import com.shinsaikou.downloads.DownloadManifest
 import com.shinsaikou.libraryupdate.FlatLibraryUpdate
 import com.shinsaikou.presentation.core.viewmodel.StateViewModel
@@ -34,7 +37,7 @@ import kotlin.time.TimeSource
 import kotlin.time.measureTimedValue
 
 /**
- * Modified (phase 4 unit SS): Metro constructor injection instead of Injekt, and three sources
+ * Modified (phase 4 unit SS): Metro constructor injection instead of Injekt, and four sources
  * differ from upstream's.
  *
  * - The update tile is the library update's own queue, `FlatLibraryUpdate.buildQueue` for an
@@ -44,7 +47,10 @@ import kotlin.time.measureTimedValue
  *   refresh takes it.
  * - Every track row is read in one query and grouped by entry, where upstream asks once per entry.
  * - The download count is the manifest's per-entry counts summed, every downloaded chapter as
- *   upstream's `DownloadManager.getDownloadCount` counts them.
+ *   upstream's `DownloadManager.getDownloadCount` counts them, each number of a merged title once.
+ * - A merged title counts as one title, under its main entry, and its chapters by distinct number,
+ *   the Library's own fold ([MergedLibrary]). The update tile stays per member, as the update is,
+ *   less the members with Check for updates off.
  *
  * The read duration is `sum(time_read)` over history. Sync merges a chapter's duration by the
  * larger of the two devices' values (R82), so a chapter read on two devices counts its longer
@@ -55,6 +61,7 @@ import kotlin.time.measureTimedValue
 @Inject
 class StatsViewModel(
     private val getLibraryManga: GetLibraryManga,
+    private val getMergedGroups: GetMergedGroups,
     private val getTotalReadDuration: GetTotalReadDuration,
     private val trackRepository: TrackRepository,
     private val trackerManager: TrackerManager,
@@ -74,7 +81,8 @@ class StatsViewModel(
             // coroutine's IO dispatcher (phase 5 unit SC5); before, each waited for the one before it.
             val tracks = async { trackRepository.getTracksAsFlow().first() }
             val totalReadDuration = async { getTotalReadDuration.await() }
-            val downloadCount = async { downloadManifest.subscribeCountsByManga().first().values.sum().toInt() }
+            val downloadCounts = async { downloadManifest.subscribeCountsByManga().first() }
+            val mergedTitles = async { getMergedGroups.subscribeTitles().first() }
 
             val libraryManga = getLibraryManga.await()
             val libraryRead = startedAt.elapsedNow()
@@ -82,7 +90,12 @@ class StatsViewModel(
             // The update tile takes the list in hand; it never reads the library again.
             val updateQueue = async { measureTimedValue { getGlobalUpdateItemCount(libraryManga) } }
 
-            val distinctLibraryManga = libraryManga.distinctBy { it.id }
+            val distinctLibraryManga = MergedLibrary.folded(
+                libraryManga.distinctBy { it.id },
+                mergedTitles.await(),
+                LibraryManga::id,
+                MergedLibrary::fold,
+            )
 
             val mangaTrackMap = getMangaTrackMap(distinctLibraryManga, tracks.await())
             val scoredMangaTrackerMap = getScoredMangaTrackMap(mangaTrackMap)
@@ -107,7 +120,7 @@ class StatsViewModel(
             val chaptersStatData = StatsData.Chapters(
                 totalChapterCount = distinctLibraryManga.sumOf { it.totalChapters }.toInt(),
                 readChapterCount = distinctLibraryManga.sumOf { it.readCount }.toInt(),
-                downloadCount = downloadCount.await(),
+                downloadCount = getDownloadCount(downloadCounts.await(), mergedTitles.await()),
             )
 
             val trackersStatData = StatsData.Trackers(
@@ -133,10 +146,19 @@ class StatsViewModel(
     }
 
     /** The entries an automatic library update would refresh now, by the update's own rules. */
-    private fun getGlobalUpdateItemCount(libraryManga: List<LibraryManga>): Int {
+    private suspend fun getGlobalUpdateItemCount(libraryManga: List<LibraryManga>): Int {
         val zone = TimeZone.currentSystemDefault()
         val window = fetchInterval.getWindow(Clock.System.now().toLocalDateTime(zone).date, zone)
         return libraryUpdate.buildQueue(libraryManga, categoryId = null, automatic = true, window = window).size
+    }
+
+    /** Every downloaded chapter, each number of a merged title once however many copies are on disk. */
+    private fun getDownloadCount(counts: Map<Long, Long>, titles: List<MergedTitle>): Int {
+        val copies = titles.sumOf { title ->
+            val numbers = title.counts?.downloaded ?: return@sumOf 0L
+            title.group.members.sumOf { counts[it.mangaId] ?: 0L } - numbers
+        }
+        return (counts.values.sum() - copies).toInt()
     }
 
     private fun getMangaTrackMap(libraryManga: List<LibraryManga>, tracks: List<Track>): Map<Long, List<Track>> {

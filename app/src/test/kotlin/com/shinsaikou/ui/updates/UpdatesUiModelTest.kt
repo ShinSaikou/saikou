@@ -50,6 +50,17 @@ class UpdatesUiModelTest {
     }
 
     @Test
+    fun `a merged title's rows fold together, from whichever member each came`() {
+        val rows = listOf(
+            row(1, mangaId = 10, dateFetch = at(2026, 9, 2, 10)).copy(mergedMainId = 10),
+            row(2, mangaId = 11, dateFetch = at(2026, 9, 2, 9)).copy(mergedMainId = 10),
+        )
+
+        updatesUiModels(rows, zone = paris).shape() shouldBe
+            listOf("H 2026-09-02", "F 10 [1, 2] open", "  I 1", "  I 2")
+    }
+
+    @Test
     fun `an empty list has no header`() {
         updatesUiModels(emptyList(), zone = paris) shouldBe emptyList()
     }

@@ -214,6 +214,8 @@ class UpstreamLosslessExportTest {
             withClue("manga ${entry.url}") {
                 entry.customTitle shouldBe null
                 entry.customDescription shouldBe null
+                entry.mergedEntries shouldBe emptyList()
+                entry.mergeSettings shouldBe null
             }
         }
     }
@@ -502,7 +504,7 @@ class UpstreamLosslessExportTest {
         const val GZIP_MAGIC = 0x1f8b
 
         /** BackupManga's fields the import reads from other readers' files and the export never fills. */
-        val IMPORT_ONLY_MANGA_FIELDS = setOf("customTitle", "customDescription")
+        val IMPORT_ONLY_MANGA_FIELDS = setOf("customTitle", "customDescription", "mergedEntries", "mergeSettings")
 
         /** Upstream v0.20.4's `ReadingMode.MASK`. */
         const val UPSTREAM_READING_MODE_MASK = 0x00000007

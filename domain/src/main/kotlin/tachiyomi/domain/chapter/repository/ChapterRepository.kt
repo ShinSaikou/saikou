@@ -42,6 +42,13 @@ interface ChapterRepository {
 
     suspend fun getChaptersByIds(ids: List<Long>): List<Chapter>
 
+    /** The live chapters of [mangaIds] numbered one of [numbers], which stay under SQLite's bind limit. */
+    suspend fun getChaptersByNumbers(
+        mangaIds: List<Long>,
+        numbers: List<Double>,
+        applyScanlatorFilter: Boolean,
+    ): List<Chapter>
+
     suspend fun softDelete(chapterIds: List<Long>, now: Long)
 
     /**

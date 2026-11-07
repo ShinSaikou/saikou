@@ -17,6 +17,9 @@ release may change behaviour.
   of a chapter, or unmerge. Each source stays a whole entry, so unmerging puts them back. Merges sync
   between your devices, and every device needs this version to keep syncing. Backups keep every entry
   and chapter but not the merge. Turning the switch off shows the entries separately again.
+- Restoring a TachiyomiSY backup brings its merged entries back as merged entries, in the same
+  source order. They show as one once **Merged entries** is on, and the restore report names any
+  source the backup did not hold.
 
 ## 0.1.2 - 2026-11-07
 

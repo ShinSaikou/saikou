@@ -18,7 +18,7 @@ import tachiyomi.domain.chapter.repository.ChapterRepository
 /**
  * Modified: the constructor takes [DatabaseHandler], the mapper moved out to [ChapterMapper],
  * `insertReturningId` became `insert` plus `selectLastInsertedRowId`, `getChaptersByIds`,
- * `softDelete` and `getDeletedChaptersByMangaId` are added, and an update can clear the volume (phase
+ * `getChaptersByNumbers`, `softDelete` and `getDeletedChaptersByMangaId` are added, and an update can clear the volume (phase
  * 4 unit VG) and deleted_at (phase 4 unit CR). Upstream's swallowing `try/catch` bodies are dropped: every function here
  * returns `Unit` or a list, so a caught exception would be an invisible data loss (05-data 4.3).
  */
@@ -115,6 +115,19 @@ class ChapterRepositoryImpl(
 
     override suspend fun getChaptersByIds(ids: List<Long>): List<Chapter> {
         return handler.awaitList { chaptersQueries.getChaptersByIds(ids, ChapterMapper::mapChapter) }
+    }
+
+    override suspend fun getChaptersByNumbers(
+        mangaIds: List<Long>,
+        numbers: List<Double>,
+        applyScanlatorFilter: Boolean,
+    ): List<Chapter> = handler.awaitList {
+        chaptersQueries.getChaptersByMangaIdsAndNumbers(
+            mangaIds = mangaIds,
+            numbers = numbers,
+            applyScanlatorFilter = if (applyScanlatorFilter) 1L else 0L,
+            mapper = ChapterMapper::mapChapter,
+        )
     }
 
     override suspend fun softDelete(chapterIds: List<Long>, now: Long) {
