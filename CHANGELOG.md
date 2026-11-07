@@ -7,6 +7,8 @@ release may change behaviour.
 
 ## Unreleased
 
+## 0.1.2 - 2026-11-07
+
 ### Added
 
 - An update interval button on every library entry says when the entry is next checked, or why it
