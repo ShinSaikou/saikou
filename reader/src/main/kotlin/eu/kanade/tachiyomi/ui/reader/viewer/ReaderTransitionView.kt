@@ -22,7 +22,7 @@ import eu.kanade.presentation.reader.ChapterTransition as ChapterTransitionConte
 /**
  * The chapter transition, composed inside the viewer's own View tree so it scrolls with the pages.
  *
- * Two modifications:
+ * Three modifications:
  *
  *  - upstream's no-argument `TachiyomiTheme { }` becomes
  *    `BaseSaikouTheme(host.appTheme, host.isDark, host.isAmoled)` (ruling R21): this View owns its
@@ -36,6 +36,8 @@ import eu.kanade.presentation.reader.ChapterTransition as ChapterTransitionConte
  *    skeleton. The retry part 2 section 5.5 mentions is not here and is not a parameter: both
  *    transition holders already draw their own retry button off `ReaderChapter.stateFlow`, exactly
  *    as in upstream.
+ *  - the chapter ahead counts as Local by the entry it belongs to, which in a merged title (R163)
+ *    need not be the entry being read.
  */
 class ReaderTransitionView @JvmOverloads constructor(
     context: Context,
@@ -50,7 +52,8 @@ class ReaderTransitionView @JvmOverloads constructor(
     }
 
     fun bind(transition: ChapterTransition, manga: Manga?) {
-        data = manga?.let { Data(transition = transition, isLocal = it.source == SourceIds.LOCAL) }
+        val owner = transition.to?.chapter?.let(host::ownerOf) ?: manga
+        data = owner?.let { Data(transition = transition, isLocal = it.source == SourceIds.LOCAL) }
     }
 
     @Composable

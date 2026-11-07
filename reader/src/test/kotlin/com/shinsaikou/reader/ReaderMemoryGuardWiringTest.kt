@@ -187,6 +187,7 @@ class ReaderMemoryGuardWiringTest {
         basePreferences = BasePreferences(InMemoryPreferenceStore()),
         progressCommitterFactory = progressCommitterFactory(),
         incognitoPolicy = mockk<IncognitoPolicy>(),
+        readerEntries = { listOf(it) },
         readerPreferences = ReaderPreferences(InMemoryPreferenceStore()),
         preloadPolicy = mockk<PreloadPolicy> { every { compute() } returns PreloadPolicy.DEFAULT },
         animatedImagePolicy = mockk<AnimatedImagePolicy>(),

@@ -165,6 +165,7 @@ class ReaderViewModelRestoreTest {
                 every { create(any()) } returns mockk(relaxed = true)
             },
             incognitoPolicy = mockk<IncognitoPolicy> { every { isIncognito(any()) } returns incognito },
+            readerEntries = { listOf(it) },
             readerPreferences = ReaderPreferences(InMemoryPreferenceStore()),
             preloadPolicy = mockk<PreloadPolicy> { every { compute() } returns PreloadPolicy.DEFAULT },
             animatedImagePolicy = mockk(),
