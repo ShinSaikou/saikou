@@ -83,13 +83,19 @@ internal val Route.Settings.highlightKey: SettingsSearchKey?
         SettingsSearchKey(it, highlightTitle, highlightGroup.takeIf { group -> group != 0 })
     }
 
-/** A row the search can show only on some devices; on the others the section does not draw it. */
+/**
+ * A row the search can show only on some devices, or only while a switch is on; otherwise the
+ * section does not draw it.
+ */
 internal enum class SettingsSearchCondition {
     /** Reader's draw under the cutout, as upstream offers it. */
     DISPLAY_CUTOUT,
 
     /** Security's app lock, offered only while the device can authenticate. */
     AUTHENTICATION,
+
+    /** Downloads' sources at once, drawn only while its Experimental switch is on. */
+    PARALLEL_SOURCE_DOWNLOADS,
 }
 
 /**
@@ -114,11 +120,12 @@ internal data class SettingsSearchEntry(
  *
  * Left out: a row shown only while another setting is on (Flash on page change's three, Lock when
  * idle, the navigator's height, the auto-scroll speed), whose result would open the section with
- * nothing to scroll to; a row only some states have (a move left over, the last adoption, an
- * earlier sync report); and a fact rather than a setting (the signed-in account). Sync's signed-in
- * rows are kept: signed out, the section opens on the sign-in they wait for. Its service picker is
- * drawn only signed out, so signed in its result lands on the account in use.
- * `SettingsSearchIndexTest` holds the list.
+ * nothing to scroll to, unless a [SettingsSearchCondition] hides its result while the row is not
+ * drawn (Downloads' sources at once, behind its Experimental switch); a row only some states have (a
+ * move left over, the last adoption, an earlier sync report); and a fact rather than a setting (the
+ * signed-in account). Sync's signed-in rows are kept: signed out, the section opens on the sign-in
+ * they wait for. Its service picker is drawn only signed out, so signed in its result lands on the
+ * account in use. `SettingsSearchIndexTest` holds the list.
  */
 internal val settingsSearchIndex: List<SettingsSearchEntry> = buildList {
     section(SettingsSection.APPEARANCE) {
@@ -206,6 +213,7 @@ internal val settingsSearchIndex: List<SettingsSearchEntry> = buildList {
     }
     section(SettingsSection.DOWNLOADS) {
         row(R.string.pref_download_only_over_wifi, R.string.pref_download_only_over_wifi_detail)
+        row(R.string.pref_download_parallel_sources, condition = SettingsSearchCondition.PARALLEL_SOURCE_DOWNLOADS)
         row(R.string.pref_download_parallel_pages)
         group(R.string.pref_category_delete_chapters) {
             row(R.string.pref_remove_after_marked_as_read)
@@ -287,6 +295,7 @@ internal val settingsSearchIndex: List<SettingsSearchEntry> = buildList {
         row(R.string.settings_experimental_auto_scroll, R.string.settings_experimental_auto_scroll_summary)
         row(R.string.settings_experimental_search_links, R.string.settings_experimental_search_links_summary)
         row(R.string.settings_experimental_extension_auto_update, R.string.settings_experimental_extension_auto_update_summary)
+        row(R.string.settings_experimental_parallel_sources, R.string.settings_experimental_parallel_sources_summary)
     }
 }
 

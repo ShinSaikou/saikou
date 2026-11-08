@@ -3,8 +3,10 @@ package com.shinsaikou.downloads
 import com.shinsaikou.core.metadata.comicinfo.ComicInfoXml
 import com.shinsaikou.data.DatabaseTransactionRunner
 import com.shinsaikou.domain.download.model.DownloadManifestEntry
+import com.shinsaikou.domain.download.model.DownloadQueueEntry
 import com.shinsaikou.domain.download.model.DownloadState
 import com.shinsaikou.domain.download.repository.DownloadManifestRepository
+import com.shinsaikou.domain.download.repository.DownloadQueueRepository
 import com.shinsaikou.domain.error.ErrorKey
 import eu.kanade.tachiyomi.network.HttpException
 import io.kotest.matchers.collections.shouldBeEmpty
@@ -81,6 +83,77 @@ class DownloadEngineTest : DownloadTestBase() {
 
     private fun pageFiles(dir: File): List<String> =
         dir.list().orEmpty().filter { it != COMIC_INFO_FILE }.sorted()
+
+    /**
+     * An engine whose first queue read is followed by a removal of [removedChapterId]'s row, as if
+     * a removal landed just after the read and its cancel found no job to stop. Later reads see the
+     * real queue.
+     */
+    private fun TestScope.engineRemovedAfterRead(removedChapterId: Long): DownloadEngine {
+        val real = queueRepository
+        var removed = false
+        val racing = object : DownloadQueueRepository by real {
+            override suspend fun getActive(): List<DownloadQueueEntry> {
+                val rows = real.getActive()
+                if (!removed) {
+                    removed = true
+                    real.remove(listOf(removedChapterId))
+                }
+                return rows
+            }
+        }
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        return DownloadEngine(
+            queueRepository = racing,
+            manifestRepository = manifestRepository,
+            transactionRunner = DatabaseTransactionRunner(handler),
+            getManga = GetManga(mangaRepository),
+            chapterRepository = chapterRepository,
+            sourceManager = sourceManager,
+            downloadRoot = downloadRoot,
+            downloadPreferences = downloadPreferences,
+            libraryPreferences = libraryPreferences,
+            comicInfoWriter = comicInfoWriter(dispatcher),
+            locator = locator(dispatcher),
+            writeLock = writeLock,
+            dispatchers = dispatchers(dispatcher),
+        )
+    }
+
+    @Test
+    fun `a chapter removed right after the queue was read is dropped before any request, and the run goes on to the next`() =
+        runTest {
+            queueRepository.enqueue(chapterId = 10, mangaId = 1, now = 0)
+            queueRepository.enqueue(chapterId = 11, mangaId = 1, now = 0)
+
+            val outcome = engineRemovedAfterRead(removedChapterId = 10).run()
+
+            outcome shouldBe DownloadEngine.Outcome(completed = 1, failed = 0)
+            source.pageListCalls.get() shouldBe 1
+            for (index in 0 until PAGES) source.imageCallsFor("/ch/10", index) shouldBe 0
+            source.totalImageCalls() shouldBe PAGES
+            tmpDir(10).exists() shouldBe false
+            finalDir(10).exists() shouldBe false
+            realManifestRepository.getByChapterId(10).shouldBeNull()
+            queueRepository.getByChapterId(10).shouldBeNull()
+            realManifestRepository.getByChapterId(11).shouldNotBeNull()
+            finalDir(11).isDirectory shouldBe true
+            queueRepository.getActive().shouldBeEmpty()
+        }
+
+    @Test
+    fun `a chapter removed right after the queue was read, with nothing queued after it, ends the run with no work done`() =
+        runTest {
+            queueRepository.enqueue(chapterId = 10, mangaId = 1, now = 0)
+
+            val outcome = engineRemovedAfterRead(removedChapterId = 10).run()
+
+            outcome shouldBe DownloadEngine.Outcome(completed = 0, failed = 0)
+            source.pageListCalls.get() shouldBe 0
+            source.totalImageCalls() shouldBe 0
+            tmpDir(10).exists() shouldBe false
+            realManifestRepository.getByChapterId(10).shouldBeNull()
+        }
 
     @Test
     fun `an enqueued chapter ends in the manifest with its pages, its ComicInfo and no temporary files`() = runTest {

@@ -24,6 +24,12 @@ release may change behaviour.
   a time. A notification names the extensions it updated and any it could not; tap it to open
   Extensions. An update signed with a different key than the installed copy, or one you would have
   to trust again, is left for you. A new version can change how a source behaves or break it.
+- **Download from several sources at once** in Settings > Experimental, off by default, downloads one
+  chapter from each of several sources at the same time instead of one chapter at a time, so a queue
+  that mixes sources finishes sooner. Chapters from the same source still download one after
+  another, in queue order. **Sources downloaded at once** in Settings > Downloads sets how many, from
+  1 to 10 (5 by default), while the switch is on. The queue shows progress on every chapter running,
+  and the notification counts them. It uses more data, memory and battery while downloads run.
 
 ## 0.1.3 - 2026-11-07
 

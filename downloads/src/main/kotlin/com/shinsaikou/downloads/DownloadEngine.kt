@@ -32,12 +32,14 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
@@ -61,7 +63,10 @@ import kotlin.time.Clock
 /**
  * Drains `download_queue` one chapter at a time, in `queue_order`. [DownloadWorker] hosts it; a
  * stopped worker is a cancelled [run], and the next [run] resumes from what the rows and the
- * chapter folders still hold (phase 2 decision Q4(a)(i)).
+ * chapter folders still hold (phase 2 decision Q4(a)(i)). With the Experimental switch
+ * [DownloadPreferences.parallelSourceDownloads] on, it runs one chapter from each of several
+ * sources at once instead ([runBySource]); this amends R65, which left
+ * [DownloadPreferences.parallelSourceLimit] unread.
  *
  * Per chapter, and in this order:
  * 1. the page list from the source,
@@ -78,9 +83,10 @@ import kotlin.time.Clock
  * A run starts by deleting the `_tmp` folders no queue row will resume ([sweepLeftovers]).
  *
  * Each chapter is downloaded under [DownloadWriteLock], so a chapter the adoption of upstream's
- * downloads is copying is never written by both at once. A chapter folder another chapter's manifest
- * row may be found at is that download's, and the chapter fails rather than take it over (ruling
- * draft R-J7).
+ * downloads is copying is never written by both at once (R71). Several sources at once hold it
+ * through [DownloadWriteLock.withFolderLock], which still keeps the adoption out for the whole
+ * chapter. A chapter folder another chapter's manifest row may be found at is that download's, and
+ * the chapter fails rather than take it over (ruling draft R-J7).
  */
 @Inject
 @SingleIn(AppScope::class)
@@ -103,6 +109,12 @@ class DownloadEngine(
     /**
      * What the foreground notification shows: the chapter in flight, its pages, and [chaptersLeft],
      * the chapters the run still had to download when this one started, this one included.
+     *
+     * With several sources at once, [chaptersRunning] is the number of chapters whose pages are
+     * downloading. Past one, the report is their sum ([ProgressBoard]): the pages of all of them and
+     * the names and id of the one that started first. There [chaptersLeft] follows the queue: the
+     * rows still queued or running as the queue stood when a chapter last started or ended, since a
+     * count taken when each chapter started would not drop as another source's chapters finish.
      */
     data class Progress(
         val chapterId: Long,
@@ -111,6 +123,7 @@ class DownloadEngine(
         val pagesDone: Int,
         val pagesTotal: Int,
         val chaptersLeft: Int,
+        val chaptersRunning: Int = 1,
     )
 
     /**
@@ -129,7 +142,9 @@ class DownloadEngine(
 
     private val runLock = Mutex()
     private val activeLock = Any()
-    private var active: Pair<Long, Deferred<ChapterResult>>? = null
+
+    /** The chapters in flight by chapter id: one at a time, or one per source with the switch on. */
+    private val active = HashMap<Long, Deferred<ChapterResult>>()
 
     /**
      * Network failures in a row per chapter, for [MAX_NETWORK_REQUEUES]. Kept for the life of the
@@ -156,6 +171,10 @@ class DownloadEngine(
         var completed = 0
         val failed = mutableSetOf<Long>()
         while (true) {
+            // Read before each chapter, so turning the switch on applies from the next chapter.
+            if (downloadPreferences.parallelSourceDownloads.get()) {
+                return@withLock runBySource(completed, failed, onProgress)
+            }
             val waiting = queueRepository.getActive().filter { it.chapterId !in failed }
             val next = waiting.firstOrNull() ?: break
             if (withContext(dispatchers.io) { downloadRoot.isLowOnSpace() }) {
@@ -237,25 +256,127 @@ class DownloadEngine(
     private fun tmpKey(mangaDirName: String, name: String) = "$mangaDirName/$name"
 
     /**
-     * Stops the chapter in flight if it is one of [chapterIds], and returns once it has stopped, so
-     * the caller can delete its `_tmp` folder without racing a page write.
+     * The run while [DownloadPreferences.parallelSourceDownloads] is on (Experimental; amends R65,
+     * under which [DownloadPreferences.parallelSourceLimit] was never read). Up to that many sources
+     * download at once, one chapter each. A source's chapters still go one after another in queue
+     * order, so no source is asked for two chapters at a time, and the pages of each chapter still
+     * run [DownloadPreferences.parallelPageLimit] at a time.
+     *
+     * The switch and the limit are read again at every chapter boundary, when a chapter ends and the
+     * free places are filled, so a change applies from the next chapter to start; the switch turned
+     * off mid-run leaves one chapter at a time until the run ends. The queue is read again there
+     * too, so rows enqueued, removed or reordered meanwhile decide what starts next, as in [run].
+     * Too little storage, or a chapter put back for want of a network, stops new chapters from
+     * starting; the ones running finish, then the run ends as [run] would end there.
      */
-    suspend fun cancel(chapterIds: Collection<Long>) {
-        val job = synchronized(activeLock) { active?.takeIf { it.first in chapterIds }?.second }
-        job?.cancelAndJoin()
+    private suspend fun runBySource(
+        completedBefore: Int,
+        failed: MutableSet<Long>,
+        onProgress: (Progress) -> Unit,
+    ): Outcome = coroutineScope {
+        var completed = completedBefore
+        var storageFull = false
+        var interrupted = false
+        val board = ProgressBoard(onProgress)
+        // Chapter id to its source id; null for a chapter whose entry is gone, which is only dropped.
+        val running = HashMap<Long, Long?>()
+        val sourceOfManga = HashMap<Long, Long?>()
+        val finished = Channel<Pair<Long, ChapterResult>>(Channel.UNLIMITED)
+        var ended: Long? = null
+        while (true) {
+            // Read at every boundary, a stopping run's too, so the count the notification shows is
+            // the rows still queued or running, the ones just started included.
+            val waiting = queueRepository.getActive().filter { it.chapterId !in failed }
+            board.boundary(left = waiting.size, ended = ended)
+            ended = null
+            if (!storageFull && !interrupted) {
+                val limit = sourceLimit()
+                // A source is busy while one of its chapters runs. Only a source's first waiting row
+                // may start, and only once the source is free, so its rows keep their queue order.
+                val busy = running.values.toMutableSet()
+                for (entry in waiting) {
+                    if (running.size >= limit) break
+                    if (entry.chapterId in running) continue
+                    val sourceId = if (entry.mangaId in sourceOfManga) {
+                        sourceOfManga[entry.mangaId]
+                    } else {
+                        getManga.await(entry.mangaId)?.source.also { sourceOfManga[entry.mangaId] = it }
+                    }
+                    if (!busy.add(sourceId)) continue
+                    if (withContext(dispatchers.io) { downloadRoot.isLowOnSpace() }) {
+                        logcat(LogPriority.WARN) { "Downloads stopped: less than $MIN_FREE_BYTES bytes free" }
+                        storageFull = true
+                        break
+                    }
+                    running[entry.chapterId] = sourceId
+                    launch {
+                        val result = runChapter(entry, chaptersLeft = waiting.size, board::report, parallel = true)
+                        finished.send(entry.chapterId to result)
+                    }
+                }
+            }
+            if (running.isEmpty()) break
+            val (chapterId, result) = finished.receive()
+            running.remove(chapterId)
+            // It leaves the board at the next boundary, with the count read after its commit.
+            ended = chapterId
+            if (result != ChapterResult.INTERRUPTED) networkFailures.remove(chapterId)
+            when (result) {
+                ChapterResult.COMPLETED -> completed++
+                ChapterResult.FAILED -> failed += chapterId
+                ChapterResult.DROPPED -> Unit
+                ChapterResult.INTERRUPTED -> interrupted = true
+            }
+        }
+        Outcome(completed = completed, failed = failed.size, storageFull = storageFull, interrupted = interrupted)
     }
 
+    /** Sources at once for the next chapter to start; one with the switch turned off mid-run. */
+    private fun sourceLimit(): Int =
+        if (downloadPreferences.parallelSourceDownloads.get()) {
+            downloadPreferences.parallelSourceLimit.get().coerceIn(1, MAX_PARALLEL_SOURCES)
+        } else {
+            1
+        }
+
+    /**
+     * Stops the chapters in flight that are among [chapterIds], and returns once they have stopped,
+     * so the caller can delete their `_tmp` folders without racing a page write. The others run on.
+     */
+    suspend fun cancel(chapterIds: Collection<Long>) {
+        val jobs = synchronized(activeLock) { chapterIds.mapNotNull { active[it] } }
+        jobs.forEach { it.cancelAndJoin() }
+    }
+
+    /**
+     * One chapter under [DownloadWriteLock]: the whole lock one chapter at a time, as R71 has it, or,
+     * with several sources at once ([parallel]), the hold that keeps the adoption out just the same
+     * but lets engine chapters of other folder names run beside it.
+     */
     private suspend fun runChapter(
         entry: DownloadQueueEntry,
         chaptersLeft: Int,
         onProgress: (Progress) -> Unit,
+        parallel: Boolean = false,
     ): ChapterResult =
         coroutineScope {
             val job = async(start = CoroutineStart.LAZY) {
-                writeLock.withLock { downloadChapter(entry, chaptersLeft, onProgress) }
+                if (parallel) {
+                    writeLock.withFolderLock(folderNames(entry)) { downloadChapter(entry, chaptersLeft, onProgress) }
+                } else {
+                    writeLock.withLock { downloadChapter(entry, chaptersLeft, onProgress) }
+                }
             }
-            synchronized(activeLock) { active = entry.chapterId to job }
+            synchronized(activeLock) { active[entry.chapterId] = job }
             try {
+                // The queue was read before the job was registered, so a removal in between found
+                // nothing to cancel. A removal deletes the row before it cancels, so the row read
+                // after registering is either gone, and the chapter is dropped, or still there, and
+                // the removal's cancel will find the job.
+                if (queueRepository.getByChapterId(entry.chapterId) == null) {
+                    job.cancel()
+                    return@coroutineScope ChapterResult.DROPPED
+                }
                 job.await()
             } catch (e: CancellationException) {
                 // Either [cancel] stopped this chapter, and the run goes on, or the run itself is
@@ -263,9 +384,26 @@ class DownloadEngine(
                 currentCoroutineContext().ensureActive()
                 ChapterResult.DROPPED
             } finally {
-                synchronized(activeLock) { if (active?.second === job) active = null }
+                synchronized(activeLock) { if (active[entry.chapterId] === job) active.remove(entry.chapterId) }
             }
         }
+
+    /**
+     * Every name the chapter's folder may have, under either value of
+     * [LibraryPreferences.disallowNonAsciiFilenames] and with case folded, since a shared folder can
+     * be on storage that ignores case. Two engine chapters whose names meet would write one `_tmp`
+     * folder, or one would record a manifest row the other's R71 part 2 check had not seen, so they
+     * do not run at once. Every manifest row a folder may resolve to has the folder's own name
+     * ([DownloadLocator.mayResolveTo]), so the name alone decides it. A chapter no longer stored has
+     * none; it is only dropped.
+     */
+    private suspend fun folderNames(entry: DownloadQueueEntry): List<String> {
+        val chapter = chapterRepository.getChapterById(entry.chapterId) ?: return emptyList()
+        return listOf(false, true).map { ascii ->
+            DownloadProvider.getChapterDirName(chapter.name, chapter.scanlator, chapter.url, ascii)
+                .lowercase(Locale.ROOT)
+        }
+    }
 
     @Suppress("TooGenericExceptionCaught")
     private suspend fun downloadChapter(
@@ -564,9 +702,64 @@ class DownloadEngine(
         /** Runs a chapter may end on a network failure, each time put back in the queue, before it fails. */
         const val MAX_NETWORK_REQUEUES = 3
 
+        /** The top of upstream's range for [DownloadPreferences.parallelSourceLimit], 1 to 10. */
+        const val MAX_PARALLEL_SOURCES = 10
+
         private val NETWORK_FAILURES = setOf(ErrorKey.NO_NETWORK, ErrorKey.TIMEOUT)
 
         private const val MIN_PAGE_DIGITS = 3
         private const val PAGE_TMP_SUFFIX = ".tmp"
+    }
+}
+
+/**
+ * The progress of the chapters running at once, sent as one report, so the foreground notification
+ * shows them together. A chapter is on the board from its first report, once its page list is in,
+ * until the boundary after it ends. Every report carries the chapters left as [boundary] last set
+ * it from the queue, one chapter running or several. Synchronized, so the reports of several
+ * chapters reach [onProgress] one at a time, which [DownloadProgressCadence] relies on.
+ */
+private class ProgressBoard(private val onProgress: (DownloadEngine.Progress) -> Unit) {
+
+    /** In the order the chapters first reported, so the first is the one running longest. */
+    private val running = LinkedHashMap<Long, DownloadEngine.Progress>()
+
+    /** The rows still queued or running at the last boundary; set before any chapter starts. */
+    private var left = 0
+
+    @Synchronized
+    fun report(progress: DownloadEngine.Progress) {
+        running[progress.chapterId] = progress
+        send()
+    }
+
+    /**
+     * A chapter boundary: [ended], the chapter that just ended if one did, leaves the board, and
+     * [left] is the queue's count now. The chapters still running are reported again when either
+     * changed, so a drop to one chapter shows that chapter's own report with the new count.
+     */
+    @Synchronized
+    fun boundary(left: Int, ended: Long?) {
+        val removed = ended != null && running.remove(ended) != null
+        val changed = left != this.left
+        this.left = left
+        if ((removed || changed) && running.isNotEmpty()) send()
+    }
+
+    private fun send() {
+        val all = running.values
+        val first = all.first()
+        onProgress(
+            if (all.size == 1) {
+                first.copy(chaptersLeft = left)
+            } else {
+                first.copy(
+                    pagesDone = all.sumOf { it.pagesDone },
+                    pagesTotal = all.sumOf { it.pagesTotal },
+                    chaptersLeft = left,
+                    chaptersRunning = all.size,
+                )
+            },
+        )
     }
 }

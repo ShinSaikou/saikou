@@ -29,8 +29,8 @@ import kotlin.time.Clock
  * The queue is the `download_queue` table; this class adds the controls over it and over the
  * worker that drains it. Nothing is held in memory that a process death would lose.
  *
- * A cancel removes the queue row first, then stops the chapter if it is the one in flight, then
- * deletes its `_tmp` folder. The engine's commit re-reads the row inside its transaction, so a
+ * A cancel removes the queue row first, then stops the chapter if it is in flight (one of several
+ * with several sources at once; the others run on), then deletes its `_tmp` folder. The engine's commit re-reads the row inside its transaction, so a
  * chapter cancelled after its last page is not recorded either.
  */
 @Inject

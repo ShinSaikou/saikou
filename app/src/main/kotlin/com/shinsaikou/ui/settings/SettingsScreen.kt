@@ -46,6 +46,7 @@ import tachiyomi.presentation.core.components.TwoPanelBox
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.EmptyScreen
+import tachiyomi.presentation.core.util.collectAsState
 
 /**
  * The tag on the two pane layout's root. It was a bare literal repeated in the device suite until
@@ -79,6 +80,8 @@ internal fun SettingsScreen(requestedSection: SettingsSection?, requestedHighlig
     }
     // Null while the search is closed, as the library's bar has it.
     var searchQuery by rememberSaveable { mutableStateOf<String?>(null) }
+    // Downloads draws its sources-at-once row only while this switch is on, so the search does too.
+    val parallelSourceDownloads by viewModel.downloadPreferences.parallelSourceDownloads.collectAsState()
     // The row a result asked for, until it has been shown: saved as its ids, so "none" is saved too,
     // and a section shown again keeps the scroll it was left at.
     var highlightIds by rememberSaveable { mutableStateOf(requestedHighlight?.ids ?: intArrayOf()) }
@@ -120,6 +123,7 @@ internal fun SettingsScreen(requestedSection: SettingsSection?, requestedHighlig
             SettingsSearchResults(
                 query = query,
                 sections = viewModel.sections,
+                parallelSourceDownloads = parallelSourceDownloads,
                 onPick = { entry ->
                     if (tabletUi) {
                         selected = entry.section
@@ -231,15 +235,18 @@ private fun SectionRow(section: SettingsSection, selected: Boolean, onClick: () 
 private fun SettingsSearchResults(
     query: String,
     sections: List<SettingsSection>,
+    parallelSourceDownloads: Boolean,
     onPick: (SettingsSearchEntry) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val resources = LocalResources.current
     val context = LocalContext.current
     val view = LocalView.current
-    val items = remember(resources, sections) {
+    val items = remember(resources, sections, parallelSourceDownloads) {
         settingsSearchIndex
-            .filter { entry -> entry.section in sections && entry.condition?.isMet(context, view) != false }
+            .filter { entry ->
+                entry.section in sections && entry.condition?.isMet(context, view, parallelSourceDownloads) != false
+            }
             .map { it.resolve(resources) }
     }
     val results = remember(items, query) { matchSettings(items, query) }
@@ -269,8 +276,10 @@ private fun SettingsSearchResults(
     }
 }
 
-/** Whether this device has the row: the same checks the section makes before it draws it. */
-private fun SettingsSearchCondition.isMet(context: Context, view: View): Boolean = when (this) {
-    SettingsSearchCondition.DISPLAY_CUTOUT -> view.hasDisplayCutout()
-    SettingsSearchCondition.AUTHENTICATION -> context.isAuthenticationSupported()
-}
+/** Whether the row is drawn: the same checks the section makes before it draws it. */
+private fun SettingsSearchCondition.isMet(context: Context, view: View, parallelSourceDownloads: Boolean): Boolean =
+    when (this) {
+        SettingsSearchCondition.DISPLAY_CUTOUT -> view.hasDisplayCutout()
+        SettingsSearchCondition.AUTHENTICATION -> context.isAuthenticationSupported()
+        SettingsSearchCondition.PARALLEL_SOURCE_DOWNLOADS -> parallelSourceDownloads
+    }

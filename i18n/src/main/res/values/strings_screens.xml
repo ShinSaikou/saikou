@@ -482,6 +482,8 @@
     <string name="settings_experimental_auto_scroll_summary">Adds a play button to the reader\'s menu in long strip that scrolls the pages by itself at the speed you set in the reader settings. Any touch stops it, and the screen stays on while it runs. The setting stays on this device and is not in backups.</string>
     <string name="settings_experimental_extension_auto_update">Update extensions automatically</string>
     <string name="settings_experimental_extension_auto_update_summary">Once a day on Wi-Fi, Saikou checks your extension stores and installs the updates it finds. An update signed with a different key still waits for you. A new version can change how a source behaves or break it.</string>
+    <string name="settings_experimental_parallel_sources">Download from several sources at once</string>
+    <string name="settings_experimental_parallel_sources_summary">Downloads one chapter from each of several sources at the same time, instead of one chapter at a time. Chapters from the same source still download one after another, in queue order. While it is on, Settings > Downloads shows Sources downloaded at once, which sets how many. Uses more data, memory and battery while downloads run. A change applies from the next chapter to start.</string>
     <string name="settings_theme">Theme</string>
     <string name="settings_theme_mode">Light and dark</string>
     <string name="settings_tablet_ui">Two pane layout</string>
@@ -1205,6 +1207,7 @@
     <string name="settings_section_downloads">Downloads</string>
     <string name="pref_download_only_over_wifi">Only download over Wi-Fi</string>
     <string name="pref_download_only_over_wifi_detail">Downloads wait for Wi-Fi. A change applies at once, to downloads running or waiting</string>
+    <string name="pref_download_parallel_sources">Sources downloaded at once</string>
     <string name="pref_download_parallel_pages">Pages downloaded at once</string>
     <string name="pref_download_orphans">Unmatched downloads</string>
     <plurals name="pref_download_orphans_format">

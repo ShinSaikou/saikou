@@ -181,6 +181,47 @@ class SettingsSearchIndexTest {
             .forEach { name -> withClue(name) { strings.getValue(name) shouldNotContain "%" } }
     }
 
+    @Test
+    fun `the sources downloaded at once row is indexed with the switch's condition, and no other entry has one for it`() {
+        val row = settingsSearchIndex.single { name(it.titleRes) == "pref_download_parallel_sources" }
+
+        row.section shouldBe SettingsSection.DOWNLOADS
+        row.condition shouldBe SettingsSearchCondition.PARALLEL_SOURCE_DOWNLOADS
+        settingsSearchIndex.filter { it.condition == SettingsSearchCondition.PARALLEL_SOURCE_DOWNLOADS } shouldBe
+            listOf(row)
+    }
+
+    @Test
+    fun `the Experimental switch itself is always indexed, with no condition`() {
+        val switch = settingsSearchIndex.single { name(it.titleRes) == "settings_experimental_parallel_sources" }
+
+        switch.section shouldBe SettingsSection.EXPERIMENTAL
+        switch.condition shouldBe null
+    }
+
+    /** The search hides the row while the switch is off only because the section does not draw it then. */
+    @Test
+    fun `the section draws the sources downloaded at once row only inside a check of the switch`() {
+        val section = functions(source("settings/SettingsSections.kt")).single { it.name == "DownloadsSection" }.text
+        val check = section.indexOf("if (parallelSources) {")
+        val target = section.indexOf("SettingsSearchTarget(R.string.pref_download_parallel_sources)")
+
+        withClue("the switch is read from the preference") {
+            section shouldContain "val parallelSources by viewModel.downloadPreferences.parallelSourceDownloads.collectAsState()"
+        }
+        (check >= 0 && target >= 0) shouldBe true
+        val open = section.indexOf('{', check)
+        (target in open..closingBrace(section, open)) shouldBe true
+    }
+
+    @Test
+    fun `the other Downloads rows have no condition`() {
+        settingsSearchIndex
+            .filter { it.section == SettingsSection.DOWNLOADS && name(it.titleRes) != "pref_download_parallel_sources" }
+            .mapNotNull { it.condition }
+            .shouldBeEmpty()
+    }
+
     /** One top-level function of a source file: its name and its text up to the next one. */
     private class Chunk(val name: String, val text: String) {
         private val groups: List<Triple<IntRange, String, Int>> = GROUP.findAll(text).map { match ->

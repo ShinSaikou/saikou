@@ -96,6 +96,11 @@
         <item quantity="one">%1$d chapter left</item>
         <item quantity="other">%1$d chapters left</item>
     </plurals>
+    <!-- The download progress notification's title while chapters from several sources download at once (Experimental). -->
+    <plurals name="notification_download_running">
+        <item quantity="one">Downloading %1$d chapter</item>
+        <item quantity="other">Downloading %1$d chapters at once</item>
+    </plurals>
     <string name="notification_download_pause">Pause</string>
     <string name="notification_download_cancel_all">Cancel all</string>
     <plurals name="notification_download_errors">

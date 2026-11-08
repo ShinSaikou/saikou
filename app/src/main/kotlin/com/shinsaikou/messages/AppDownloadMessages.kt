@@ -26,6 +26,9 @@ class AppDownloadMessages(private val context: Context) : DownloadMessages {
     override fun chaptersLeft(left: Int): String =
         context.resources.getQuantityString(R.plurals.notification_download_left, left, left)
 
+    override fun chaptersRunning(count: Int): String =
+        context.resources.getQuantityString(R.plurals.notification_download_running, count, count)
+
     override fun pauseAction(): String = context.getString(R.string.notification_download_pause)
 
     override fun cancelAllAction(): String = context.getString(R.string.notification_download_cancel_all)

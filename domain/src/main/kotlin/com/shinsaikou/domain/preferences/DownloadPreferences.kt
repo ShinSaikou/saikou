@@ -44,7 +44,19 @@ class DownloadPreferences(preferenceStore: PreferenceStore) {
     val downloadNewUnreadChaptersOnly: Preference<Boolean> =
         preferenceStore.getBoolean("download_new_unread_chapters_only", false)
 
+    /**
+     * Sources the engine downloads from at once, one chapter each. Read only while
+     * [parallelSourceDownloads] is on (amends R65, which left it unread).
+     */
     val parallelSourceLimit: Preference<Int> = preferenceStore.getInt("download_parallel_source_limit", 5)
+
+    /**
+     * Experimental: the switch that has the engine run up to [parallelSourceLimit] sources at once
+     * instead of one chapter at a time (amends R65). Off by default (R162 item 2). App state, so it
+     * stays on the device and out of backups.
+     */
+    val parallelSourceDownloads: Preference<Boolean> =
+        preferenceStore.getBoolean(Preference.appStateKey("download_parallel_sources"), false)
 
     val parallelPageLimit: Preference<Int> = preferenceStore.getInt("download_parallel_page_limit", 5)
 

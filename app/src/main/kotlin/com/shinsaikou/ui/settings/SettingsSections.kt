@@ -98,6 +98,7 @@ import com.shinsaikou.ui.storage.StorageLocationViewModel
 import com.shinsaikou.ui.storage.rememberStorageLocationPicker
 import dev.zacsweers.metrox.viewmodel.metroViewModel
 import com.shinsaikou.domain.storage.StorageLocation
+import com.shinsaikou.downloads.DownloadEngine
 import com.shinsaikou.downloads.export.DownloadExportScheduler
 import com.shinsaikou.ui.util.copyToClipboard
 import com.shinsaikou.ui.util.relativeTimeSpanString
@@ -151,6 +152,9 @@ internal val backupIntervals = listOf(0, 6, 12, 24, 48, WEEK_HOURS)
 
 /** Upstream's range for the same key, so a restored value lands on the slider. */
 private val parallelPageLimits = 1..15
+
+/** Upstream's range for the same key; the engine clamps to the same top. */
+private val parallelSourceLimits = 1..DownloadEngine.MAX_PARALLEL_SOURCES
 
 /** Upstream's download ahead choices, next N unread chapters; 0 is Disabled (phase 3 unit AD). */
 internal val autoDownloadWhileReadingChoices = listOf(0, 2, 3, 5, 10)
@@ -1057,8 +1061,9 @@ private fun BrowseSection(viewModel: SettingsViewModel) {
 
 /**
  * The two download keys the engine reads (phase 2 decision Q5): the network constraint and the
- * pages in flight per chapter. Then upstream's "Delete chapters" group (phase 3 unit DR), where upstream
- * places it, and upstream's auto-download rows (phase 3 unit AD): new chapters, with
+ * pages in flight per chapter, with the sources at once above the pages, where upstream has it,
+ * while the Experimental switch for several sources is on (amends R65). Then upstream's "Delete
+ * chapters" group (phase 3 unit DR), where upstream places it, and upstream's auto-download rows (phase 3 unit AD): new chapters, with
  * the two rows that only apply while it is on, and download ahead with upstream's note. Below them, the downloads whose chapter row is
  * gone or soft deleted and that the sweep's re-match could not match to a current chapter (phase 2
  * decision Q7), with a delete behind a confirmation that names them, because the files may not be
@@ -1069,6 +1074,8 @@ private fun BrowseSection(viewModel: SettingsViewModel) {
 @Composable
 private fun DownloadsSection(viewModel: SettingsViewModel) {
     val parallelPageLimit by viewModel.downloadPreferences.parallelPageLimit.collectAsState()
+    val parallelSources by viewModel.downloadPreferences.parallelSourceDownloads.collectAsState()
+    val parallelSourceLimit by viewModel.downloadPreferences.parallelSourceLimit.collectAsState()
     val state by viewModel.state.collectAsStateWithLifecycle()
     var confirmingDelete by remember { mutableStateOf(false) }
     val downloadNew by viewModel.downloadPreferences.downloadNewChapters.collectAsState()
@@ -1098,6 +1105,16 @@ private fun DownloadsSection(viewModel: SettingsViewModel) {
             detailRes = R.string.pref_download_only_over_wifi_detail,
             pref = viewModel.downloadPreferences.downloadOnlyOverWifi,
         )
+        if (parallelSources) {
+            SettingsSearchTarget(R.string.pref_download_parallel_sources) {
+                SliderItem(
+                    value = parallelSourceLimit,
+                    valueRange = parallelSourceLimits,
+                    label = stringResource(R.string.pref_download_parallel_sources),
+                    onChange = viewModel.downloadPreferences.parallelSourceLimit::set,
+                )
+            }
+        }
         SettingsSearchTarget(R.string.pref_download_parallel_pages) {
             SliderItem(
                 value = parallelPageLimit,
@@ -1899,6 +1916,11 @@ private fun ExperimentalSection(viewModel: SettingsViewModel) {
         labelRes = R.string.settings_experimental_extension_auto_update,
         pref = viewModel.extensionsPreferences.autoInstallUpdates,
         detailRes = R.string.settings_experimental_extension_auto_update_summary,
+    )
+    CheckboxRow(
+        labelRes = R.string.settings_experimental_parallel_sources,
+        pref = viewModel.downloadPreferences.parallelSourceDownloads,
+        detailRes = R.string.settings_experimental_parallel_sources_summary,
     )
 }
 

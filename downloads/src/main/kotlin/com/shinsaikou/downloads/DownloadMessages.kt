@@ -20,6 +20,9 @@ interface DownloadMessages {
     /** The same with notification content hidden: [left] chapters left. */
     fun chaptersLeft(left: Int): String
 
+    /** Title of the foreground notification while [count] chapters download at once, from several sources. */
+    fun chaptersRunning(count: Int): String
+
     /** The foreground notification's action that stops the run and keeps the queue. */
     fun pauseAction(): String
 

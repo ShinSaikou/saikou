@@ -45,12 +45,22 @@ class DownloadNotifier(
      * The worker's foreground notification. WorkManager posts it, so it is built here and not posted.
      * It names the entry, then the chapter and the chapters left; with notification content hidden,
      * only the count. Pause stops the run and keeps the queue; Cancel all empties the queue.
+     *
+     * With several chapters running at once (several sources at once, the Experimental switch), it
+     * names no entry: the title counts the chapters running, the text the chapters left, and the bar
+     * is their pages together.
      */
     fun progressNotification(progress: DownloadEngine.Progress?): Notification {
         val hidden = securityPreferences.hideNotificationContent.get()
+        val running = progress?.chaptersRunning ?: 1
+        val several = running > 1
         val builder = builderOn(CHANNEL_PROGRESS)
             .setContentTitle(
-                progress?.takeUnless { hidden }?.mangaTitle?.chop(TITLE_MAX_LENGTH) ?: messages.downloaderTitle(),
+                if (several) {
+                    messages.chaptersRunning(running)
+                } else {
+                    progress?.takeUnless { hidden }?.mangaTitle?.chop(TITLE_MAX_LENGTH) ?: messages.downloaderTitle()
+                },
             )
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setOngoing(true)
@@ -63,7 +73,7 @@ class DownloadNotifier(
             )
         if (progress != null) {
             builder.setContentText(
-                if (hidden) {
+                if (hidden || several) {
                     messages.chaptersLeft(progress.chaptersLeft)
                 } else {
                     messages.chapterAndLeft(progress.chapterName.chop(TITLE_MAX_LENGTH), progress.chaptersLeft)

@@ -94,4 +94,16 @@ class AutoDownloadSettingsTest {
         setOf("wifi", "ac").toggled("wifi") shouldBe setOf("ac")
         emptySet<String>().toggled("wifi") shouldBe setOf("wifi")
     }
+
+    @Test
+    fun `the several sources switch is app state, so a backup never carries it, and starts off`() {
+        Preference.isAppState(downloadPreferences.parallelSourceDownloads.key()) shouldBe true
+        downloadPreferences.parallelSourceDownloads.get() shouldBe false
+    }
+
+    @Test
+    fun `the sources at once limit is upstream's key and starts at 5`() {
+        downloadPreferences.parallelSourceLimit.key() shouldBe "download_parallel_source_limit"
+        downloadPreferences.parallelSourceLimit.get() shouldBe 5
+    }
 }
