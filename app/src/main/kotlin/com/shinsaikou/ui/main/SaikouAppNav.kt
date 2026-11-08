@@ -54,6 +54,7 @@ import com.shinsaikou.navigation.LIBRARY_SEARCH_KEY
 import com.shinsaikou.navigation.MIGRATION_PICK_KEY
 import com.shinsaikou.navigation.Route
 import com.shinsaikou.navigation.SettingsSection
+import com.shinsaikou.navigation.SourceBrowseMode
 import com.shinsaikou.navigation.SaikouNavigator
 import com.shinsaikou.presentation.core.components.SolveBanner
 import com.shinsaikou.presentation.core.util.LocalTabletUiMode
@@ -471,6 +472,9 @@ internal fun MainIntents.Target.toArrival(): Arrival = Arrival(
  * Every payload-carrying case falls back to the library rather than opening its screen on nothing:
  * an entry intent with no id, or a restore intent whose URI the sender did not attach, is a
  * malformed intent, and a screen that opens empty reads to the owner as a screen that is broken.
+ *
+ * A search another app sent opens the one source it names searching for it, through the same route
+ * a source's search takes, or Global Search when it names none or several.
  */
 private fun MainIntents.Target.toRoute(): Route = when (destination) {
     MainDestination.LIBRARY -> Route.Library
@@ -488,4 +492,8 @@ private fun MainIntents.Target.toRoute(): Route = when (destination) {
     MainDestination.DATA_SETTINGS -> Route.Settings(SettingsSection.DATA)
     MainDestination.TRACKING_SETTINGS -> Route.Settings(SettingsSection.TRACKING)
     MainDestination.ADVANCED_SETTINGS -> Route.Settings(SettingsSection.ADVANCED)
+    MainDestination.SEARCH -> search?.let { request ->
+        sourceSearch?.let { Route.SourceBrowse(it.sourceId, it.query, SourceBrowseMode.SEARCH) }
+            ?: Route.GlobalSearch(request.query)
+    } ?: Route.Library
 }

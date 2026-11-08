@@ -62,6 +62,15 @@ class SourcePreferences(preferenceStore: PreferenceStore) {
     val globalSearchPinnedOnly: Preference<Boolean> =
         preferenceStore.getBoolean(Preference.appStateKey("global_search_pinned_only"), false)
 
+    /**
+     * Experimental: other apps may hand the app a search, through the share menu, the system's
+     * search actions and an extension's link handler. The entry points sit on a manifest alias
+     * that is enabled only while this is on (`SearchLinksAlias`). App state, so it stays on the
+     * device and out of backups.
+     */
+    val searchLinks: Preference<Boolean> =
+        preferenceStore.getBoolean(Preference.appStateKey("source_search_links"), false)
+
     val migrationSortingMode: Preference<SetMigrateSorting.Mode> = preferenceStore.getEnum(
         "pref_migration_sorting",
         SetMigrateSorting.Mode.ALPHABETICAL,

@@ -1,5 +1,6 @@
 package com.shinsaikou.ui.browse
 
+import com.shinsaikou.domain.preferences.SourcePreferences
 import com.shinsaikou.extensions.model.Extension
 import com.shinsaikou.source.CatalogueSource
 import com.shinsaikou.source.SourceIds
@@ -21,6 +22,25 @@ internal fun CatalogueSource.isInEnabledLanguage(enabled: Set<String>): Boolean 
 internal fun matureSourceIds(installed: List<Extension.Installed>): Set<Long> = installed
     .filter { it.isNsfw }
     .flatMapTo(mutableSetOf()) { extension -> extension.sources.map { it.id } }
+
+/**
+ * The sources the owner has left on (contract 08 section 5.3): an enabled language
+ * ([isInEnabledLanguage]), an id that is not hidden, and no source of an adult extension
+ * ([matureSourceIds]) while that switch is off. The Sources page lists them, Global Search asks
+ * them, and a search another app sends picks its one source among them, all through this one
+ * function so the three cannot drift apart. Read when called, never followed.
+ */
+internal fun <T : CatalogueSource> List<T>.enabledSources(
+    preferences: SourcePreferences,
+    installed: List<Extension.Installed>,
+): List<T> {
+    val languages = preferences.enabledLanguages.get()
+    val hidden = preferences.disabledSources.get()
+    val mature = if (preferences.showNsfwSource.get()) emptySet() else matureSourceIds(installed)
+    return filter { it.isInEnabledLanguage(languages) }
+        .filterNot { it.id.toString() in hidden }
+        .filterNot { it.id in mature }
+}
 
 /**
  * Puts the Local source after every extension source and leaves the rest in the order they came in:

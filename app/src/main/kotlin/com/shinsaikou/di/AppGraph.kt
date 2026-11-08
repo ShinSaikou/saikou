@@ -7,6 +7,7 @@ import com.shinsaikou.storage.StorageMove
 import com.shinsaikou.storage.StorageMoveScheduler
 import com.shinsaikou.storage.StorageNotifier
 import com.shinsaikou.ui.backup.BackupFileCopy
+import com.shinsaikou.ui.main.SearchLinksAlias
 import android.app.Application
 import androidx.work.ListenableWorker
 import androidx.work.WorkManager
@@ -321,6 +322,9 @@ interface AppGraph : MetroViewModelMultibindings {
     val appUpdateScheduler: AppUpdateScheduler
     val appUpdateInstaller: AppUpdateInstaller
     val appUpdateNotifier: AppUpdateNotifier
+
+    /** The Experimental share and search alias, which `SaikouApp` has follow its switch. */
+    val searchLinksAlias: SearchLinksAlias
 
     /**
      * The download engine's three interfaces, which the chapter list and the download settings

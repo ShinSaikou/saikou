@@ -87,6 +87,44 @@
         </activity>
 
         <!--
+          Share to search and search links (Experimental, "Open shared text and search requests").
+          Shared text, the system's search actions and upstream's eu.kanade.tachiyomi.SEARCH, which
+          extensions' link handlers send, all open MainActivity, which reads them in
+          MainIntents.targetOf.
+
+          An alias rather than more filters on MainActivity, so the switch can take these entry
+          points away whole: disabled here, Android offers the app to no other app for any of them,
+          and SearchLinksAlias enables the alias only while the switch is on, from SaikouApp's start
+          and on every change. MainActivity itself ignores these actions while the switch is off,
+          since it is exported and an app can name it directly.
+
+          R30 stands: none of these filters carries BROWSABLE, so no web page can reach them. Only
+          another app on the device can, and only while the switch is on. The label is the app's own,
+          which is what the share menu shows.
+        -->
+        <activity-alias
+            android:name=".ui.main.SearchLinks"
+            android:enabled="false"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:targetActivity=".ui.main.MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEARCH" />
+                <action android:name="com.google.android.gms.actions.SEARCH_ACTION" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="eu.kanade.tachiyomi.SEARCH" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity-alias>
+
+        <!--
           saikou://sign-in-return: the "Return to Saikou" button on the page the browser shows once
           a sign-in's callback has arrived. BROWSABLE, so it is the one entry point a web page can
           reach, and for that reason it reads nothing from its intent: it brings back the activity

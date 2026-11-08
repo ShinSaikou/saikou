@@ -3,6 +3,7 @@ package com.shinsaikou.ui.main
 import com.shinsaikou.navigation.BrowsePage
 import com.shinsaikou.navigation.Route
 import com.shinsaikou.navigation.SettingsSection
+import com.shinsaikou.navigation.SourceBrowseMode
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
@@ -93,5 +94,40 @@ class ArrivalTest {
             Route.BackupRestore("content://x/y")
         MainIntents.Target(MainDestination.RESTORE_BACKUP).toArrival().route shouldBe Route.Library
         MainIntents.Target(MainDestination.EXTENSIONS).toArrival().route shouldBe Route.Browse(BrowsePage.EXTENSIONS)
+    }
+
+    // -- search requests from other apps (Experimental) ----------------------------------------
+
+    @Test
+    fun `a search naming one source lands on that source's search with the source's own query`() {
+        val target = MainIntents.Target(
+            MainDestination.SEARCH,
+            search = SearchRequest("berserk", addresses = listOf("https://example.org/page")),
+            sourceSearch = SourceSearch(42L, "https://example.org/page"),
+        )
+
+        target.toArrival() shouldBe Arrival(
+            route = Route.SourceBrowse(42L, "https://example.org/page", SourceBrowseMode.SEARCH),
+            showUpdateErrors = false,
+        )
+    }
+
+    @Test
+    fun `a search naming no single source lands on global search with the query`() {
+        val target = MainIntents.Target(MainDestination.SEARCH, search = SearchRequest("berserk"))
+
+        target.toArrival() shouldBe Arrival(route = Route.GlobalSearch("berserk"), showUpdateErrors = false)
+    }
+
+    @Test
+    fun `a search with no request falls back to the library`() {
+        MainIntents.Target(MainDestination.SEARCH).toArrival() shouldBe
+            Arrival(route = Route.Library, showUpdateErrors = false)
+    }
+
+    @Test
+    fun `a source search without a request still falls back to the library`() {
+        MainIntents.Target(MainDestination.SEARCH, sourceSearch = SourceSearch(42L, "berserk")).toArrival() shouldBe
+            Arrival(route = Route.Library, showUpdateErrors = false)
     }
 }

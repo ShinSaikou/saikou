@@ -1888,6 +1888,12 @@ private fun ExperimentalSection(viewModel: SettingsViewModel) {
         pref = viewModel.readerPreferences.stripAutoScroll,
         detailRes = R.string.settings_experimental_auto_scroll_summary,
     )
+    // SearchLinksAlias follows the preference, so the row needs no hook of its own.
+    CheckboxRow(
+        labelRes = R.string.settings_experimental_search_links,
+        pref = viewModel.sourcePreferences.searchLinks,
+        detailRes = R.string.settings_experimental_search_links_summary,
+    )
 }
 
 /**

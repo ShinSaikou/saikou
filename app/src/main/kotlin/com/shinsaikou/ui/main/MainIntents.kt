@@ -45,6 +45,13 @@ enum class MainDestination {
 
     /** Settings > Advanced, where [AppRestart] brings the app back after a Restart from there. */
     ADVANCED_SETTINGS,
+
+    /**
+     * A search another app asked for (Experimental); [MainIntents.Target.search] carries it, and
+     * [MainIntents.Target.sourceSearch] the one source it is for and what it searches there,
+     * once `SearchRequestResolver` has found one.
+     */
+    SEARCH,
 }
 
 /**
@@ -113,7 +120,7 @@ object MainIntents {
         ACTION_OPEN_TRACKING_SETTINGS -> MainDestination.TRACKING_SETTINGS
         ACTION_OPEN_ADVANCED_SETTINGS -> MainDestination.ADVANCED_SETTINGS
         Intent.ACTION_VIEW -> viewDestinationOf(intent, resolver)
-        else -> null
+        else -> SearchRequests.of(intent)?.let { MainDestination.SEARCH }
     }
 
     fun mangaIdOf(intent: Intent): Long? =
@@ -124,12 +131,17 @@ object MainIntents {
      * each is worth testing on its own, but the activity holds a [Target]: a destination and its
      * payload have to be consumed together, and two separate pieces of state can be half updated
      * by a second intent arriving between them.
+     *
+     * [sourceSearch] is never read off the intent: it is what `SearchRequestResolver` found for
+     * [search], filled in by the activity before the target is handed on.
      */
     data class Target(
         val destination: MainDestination,
         val mangaId: Long? = null,
         val dataUri: String? = null,
         val storeUrl: String? = null,
+        val search: SearchRequest? = null,
+        val sourceSearch: SourceSearch? = null,
     )
 
     /** Null for `ACTION_MAIN` and for any intent this app does not answer. */
@@ -140,6 +152,7 @@ object MainIntents {
             mangaId = mangaIdOf(intent),
             dataUri = dataUriOf(intent),
             storeUrl = storeUrlOf(intent),
+            search = SearchRequests.of(intent),
         )
     }
 
@@ -212,7 +225,8 @@ object MainIntents {
      * [MainDestination.RESTORE_BACKUP] and [MainDestination.EXTENSION_STORE] have no action of
      * their own on purpose. They are things the outside world hands to the app through
      * `ACTION_VIEW` and a `data` URI, so an intent the app built for one of them would carry a
-     * destination and no payload, which is a screen that opens on nothing.
+     * destination and no payload, which is a screen that opens on nothing. [MainDestination.SEARCH]
+     * is the same: other apps send it with their own actions and a query.
      */
     private fun actionOf(destination: MainDestination): String = when (destination) {
         MainDestination.LIBRARY -> ACTION_LIBRARY
@@ -231,5 +245,6 @@ object MainIntents {
         MainDestination.ADVANCED_SETTINGS -> ACTION_OPEN_ADVANCED_SETTINGS
         MainDestination.RESTORE_BACKUP, MainDestination.EXTENSION_STORE ->
             error("$destination arrives as an ACTION_VIEW and is never built by the app")
+        MainDestination.SEARCH -> error("$destination arrives from another app and is never built by the app")
     }
 }

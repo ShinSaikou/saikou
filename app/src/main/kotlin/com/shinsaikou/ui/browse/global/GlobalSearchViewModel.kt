@@ -12,9 +12,8 @@ import com.shinsaikou.presentation.core.viewmodel.StateViewModel
 import com.shinsaikou.source.CatalogueSource
 import com.shinsaikou.source.SourceManager
 import com.shinsaikou.source.model.FilterList
-import com.shinsaikou.ui.browse.isInEnabledLanguage
+import com.shinsaikou.ui.browse.enabledSources
 import com.shinsaikou.ui.browse.localSourceLast
-import com.shinsaikou.ui.browse.matureSourceIds
 import com.shinsaikou.ui.util.languageName
 import com.shinsaikou.ui.util.withCurrent
 import dev.zacsweers.metro.AppScope
@@ -363,8 +362,8 @@ class GlobalSearchViewModel(
      *
      * Contract 08 section 5.3 is the rule being mirrored here: a language the owner enabled (with
      * `"all"` a literal code since ruling R57), an id that is not hidden, and no NSFW source while
-     * that switch is off. [isInEnabledLanguage] and [matureSourceIds] are the Sources page's own
-     * rules, so the two cannot drift apart.
+     * that switch is off. [enabledSources] is the Sources page's own rule, so the two cannot drift
+     * apart.
      *
      * It waits for the source registry first. A search restored after process death runs as the
      * process starts, and until the extension host's first load has ended the registry holds the
@@ -375,20 +374,11 @@ class GlobalSearchViewModel(
         sourceManager.isInitialized.first { it }
         if (migratingMangaId != null) return@withContext migrationSources()
         val sources = sourceManager.getCatalogueSources().first()
-        val languages = sourcePreferences.enabledLanguages.get()
-        val hidden = sourcePreferences.disabledSources.get()
         val pinned = sourcePreferences.pinnedSources.get()
         val pinnedOnly = sourcePreferences.globalSearchPinnedOnly.get()
         val lastUsed = sourcePreferences.lastUsedSource.get()
-        val nsfw = if (sourcePreferences.showNsfwSource.get()) {
-            emptySet()
-        } else {
-            matureSourceIds(extensionManager.installedExtensions.value)
-        }
         sources
-            .filter { it.isInEnabledLanguage(languages) }
-            .filterNot { it.id.toString() in hidden }
-            .filterNot { it.id in nsfw }
+            .enabledSources(sourcePreferences, extensionManager.installedExtensions.value)
             .filter { !pinnedOnly || it.id.toString() in pinned }
             .sortedWith(sourceOrder(pinned, lastUsed))
     }

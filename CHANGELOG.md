@@ -14,6 +14,11 @@ release may change behaviour.
   themselves, on into the next chapter, at the speed set by **Scroll speed** in the reader settings
   (under Long strip, and in Settings > Reader). Any touch stops it, as do opening the menu or a
   sheet and leaving the reader; the screen stays on while it runs.
+- **Open shared text and search requests** in Settings > Experimental, off by default, adds Saikou
+  to the share menu. Sharing a title searches all your sources for it; sharing a web page from a site
+  one of your sources reads opens that source's search for the page. Other apps, such as an
+  extension's link handler or a voice search, can open a search too. Each search another app sends
+  asks your sources as one you type does, and with the switch off no other app can send one.
 
 ## 0.1.3 - 2026-11-07
 

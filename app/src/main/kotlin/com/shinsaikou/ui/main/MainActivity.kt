@@ -14,11 +14,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.shinsaikou.SaikouApp
+import com.shinsaikou.di.AppGraph
 import com.shinsaikou.ui.crash.CrashLogExport
 import dev.zacsweers.metrox.viewmodel.LocalMetroViewModelFactory
 import dev.zacsweers.metrox.viewmodel.metroViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -30,6 +33,14 @@ class MainActivity : AppCompatActivity() {
      * destination and the payload it needs can never be consumed a frame apart.
      */
     private var pendingTarget by mutableStateOf<MainIntents.Target?>(null)
+
+    private lateinit var graph: AppGraph
+
+    /**
+     * A search another app sent, while its source is being looked up. A later intent cancels it, so
+     * a slow lookup can never land over whatever that intent asked for.
+     */
+    private var searchLookup: Job? = null
 
     /**
      * The result is deliberately ignored. A denial is a legitimate answer, the two notifiers
@@ -46,7 +57,7 @@ class MainActivity : AppCompatActivity() {
         // SaikouTheme's pure black bars build on it.
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        val graph = (application as SaikouApp).graph
+        graph = (application as SaikouApp).graph
         if (savedInstanceState == null) {
             graph.basePreferences.incognitoMode.set(false)
             // Upstream's launch-time clear, from the same block of its own `MainActivity` (ruling
@@ -108,7 +119,31 @@ class MainActivity : AppCompatActivity() {
      * what the file is called.
      */
     private fun handleIntent(intent: Intent) {
-        pendingTarget = MainIntents.targetOf(intent, contentResolver)
+        searchLookup?.cancel()
+        val target = MainIntents.targetOf(intent, contentResolver)
+        val search = target?.search
+        if (search == null) {
+            pendingTarget = target
+            return
+        }
+        // Experimental (`SourcePreferences.searchLinks`). Off, the alias that offers these intents
+        // is disabled, but this activity is exported, so an app can still name it directly; such a
+        // search is ignored, as it was before the switch existed.
+        if (!graph.sourcePreferences.searchLinks.get()) {
+            pendingTarget = null
+            return
+        }
+        // The lookup waits for the sources to load, so the screen goes on drawing meanwhile and
+        // the target is handed on once it knows which one the search is for.
+        val resolver = SearchRequestResolver(
+            graph.sourceManager,
+            graph.extensionManager,
+            graph.sourcePreferences,
+            graph.dispatchers,
+        )
+        searchLookup = lifecycleScope.launch {
+            pendingTarget = target.copy(sourceSearch = resolver.sourceSearchOf(search))
+        }
     }
 
     /**

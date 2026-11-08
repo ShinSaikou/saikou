@@ -139,6 +139,10 @@ class SaikouApp : Application(), Configuration.Provider, SingletonImageLoader.Fa
         // only in a release build. Main thread, for the same reason; the check itself runs on IO.
         graph.appUpdateTriggers.install()
 
+        // The Experimental share and search alias follows its switch from here on, and the first
+        // value puts a component state left from before (app data cleared) right. The calls run on IO.
+        graph.searchLinksAlias.install()
+
         graph.crashLog.extensionSnapshot = {
             graph.extensionManager.installedExtensions.value
                 .map { "${it.packageName} ${it.versionCode} lib ${it.libVersion}" }

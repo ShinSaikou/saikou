@@ -158,14 +158,9 @@ class SourcesViewModel(
         installed: List<Extension.Installed>,
         query: String,
     ): State {
-        val hidden = sourcePreferences.disabledSources.get()
         val pinned = sourcePreferences.pinnedSources.get()
-        val languages = sourcePreferences.enabledLanguages.get()
-        val mature = if (sourcePreferences.showNsfwSource.get()) emptySet() else matureSourceIds(installed)
         val rows = sources
-            .filter { it.isInEnabledLanguage(languages) }
-            .filterNot { it.id.toString() in hidden }
-            .filterNot { it.id in mature }
+            .enabledSources(sourcePreferences, installed)
             .filter { it.matches(query) }
             .sortedWith(
                 compareByDescending<CatalogueSource> { it.id.toString() in pinned }

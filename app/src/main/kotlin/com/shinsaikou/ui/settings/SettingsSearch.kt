@@ -285,6 +285,7 @@ internal val settingsSearchIndex: List<SettingsSearchEntry> = buildList {
         row(R.string.settings_experimental_custom_interval, R.string.settings_experimental_custom_interval_summary)
         row(R.string.settings_experimental_merged_entries, R.string.settings_experimental_merged_entries_summary)
         row(R.string.settings_experimental_auto_scroll, R.string.settings_experimental_auto_scroll_summary)
+        row(R.string.settings_experimental_search_links, R.string.settings_experimental_search_links_summary)
     }
 }
 
