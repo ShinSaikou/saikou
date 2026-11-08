@@ -1941,6 +1941,13 @@ private fun ExperimentalSection(viewModel: SettingsViewModel, showMessage: (Stri
             )
         },
     )
+    // Saikou's own key: a restore maps upstream's onto it, and a value an older restore stored under
+    // upstream's key leaves it off (R162 item 7).
+    CheckboxRow(
+        labelRes = R.string.settings_experimental_save_as_cbz,
+        pref = viewModel.downloadPreferences.saveChaptersAsCBZ,
+        detailRes = R.string.settings_experimental_save_as_cbz_summary,
+    )
 }
 
 /**

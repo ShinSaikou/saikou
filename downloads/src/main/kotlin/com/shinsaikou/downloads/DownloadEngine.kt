@@ -52,11 +52,16 @@ import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.domain.chapter.repository.ChapterRepository
 import tachiyomi.domain.manga.interactor.GetManga
 import tachiyomi.domain.manga.model.Manga
+import java.io.BufferedOutputStream
 import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
 import java.net.SocketException
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import java.util.zip.CRC32
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import kotlin.math.max
 import kotlin.time.Clock
 
@@ -77,8 +82,16 @@ import kotlin.time.Clock
  * 4. the rename of `<chapter>_tmp` to `<chapter>`,
  * 5. the manifest insert and the queue delete, in one transaction.
  *
+ * With [DownloadPreferences.saveChaptersAsCBZ] on, read as each chapter starts, step 4 is instead
+ * the folder's pages, in page order, and its `ComicInfo.xml` written as STORED zip entries into
+ * `<chapter>.cbz_tmp`, synced, and renamed to `<chapter>.cbz`; the manifest row names the archive,
+ * as it does for one adopted from upstream's downloads, and `<chapter>_tmp` goes once the row is
+ * written. This amends R65 (`saveChaptersAsCBZ` is read) and builds R162 item 7. Off, the engine
+ * writes folders exactly as before, and an entry may hold both kinds, since everything that finds a
+ * download goes through its manifest row's name.
+ *
  * The order is load bearing. `PageLoaderResolver` consults the manifest before anything else, so a
- * manifest row must never exist before its folder has its final name.
+ * manifest row must never exist before its folder or archive has its final name.
  *
  * A run starts by deleting the `_tmp` folders no queue row will resume ([sweepLeftovers]).
  *
@@ -195,9 +208,11 @@ class DownloadEngine(
     }
 
     /**
-     * Deletes the `_tmp` folders, and the `.cbz_tmp` files a copy from a folder writes, that no queue
-     * row will resume: a chapter removed from the queue while its folder could not be deleted, a
-     * chapter renamed since, a copy a stopped run left. Only `<source>/<manga>/<name>_tmp` under the
+     * Deletes the `_tmp` folders, and the `.cbz_tmp` files a copy from a folder or a chapter saved as
+     * a CBZ file writes, that no queue row will resume: a chapter removed from the queue while its
+     * folder could not be deleted, a chapter renamed since, a copy a stopped run left, an archive a
+     * stopped run was writing (its pages are still in the `_tmp` folder, which the queue row keeps).
+     * Only `<source>/<manga>/<name>_tmp` under the
      * root is looked at. The `_tmp` of every queue row is kept, a failed one's too, since its retry
      * reuses the pages, and so is any name a manifest row records. It runs under [DownloadWriteLock],
      * which every writer of the root holds per chapter, so none is being written.
@@ -465,14 +480,22 @@ class DownloadEngine(
         val dirName = DownloadProvider.getChapterDirName(chapter.name, chapter.scanlator, chapter.url, disallowNonAscii)
         val finalDir = File(mangaDir, dirName)
         val tmpDir = File(mangaDir, dirName + DownloadProvider.TMP_DIR_SUFFIX)
+        val archiveFile = File(mangaDir, dirName + ARCHIVE_SUFFIX)
+        // Read per chapter, so a change applies from the next chapter on (R162 item 7).
+        val archive = archiveFile.takeIf { downloadPreferences.saveChaptersAsCBZ.get() }
 
-        if (finalDir.exists() && manifestRepository.getByChapterId(chapter.id) != null) {
-            // Already downloaded and queued again; nothing to fetch.
+        val row = manifestRepository.getByChapterId(chapter.id)
+        val downloaded = finalDir.exists() || (row?.chapterDirName == archiveFile.name && archiveFile.exists())
+        if (downloaded && row != null) {
+            // Already downloaded, as a folder or as the archive its row names, and queued again;
+            // nothing to fetch.
             queueRepository.remove(listOf(chapter.id))
             return ChapterResult.DROPPED
         }
-        if (heldByAnotherDownload(chapter, finalDir)) throw ChapterFolderInUseException(chapter.id)
-        withContext(dispatchers.io) { prepareTmpDir(finalDir, tmpDir) }
+        if (heldByAnotherDownload(chapter, listOfNotNull(finalDir, archive))) {
+            throw ChapterFolderInUseException(chapter.id)
+        }
+        withContext(dispatchers.io) { prepareTmpDir(finalDir, tmpDir, archive) }
 
         // Reading order is list order; a source's own indexing is not trusted.
         val pages = retrying { source.getPageList(chapter.toChapterInfo()) }
@@ -519,7 +542,12 @@ class DownloadEngine(
         withContext(dispatchers.io) { verifyPages(tmpDir, prefixes.toSet()) }
         comicInfoWriter.write(tmpDir, manga, chapter, source)
 
-        return withContext(NonCancellable) { commit(manga, chapter, pages.size, tmpDir, finalDir, dirName) }
+        if (archive == null) {
+            return withContext(NonCancellable) { commit(manga, chapter, pages.size, tmpDir, finalDir, dirName) }
+        }
+        val archiveTmp = archiveTmpOf(archive)
+        writeArchive(tmpDir, archiveTmp)
+        return withContext(NonCancellable) { commitArchive(manga, chapter, pages.size, tmpDir, archiveTmp, archive) }
     }
 
     /**
@@ -539,6 +567,133 @@ class DownloadEngine(
                 if (!tmpDir.renameTo(finalDir)) throw IOException("The chapter folder could not be renamed")
             }
         }
+        if (!record(manga, chapter, pageCount, dirName, sizeBytes)) {
+            withContext(dispatchers.io) { finalDir.deleteRecursively() }
+            return ChapterResult.DROPPED
+        }
+        return ChapterResult.COMPLETED
+    }
+
+    /**
+     * Writes [tmpDir]'s pages, in page order, and then its `ComicInfo.xml` into [archiveTmp] as a zip
+     * of STORED entries, as upstream's archive step does: the pages are images already, and a stored
+     * entry is read without inflating it. The file is synced before the rename makes it the chapter,
+     * so a power cut cannot leave a short archive under the final name. A failure or a cancel deletes
+     * [archiveTmp] and keeps the pages, which the next attempt reuses.
+     */
+    @Suppress("TooGenericExceptionCaught")
+    private suspend fun writeArchive(tmpDir: File, archiveTmp: File) {
+        try {
+            withContext(dispatchers.io) {
+                val files = tmpDir.listFiles().orEmpty()
+                    .filter { it.isFile && it.name != COMIC_INFO_FILE && !it.name.endsWith(PAGE_TMP_SUFFIX) }
+                    .sortedBy { it.name } +
+                    File(tmpDir, COMIC_INFO_FILE)
+                FileOutputStream(archiveTmp).use { output ->
+                    // Closed after the sync, which needs the file still open, so the native
+                    // Deflater every ZipOutputStream holds is released here, not by the collector.
+                    ZipOutputStream(BufferedOutputStream(output)).use { zip ->
+                        zip.setMethod(ZipOutputStream.STORED)
+                        files.forEach { file ->
+                            currentCoroutineContext().ensureActive()
+                            zip.putStored(file)
+                        }
+                        zip.finish()
+                        zip.flush()
+                        output.fd.sync()
+                    }
+                }
+            }
+        } catch (e: Throwable) {
+            withContext(NonCancellable + dispatchers.io) { archiveTmp.delete() }
+            throw e
+        }
+    }
+
+    /** A STORED entry needs its size and CRC before its bytes, so the file is read twice. */
+    private fun ZipOutputStream.putStored(file: File) {
+        val crc = CRC32()
+        file.inputStream().use { input ->
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                crc.update(buffer, 0, read)
+            }
+        }
+        val length = file.length()
+        putNextEntry(
+            ZipEntry(file.name).apply {
+                method = ZipEntry.STORED
+                size = length
+                compressedSize = length
+                this.crc = crc.value
+                time = file.lastModified()
+            },
+        )
+        file.inputStream().use { it.copyTo(this) }
+        closeEntry()
+    }
+
+    /**
+     * Steps 4 and 5 for an archive: the rename of [archiveTmp] to [archive], the transaction [commit]
+     * runs, and only then the delete of [tmpDir].
+     *
+     * An archive already at [archive] has no row of its own (the chapter would have been dropped as
+     * downloaded) and none of another chapter's ([heldByAnotherDownload]). It is a commit that died
+     * before its row, or a `.cbz` a migration moved to this chapter's path before a process death
+     * kept its row from following, and then it may be the only copy of the chapter. So it stays until
+     * this point and the rename replaces it (a rename over a file replaces it in one step); a
+     * download that failed before here left it as it was.
+     *
+     * A rename that fails leaves that archive alone. A transaction that fails deletes the new
+     * archive, so no `.cbz` without a row is left, and keeps the pages, which hold the whole chapter,
+     * for the next attempt. A chapter cancelled after its last page loses both, as [commit] deletes
+     * its folder.
+     */
+    @Suppress("TooGenericExceptionCaught")
+    private suspend fun commitArchive(
+        manga: Manga,
+        chapter: Chapter,
+        pageCount: Int,
+        tmpDir: File,
+        archiveTmp: File,
+        archive: File,
+    ): ChapterResult {
+        var renamed = false
+        val recorded = try {
+            val sizeBytes = withContext(dispatchers.io) {
+                archiveTmp.length().also {
+                    if (!archiveTmp.renameTo(archive)) throw IOException("The chapter archive could not be renamed")
+                    renamed = true
+                }
+            }
+            record(manga, chapter, pageCount, archive.name, sizeBytes)
+        } catch (e: Throwable) {
+            withContext(dispatchers.io) {
+                archiveTmp.delete()
+                if (renamed) archive.delete()
+            }
+            throw e
+        }
+        withContext(dispatchers.io) {
+            if (!recorded) archive.delete()
+            tmpDir.deleteRecursively()
+        }
+        return if (recorded) ChapterResult.COMPLETED else ChapterResult.DROPPED
+    }
+
+    /**
+     * Step 5: the manifest row named [chapterDirName], in one transaction with the queue delete.
+     * Returns false, and writes nothing, when the chapter's queue row is gone.
+     */
+    private suspend fun record(
+        manga: Manga,
+        chapter: Chapter,
+        pageCount: Int,
+        chapterDirName: String,
+        sizeBytes: Long,
+    ): Boolean {
         val entry = DownloadManifestEntry(
             id = 0,
             chapterId = chapter.id,
@@ -549,12 +704,12 @@ class DownloadEngine(
             chapterUrl = chapter.url,
             chapterName = chapter.name,
             scanlator = chapter.scanlator,
-            chapterDirName = dirName,
+            chapterDirName = chapterDirName,
             pageCount = pageCount.toLong(),
             sizeBytes = sizeBytes,
             dateDownloaded = now(),
         )
-        val recorded = transactionRunner.inTransaction {
+        return transactionRunner.inTransaction {
             if (queueRepository.getByChapterId(chapter.id) == null) {
                 false
             } else {
@@ -563,11 +718,6 @@ class DownloadEngine(
                 true
             }
         }
-        if (!recorded) {
-            withContext(dispatchers.io) { finalDir.deleteRecursively() }
-            return ChapterResult.DROPPED
-        }
-        return ChapterResult.COMPLETED
     }
 
     /**
@@ -578,18 +728,22 @@ class DownloadEngine(
      * pages as this chapter's and leave its row pointing at this chapter's files; writing into it
      * while the files are gone would have that row read this chapter. Only the rows named like the
      * folder are read, since [DownloadLocator.mayResolveTo] matches the name first; until the
-     * migrate-downloads follow-up each chapter read the whole manifest here.
+     * migrate-downloads follow-up each chapter read the whole manifest here. A chapter saved as an
+     * archive checks the archive's name and the folder's, since [prepareTmpDir] reuses the folder.
      */
-    private suspend fun heldByAnotherDownload(chapter: Chapter, finalDir: File): Boolean =
-        manifestRepository.getByChapterDirNames(listOf(finalDir.name))
-            .any { it.chapterId != chapter.id && locator.mayResolveTo(it, finalDir) }
+    private suspend fun heldByAnotherDownload(chapter: Chapter, paths: List<File>): Boolean =
+        manifestRepository.getByChapterDirNames(paths.map { it.name })
+            .any { row -> row.chapterId != chapter.id && paths.any { locator.mayResolveTo(row, it) } }
 
     /**
      * A final folder with no manifest row, of this chapter or any other, is a commit that died
      * between the rename and the transaction; it goes back to being the `_tmp` folder, so its pages
-     * are reused.
+     * are reused. With [archive] set, a partial archive is a write that died and goes; an archive
+     * already in place stays until [commitArchive] replaces it, since the `_tmp` folder may not hold
+     * its pages.
      */
-    private fun prepareTmpDir(finalDir: File, tmpDir: File) {
+    private fun prepareTmpDir(finalDir: File, tmpDir: File, archive: File?) {
+        if (archive != null) archiveTmpOf(archive).delete()
         if (finalDir.exists()) {
             if (tmpDir.exists()) finalDir.deleteRecursively() else finalDir.renameTo(tmpDir)
         }
@@ -690,6 +844,10 @@ class DownloadEngine(
 
     private fun now(): Long = Clock.System.now().toEpochMilliseconds()
 
+    /** `<chapter>.cbz_tmp`, which [sweepLeftovers] deletes when a run starts, as it does a copy's. */
+    private fun archiveTmpOf(archive: File): File =
+        File(archive.parentFile, archive.name + DownloadProvider.TMP_DIR_SUFFIX)
+
     companion object {
         const val MAX_RETRIES = 3
         const val RETRY_BASE_DELAY_MS = 2_000L
@@ -709,6 +867,7 @@ class DownloadEngine(
 
         private const val MIN_PAGE_DIGITS = 3
         private const val PAGE_TMP_SUFFIX = ".tmp"
+        private const val ARCHIVE_SUFFIX = ".cbz"
     }
 }
 

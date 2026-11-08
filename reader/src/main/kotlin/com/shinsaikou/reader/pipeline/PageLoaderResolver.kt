@@ -30,8 +30,9 @@ import java.io.File
  * The first branch asks [DownloadedChapters] rather than the manifest table, so a row whose folder
  * is gone falls through to the source like any chapter that was never downloaded (phase 2 decision
  * Q4). Contract 07 section 4.1 tested the row alone, which opened a missing folder as an empty
- * chapter. The file it answers is a folder for a chapter the engine wrote and an archive for one
- * adopted from upstream's downloads, and both are read by the Local source's own loaders.
+ * chapter. The file it answers is a folder or an archive: the engine writes a folder, or a `.cbz`
+ * with Save chapters as CBZ files on, and upstream's downloads are adopted as either. Both are read
+ * by the Local source's own loaders.
  *
  * The `@ApplicationContext` qualifier section 4.1 puts on [context] does not exist in this tree and
  * Metro defines none; the merged convention is a bare `Context` parameter with `@Inject` on the
@@ -79,7 +80,7 @@ class PageLoaderResolver(
         )
     }
 
-    /** A downloaded chapter is never an epub: the engine writes folders, and upstream writes folders or cbz. */
+    /** A downloaded chapter is never an epub: the engine and upstream both write folders or cbz. */
     private fun File.toFormat(): LocalChapterFormat {
         val file = checkNotNull(UniFile.fromFile(this))
         return if (isDirectory) LocalChapterFormat.Directory(file) else LocalChapterFormat.Archive(file)

@@ -4,7 +4,9 @@ import com.shinsaikou.backup.fixture.BackupTestEnvironment
 import com.shinsaikou.backup.fixture.SyntheticBackupFixture
 import com.shinsaikou.backup.importer.ImportError
 import com.shinsaikou.domain.preferences.AppTheme
+import com.shinsaikou.domain.preferences.DownloadPreferences
 import com.shinsaikou.domain.preferences.UiPreferences
+import eu.kanade.tachiyomi.data.backup.create.BackupOptions
 import eu.kanade.tachiyomi.data.backup.models.BackupPreference
 import eu.kanade.tachiyomi.data.backup.models.BackupSourcePreferences
 import eu.kanade.tachiyomi.data.backup.models.BooleanPreferenceValue
@@ -85,6 +87,97 @@ class PreferenceRestorerTest {
             env.preferenceRestorer.restoreApp(prefs, emptyMap(), mutableListOf())
 
             UiPreferences(env.preferenceStore).appTheme.get() shouldBe AppTheme.TAKO
+        }
+    }
+
+    @Test
+    fun `a backup carrying upstream's CBZ key as true turns the switch on, under Saikou's key`() = runTest {
+        BackupTestEnvironment(tempDir).use { env ->
+            DownloadPreferences(env.preferenceStore).saveChaptersAsCBZ.get() shouldBe false
+            val prefs = listOf(BackupPreference("save_chapter_as_cbz", BooleanPreferenceValue(true)))
+
+            val written = env.preferenceRestorer.restoreApp(prefs, emptyMap(), mutableListOf())
+
+            written shouldBe 1
+            DownloadPreferences(env.preferenceStore).saveChaptersAsCBZ.get() shouldBe true
+            env.preferenceStore.values["saikou_save_chapter_as_cbz"] shouldBe true
+            env.preferenceStore.values.containsKey("save_chapter_as_cbz") shouldBe false
+        }
+    }
+
+    @Test
+    fun `a backup carrying upstream's CBZ key as false turns the switch off`() = runTest {
+        BackupTestEnvironment(tempDir).use { env ->
+            env.preferenceStore.values["saikou_save_chapter_as_cbz"] = true
+            val prefs = listOf(BackupPreference("save_chapter_as_cbz", BooleanPreferenceValue(false)))
+
+            env.preferenceRestorer.restoreApp(prefs, emptyMap(), mutableListOf())
+
+            DownloadPreferences(env.preferenceStore).saveChaptersAsCBZ.get() shouldBe false
+        }
+    }
+
+    @Test
+    fun `a backup carrying Saikou's CBZ key restores it as it is`() = runTest {
+        BackupTestEnvironment(tempDir).use { env ->
+            val prefs = listOf(BackupPreference("saikou_save_chapter_as_cbz", BooleanPreferenceValue(true)))
+
+            env.preferenceRestorer.restoreApp(prefs, emptyMap(), mutableListOf())
+
+            DownloadPreferences(env.preferenceStore).saveChaptersAsCBZ.get() shouldBe true
+        }
+    }
+
+    @Test
+    fun `a backup carrying both CBZ keys restores Saikou's`() = runTest {
+        BackupTestEnvironment(tempDir).use { env ->
+            for ((saikou, upstream) in listOf(false to true, true to false)) {
+                val prefs = listOf(
+                    BackupPreference("save_chapter_as_cbz", BooleanPreferenceValue(upstream)),
+                    BackupPreference("saikou_save_chapter_as_cbz", BooleanPreferenceValue(saikou)),
+                )
+                val errors = mutableListOf<ImportError>()
+
+                env.preferenceRestorer.restoreApp(prefs, emptyMap(), errors)
+
+                errors shouldBe emptyList()
+                DownloadPreferences(env.preferenceStore).saveChaptersAsCBZ.get() shouldBe saikou
+                env.preferenceStore.values.containsKey("save_chapter_as_cbz") shouldBe false
+            }
+        }
+    }
+
+    /**
+     * The export writes Saikou's key, with a copy under upstream's for an upstream restore, and never
+     * the value an older restore left under upstream's key. Reading the file back keeps Saikou's.
+     */
+    @Test
+    fun `an export writes the CBZ switch under Saikou's key and not a stale upstream value`() = runTest {
+        BackupTestEnvironment(tempDir).use { env ->
+            env.preferenceStore.values["save_chapter_as_cbz"] = true
+            env.preferenceStore.values["saikou_save_chapter_as_cbz"] = false
+
+            val written = env.export(BackupOptions()).backupPreferences
+                .filter { it.key.endsWith("save_chapter_as_cbz") }
+                .associate { it.key to it.value }
+
+            written shouldBe mapOf(
+                "saikou_save_chapter_as_cbz" to BooleanPreferenceValue(false),
+                "save_chapter_as_cbz" to BooleanPreferenceValue(false),
+            )
+        }
+    }
+
+    @Test
+    fun `an export of an install that never set the CBZ switch carries neither key`() = runTest {
+        BackupTestEnvironment(tempDir).use { env ->
+            env.preferenceStore.values["save_chapter_as_cbz"] = true
+            // The exporter refuses a file with nothing in it.
+            env.preferenceStore.values["a_boolean"] = true
+
+            val written = env.export(BackupOptions()).backupPreferences.map { it.key }
+
+            written shouldBe listOf("a_boolean")
         }
     }
 

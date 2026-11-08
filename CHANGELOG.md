@@ -37,6 +37,12 @@ release may change behaviour.
   stores and app updates keep trusting only the certificates Android ships with. It takes effect after
   a restart, which the setting offers. On Android 9 and older, Open in WebView and a site's browser
   check still refuse such a certificate.
+- **Save chapters as CBZ files** in Settings > Experimental, off by default, saves each new download
+  as one `.cbz` file instead of a folder of images, which other readers and file managers open more
+  easily. Each chapter takes a moment longer to finish while its pages are packed into the file.
+  Chapters already downloaded stay as they are, and both kinds read, delete, migrate and export
+  alike. Restoring a backup that has the setting on turns it on; a backup restored before this
+  version leaves it off.
 
 ## 0.1.3 - 2026-11-07
 

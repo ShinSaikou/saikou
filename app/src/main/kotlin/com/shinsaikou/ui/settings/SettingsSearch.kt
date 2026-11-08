@@ -297,6 +297,7 @@ internal val settingsSearchIndex: List<SettingsSearchEntry> = buildList {
         row(R.string.settings_experimental_extension_auto_update, R.string.settings_experimental_extension_auto_update_summary)
         row(R.string.settings_experimental_parallel_sources, R.string.settings_experimental_parallel_sources_summary)
         row(R.string.settings_experimental_user_certificates, R.string.settings_experimental_user_certificates_summary)
+        row(R.string.settings_experimental_save_as_cbz, R.string.settings_experimental_save_as_cbz_summary)
     }
 }
 

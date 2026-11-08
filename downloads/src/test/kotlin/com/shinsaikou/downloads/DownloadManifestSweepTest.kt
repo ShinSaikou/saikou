@@ -145,6 +145,23 @@ class DownloadManifestSweepTest : DownloadTestBase() {
     }
 
     @Test
+    fun `a row naming an archive is kept while the archive is there and removed once it is gone`() = runTest {
+        insertChapter(id = 11, mangaId = 1)
+        val kept = File(mangaDir(1), chapterDirName(10) + ".cbz").apply {
+            parentFile.mkdirs()
+            writeBytes(byteArrayOf(1))
+        }
+        realManifestRepository.recordDownload(manifestEntry(chapter(10), manga(1), kept.name))
+        realManifestRepository.recordDownload(manifestEntry(chapter(11), manga(1), chapterDirName(11) + ".cbz"))
+
+        sweep().run() shouldBe DownloadManifestSweep.Result(rematched = 0, removed = 1, unmatched = 0)
+
+        kept.isFile shouldBe true
+        realManifestRepository.getByChapterId(10).shouldNotBeNull().chapterDirName shouldBe kept.name
+        realManifestRepository.getByChapterId(11).shouldBeNull()
+    }
+
+    @Test
     fun `a folder under a source folder of another name still counts, so a renamed source loses nothing`() = runTest {
         val folder = record(10, chapterDirName(10))
         val renamedSource = File(downloadRoot.root(), "Renamed Source")

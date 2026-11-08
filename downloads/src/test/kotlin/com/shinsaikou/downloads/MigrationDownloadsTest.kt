@@ -89,6 +89,20 @@ class MigrationDownloadsTest : DownloadTestBase() {
         }
     }
 
+    /**
+     * A download of old chapter [chapterId] saved as an archive, as the engine does with the CBZ
+     * switch on: `<chapter folder name>.cbz` in the old entry's folder, and a row naming it.
+     */
+    private suspend fun downloadOldArchive(chapterId: Long): File {
+        val chapter = chapter(chapterId)
+        val dirName = DownloadProvider.getChapterDirName(chapter.name, chapter.scanlator, chapter.url, false) + ".cbz"
+        realManifestRepository.recordDownload(manifestEntry(chapter, manga(OLD), dirName))
+        return File(File(File(downloadRoot.root(), OLD_SOURCE_DIR), "Old title"), dirName).apply {
+            parentFile.mkdirs()
+            writeText("archive of $chapterId")
+        }
+    }
+
     /** The folder new chapter [chapterId] downloads to. */
     private suspend fun newFolder(chapterId: Long): File = File(mangaDir(NEW), chapterDirName(chapterId))
 
@@ -142,6 +156,42 @@ class MigrationDownloadsTest : DownloadTestBase() {
         realManifestRepository.getByChapterId(20).shouldNotBeNull().mangaId shouldBe NEW
         queue.removedManga.shouldBeEmpty()
     }
+
+    @Test
+    fun `Copy copies a chapter saved as an archive to the new chapter's archive name and the old one keeps its own`() =
+        runTest {
+            insertChapter(id = 10, mangaId = OLD, number = 1.0)
+            insertChapter(id = 20, mangaId = NEW, url = "/new/1", number = 1.0)
+            val oldArchive = downloadOldArchive(10)
+            val newArchive = File(mangaDir(NEW), chapterDirName(20) + ".cbz")
+
+            val outcome = migration().transfer(old(), new(), move = false)
+
+            outcome shouldBe MigrationDownloads.Outcome(transferred = listOf(20L), leftBehind = emptyList())
+            oldArchive.readText() shouldBe "archive of 10"
+            newArchive.readText() shouldBe "archive of 10"
+            File(mangaDir(NEW), newArchive.name + DownloadProvider.TMP_DIR_SUFFIX).exists() shouldBe false
+            realManifestRepository.getByChapterId(20).shouldNotBeNull().chapterDirName shouldBe newArchive.name
+            realManifestRepository.getByChapterId(10).shouldNotBeNull().chapterDirName shouldBe oldArchive.name
+            manifest(StandardTestDispatcher(testScheduler)).getChapterDir(20) shouldBe newArchive
+        }
+
+    @Test
+    fun `Migrate renames a chapter saved as an archive to the new chapter's archive name and repoints its row`() =
+        runTest {
+            insertChapter(id = 10, mangaId = OLD, number = 1.0)
+            insertChapter(id = 20, mangaId = NEW, url = "/new/1", number = 1.0)
+            val oldArchive = downloadOldArchive(10)
+            val newArchive = File(mangaDir(NEW), chapterDirName(20) + ".cbz")
+
+            val outcome = migration().transfer(old(), new(), move = true)
+
+            outcome shouldBe MigrationDownloads.Outcome(transferred = listOf(20L), leftBehind = emptyList())
+            oldArchive.exists() shouldBe false
+            newArchive.readText() shouldBe "archive of 10"
+            realManifestRepository.getByChapterId(10).shouldBeNull()
+            realManifestRepository.getByChapterId(20).shouldNotBeNull().chapterDirName shouldBe newArchive.name
+        }
 
     @Test
     fun `a chapter with no match and one with no recognised number are left behind, and Delete them deletes their files and rows`() =

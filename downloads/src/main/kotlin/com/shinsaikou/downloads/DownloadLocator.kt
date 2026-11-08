@@ -42,11 +42,14 @@ class DownloadLocator(
         entry.chapterDirName == dir.name &&
             asciiSettings().any { DownloadProvider.getMangaDirName(entry.mangaTitle, it) == dir.parentFile?.name }
 
-    /** Every `_tmp` folder [chapter] may have under [sourceId] and [mangaTitle]. */
+    /**
+     * Every `_tmp` folder [chapter] may have under [sourceId] and [mangaTitle], and the `.cbz_tmp`
+     * file the engine writes a chapter's archive into when it saves chapters as CBZ files.
+     */
     suspend fun findTmpDirs(sourceId: Long, mangaTitle: String, chapter: Chapter): List<File> {
-        val names = asciiSettings().map {
-            DownloadProvider.getChapterDirName(chapter.name, chapter.scanlator, chapter.url, it) +
-                DownloadProvider.TMP_DIR_SUFFIX
+        val names = asciiSettings().flatMap {
+            val name = DownloadProvider.getChapterDirName(chapter.name, chapter.scanlator, chapter.url, it)
+            listOf(name + DownloadProvider.TMP_DIR_SUFFIX, "$name.cbz" + DownloadProvider.TMP_DIR_SUFFIX)
         }.distinct()
         return withContext(dispatchers.io) {
             candidates(sourceId, mangaTitle, names).filter { it.exists() }.toList()

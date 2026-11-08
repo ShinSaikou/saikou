@@ -17,7 +17,18 @@ class DownloadPreferences(preferenceStore: PreferenceStore) {
     val downloadOnlyOverWifi: Preference<Boolean> =
         preferenceStore.getBoolean("pref_download_only_over_wifi_key", true)
 
-    val saveChaptersAsCBZ: Preference<Boolean> = preferenceStore.getBoolean("save_chapter_as_cbz", true)
+    /**
+     * The Experimental "Save chapters as CBZ files" switch, read by the download engine as each
+     * chapter starts (amends R65), off by default (R162 item 7).
+     *
+     * Its key is Saikou's own, not upstream's `save_chapter_as_cbz`. Restores before this switch
+     * existed stored upstream's key as it came, usually true, its default there, and nothing read
+     * it; on upstream's key those installs would find the switch on after the update without anyone
+     * turning it on. So a value under upstream's key stored before this version does nothing and is
+     * never copied over, and a restore from now on maps upstream's key onto this one
+     * (`UpstreamPreferenceKeys` in `:backup`), which is the restored true R162 item 7 honours.
+     */
+    val saveChaptersAsCBZ: Preference<Boolean> = preferenceStore.getBoolean(SAVE_CHAPTERS_AS_CBZ_PREF_KEY, false)
 
     val splitTallImages: Preference<Boolean> = preferenceStore.getBoolean("split_tall_images", true)
 
@@ -61,6 +72,11 @@ class DownloadPreferences(preferenceStore: PreferenceStore) {
     val parallelPageLimit: Preference<Int> = preferenceStore.getInt("download_parallel_page_limit", 5)
 
     companion object {
+        const val SAVE_CHAPTERS_AS_CBZ_PREF_KEY = "saikou_save_chapter_as_cbz"
+
+        /** Upstream's key for the same setting, read only from a backup (see [saveChaptersAsCBZ]). */
+        const val UPSTREAM_SAVE_CHAPTERS_AS_CBZ_PREF_KEY = "save_chapter_as_cbz"
+
         private const val REMOVE_EXCLUDE_CATEGORIES_PREF_KEY = "remove_exclude_categories"
         private const val DOWNLOAD_NEW_CATEGORIES_PREF_KEY = "download_new_categories"
         private const val DOWNLOAD_NEW_CATEGORIES_EXCLUDE_PREF_KEY = "download_new_categories_exclude"

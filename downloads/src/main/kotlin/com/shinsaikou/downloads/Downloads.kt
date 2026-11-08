@@ -13,7 +13,8 @@ import java.io.File
 /**
  * The download engine's public shape. [WorkManagerDownloadQueue], [FolderDownloadManifest] and
  * [FilesDirDownloadRoot] are the bindings; [DownloadWorker] hosts [DownloadEngine], which writes a
- * chapter into a `_tmp` folder, renames it and only then records it in the manifest.
+ * chapter into a `_tmp` folder, renames it (or archives it as a `.cbz`) and only then records it in
+ * the manifest.
  */
 
 /** The ordered list of chapters waiting to be downloaded, and the controls over it. */
@@ -82,8 +83,8 @@ interface DownloadManifest {
     suspend fun getPages(chapterId: Long): List<PageInfo>?
 
     /**
-     * The folder a downloaded chapter lives in, or null when it has no manifest row or its folder is
-     * gone. A row whose folder is missing counts as not downloaded (phase 2 decision Q4).
+     * The folder or `.cbz` a downloaded chapter lives in, or null when it has no manifest row or its
+     * files are gone. A row whose folder is missing counts as not downloaded (phase 2 decision Q4).
      */
     suspend fun getChapterDir(chapterId: Long): File?
 

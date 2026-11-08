@@ -486,6 +486,8 @@
     <string name="settings_experimental_parallel_sources_summary">Downloads one chapter from each of several sources at the same time, instead of one chapter at a time. Chapters from the same source still download one after another, in queue order. While it is on, Settings > Downloads shows Sources downloaded at once, which sets how many. Uses more data, memory and battery while downloads run. A change applies from the next chapter to start.</string>
     <string name="settings_experimental_user_certificates">Trust certificates you installed</string>
     <string name="settings_experimental_user_certificates_summary">Lets sources load through an ad blocker, a DNS filter or a network that inspects secure connections with a certificate you installed on this device. Whoever controls that certificate can read and change what Saikou loads from sources. Sync, tracking, extension stores and app updates keep trusting only the certificates Android ships with. Takes effect after a restart.</string>
+    <string name="settings_experimental_save_as_cbz">Save chapters as CBZ files</string>
+    <string name="settings_experimental_save_as_cbz_summary">New downloads are saved as one .cbz file per chapter instead of a folder of images, which other readers and file managers open more easily. Each chapter takes a moment longer to finish while its pages are packed into the file. Chapters you already downloaded stay as they are.</string>
     <string name="settings_theme">Theme</string>
     <string name="settings_theme_mode">Light and dark</string>
     <string name="settings_tablet_ui">Two pane layout</string>
