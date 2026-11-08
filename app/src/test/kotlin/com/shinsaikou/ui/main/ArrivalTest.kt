@@ -79,6 +79,13 @@ class ArrivalTest {
             Arrival(route = Route.Settings(SettingsSection.ADVANCED), showUpdateErrors = false)
     }
 
+    /** The Restart action of Settings > Experimental reopens that section in the new process. */
+    @Test
+    fun `a restart from the experimental settings lands on the experimental settings`() {
+        MainIntents.Target(MainDestination.EXPERIMENTAL_SETTINGS).toArrival() shouldBe
+            Arrival(route = Route.Settings(SettingsSection.EXPERIMENTAL), showUpdateErrors = false)
+    }
+
     /** The restore's completion notification opens the restore report (unit restore-report). */
     @Test
     fun `the import report notification lands on the restore report`() {

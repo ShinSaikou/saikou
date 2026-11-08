@@ -1,6 +1,7 @@
 package com.shinsaikou.extensions.repo
 
 import android.os.SystemClock
+import com.shinsaikou.core.common.network.trustSystemCertificatesOnly
 import com.shinsaikou.extensions.model.AvailableSource
 import com.shinsaikou.extensions.model.Extension
 import dev.zacsweers.metro.AppScope
@@ -22,6 +23,7 @@ import kotlinx.serialization.json.okio.decodeFromBufferedSource
 import kotlinx.serialization.protobuf.ProtoBuf
 import tachiyomi.domain.extension.model.ExtensionStore
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.OkHttpClient
 import okio.BufferedSource
 import okio.buffer
 import okio.gzip
@@ -50,6 +52,21 @@ class ExtensionRepoClient(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
     private val cache = ConcurrentHashMap<String, FetchedIndex>()
+
+    /**
+     * What index fetches and APK downloads go through: the shared client, except that it keeps
+     * system trust when the Experimental switch has the shared client trust the CAs the owner
+     * installed ([NetworkHelper.trustsUserCertificates]). An extension is code the app installs, as
+     * the app updater's APK is, and whoever holds such a CA could swap an index or the APK it names.
+     * With the switch off this is the shared client itself. Built on first use, on [ioDispatcher].
+     */
+    internal val client: OkHttpClient by lazy {
+        if (networkHelper.trustsUserCertificates) {
+            networkHelper.client.newBuilder().trustSystemCertificatesOnly().build()
+        } else {
+            networkHelper.client
+        }
+    }
 
     /** The last successful fetch of [indexUrl], for the browse screen and for refreshes. */
     fun cached(indexUrl: String): FetchedIndex? = cache[indexUrl]
@@ -110,7 +127,7 @@ class ExtensionRepoClient(
             }
         }
         try {
-            networkHelper.client.newCachelessCallWithProgress(GET(url), listener).awaitSuccess().use { response ->
+            client.newCachelessCallWithProgress(GET(url), listener).awaitSuccess().use { response ->
                 target.parentFile?.mkdirs()
                 response.body.source().use { source ->
                     target.sink().buffer().use { it.writeAll(source) }
@@ -185,7 +202,7 @@ class ExtensionRepoClient(
 
     private suspend fun <T> readBody(url: String, decode: suspend (BufferedSource) -> T): T {
         val response = try {
-            networkHelper.client.newCall(GET(url)).awaitSuccess()
+            client.newCall(GET(url)).awaitSuccess()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {

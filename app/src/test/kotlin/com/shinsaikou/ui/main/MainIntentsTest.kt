@@ -7,6 +7,7 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.jupiter.api.Test
@@ -203,6 +204,19 @@ class MainIntentsTest {
         val intent = mockk<Intent> { every { action } returns MainIntents.ACTION_OPEN_ADVANCED_SETTINGS }
 
         MainIntents.destinationOf(intent) shouldBe MainDestination.ADVANCED_SETTINGS
+    }
+
+    /** The Restart action on Settings > Experimental comes back there. */
+    @Test
+    fun `the experimental settings action resolves to the EXPERIMENTAL_SETTINGS destination`() {
+        val intent = mockk<Intent> { every { action } returns MainIntents.ACTION_OPEN_EXPERIMENTAL_SETTINGS }
+
+        MainIntents.destinationOf(intent) shouldBe MainDestination.EXPERIMENTAL_SETTINGS
+    }
+
+    @Test
+    fun `the experimental settings action is its own, not the advanced one`() {
+        MainIntents.ACTION_OPEN_EXPERIMENTAL_SETTINGS shouldNotBe MainIntents.ACTION_OPEN_ADVANCED_SETTINGS
     }
 
     private fun viewIntent(data: Uri): Intent = mockk {

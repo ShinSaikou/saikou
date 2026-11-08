@@ -496,4 +496,5 @@ private fun MainIntents.Target.toRoute(): Route = when (destination) {
         sourceSearch?.let { Route.SourceBrowse(it.sourceId, it.query, SourceBrowseMode.SEARCH) }
             ?: Route.GlobalSearch(request.query)
     } ?: Route.Library
+    MainDestination.EXPERIMENTAL_SETTINGS -> Route.Settings(SettingsSection.EXPERIMENTAL)
 }

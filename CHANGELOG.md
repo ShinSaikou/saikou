@@ -30,6 +30,13 @@ release may change behaviour.
   another, in queue order. **Sources downloaded at once** in Settings > Downloads sets how many, from
   1 to 10 (5 by default), while the switch is on. The queue shows progress on every chapter running,
   and the notification counts them. It uses more data, memory and battery while downloads run.
+- **Trust certificates you installed** in Settings > Experimental, off by default, lets sources load
+  through an ad blocker, a DNS filter or a network that inspects secure connections with a certificate
+  you installed on the device, in the browse screens, the reader and Open in WebView. Whoever controls
+  that certificate can read and change what the app loads from sources, so sync, tracking, extension
+  stores and app updates keep trusting only the certificates Android ships with. It takes effect after
+  a restart, which the setting offers. On Android 9 and older, Open in WebView and a site's browser
+  check still refuse such a certificate.
 
 ## 0.1.3 - 2026-11-07
 

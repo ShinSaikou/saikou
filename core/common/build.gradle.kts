@@ -39,5 +39,8 @@ dependencies {
 
     testImplementation(libs.androidx.work.testing)
     testImplementation(libs.kotlinx.coroutines.test)
+    // UserCertificatesTest signs test certificates and serves them over TLS; no network is reached.
+    testImplementation(libs.okhttp.mockwebserver3)
+    testImplementation(libs.okhttp.tls)
     testImplementation(libs.turbine)
 }

@@ -2,9 +2,11 @@ package com.shinsaikou.ui.webview
 
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
+import android.net.http.SslError
 import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.RenderProcessGoneDetail
+import android.webkit.SslErrorHandler
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -46,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.shinsaikou.i18n.R
+import com.shinsaikou.core.common.network.isSignedByUserCertificate
 import com.shinsaikou.navigation.LocalNavigator
 import com.shinsaikou.ui.components.ScreenTopBar
 import com.shinsaikou.ui.components.SaikouSnackbarHost
@@ -268,6 +271,22 @@ private fun pageClient(viewModel: WebViewViewModel): WebViewClient = object : We
      */
     override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
         viewModel.onError(error.description.toString())
+    }
+
+    /**
+     * The network security config trusts system CAs only. With the Experimental switch on, a page
+     * behind a CA the owner installed proceeds as the source client does (amends contract 08
+     * section 6.5, opt-in only). Anything else is cancelled, as WebViewClient's own answer does.
+     * Lint flags any proceed; this one runs only behind the switch and the checks in
+     * [isSignedByUserCertificate].
+     */
+    @SuppressLint("WebViewClientOnReceivedSslError")
+    override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
+        if (viewModel.trustsUserCertificates && isSignedByUserCertificate(error)) {
+            handler.proceed()
+        } else {
+            super.onReceivedSslError(view, handler, error)
+        }
     }
 
     /** Returning true keeps the app alive; the view model then closes the screen. */

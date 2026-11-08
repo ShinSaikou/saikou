@@ -5,10 +5,11 @@ import android.content.Intent
 
 /**
  * Ends the process and opens the app again on a [MainDestination], for the settings that are read
- * once per process: DNS over HTTPS and Verbose logging build the network client, the user agent is
- * built into each extension source's headers, and trust and the extension list override are read
- * when extensions load. Upstream only says "Requires app restart to take effect"; Saikou's snackbar
- * carries a Restart action that calls this (fixes unit settings-restart-and-wording, F13).
+ * once per process: DNS over HTTPS, Verbose logging and Experimental's Trust certificates you
+ * installed build the network client, the user agent is built into each extension source's headers,
+ * and trust and the extension list override are read when extensions load. Upstream only says
+ * "Requires app restart to take effect"; Saikou's snackbar carries a Restart action that calls this
+ * (fixes unit settings-restart-and-wording, F13).
  *
  * ProcessPhoenix's pattern without the library: the activity is started in a new, cleared task,
  * then the process exits, and Android starts a new process for the task's pending activity. A

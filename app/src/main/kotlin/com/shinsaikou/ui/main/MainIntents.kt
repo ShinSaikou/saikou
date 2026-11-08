@@ -52,6 +52,9 @@ enum class MainDestination {
      * once `SearchRequestResolver` has found one.
      */
     SEARCH,
+
+    /** Settings > Experimental, where [AppRestart] brings the app back after a Restart from there. */
+    EXPERIMENTAL_SETTINGS,
 }
 
 /**
@@ -78,6 +81,7 @@ object MainIntents {
     const val ACTION_OPEN_DATA_SETTINGS = "com.shinsaikou.OPEN_DATA_SETTINGS"
     const val ACTION_OPEN_TRACKING_SETTINGS = "com.shinsaikou.OPEN_TRACKING_SETTINGS"
     const val ACTION_OPEN_ADVANCED_SETTINGS = "com.shinsaikou.OPEN_ADVANCED_SETTINGS"
+    const val ACTION_OPEN_EXPERIMENTAL_SETTINGS = "com.shinsaikou.OPEN_EXPERIMENTAL_SETTINGS"
 
     const val EXTRA_MANGA_ID = "com.shinsaikou.extra.MANGA_ID"
 
@@ -119,6 +123,7 @@ object MainIntents {
         ACTION_OPEN_DATA_SETTINGS -> MainDestination.DATA_SETTINGS
         ACTION_OPEN_TRACKING_SETTINGS -> MainDestination.TRACKING_SETTINGS
         ACTION_OPEN_ADVANCED_SETTINGS -> MainDestination.ADVANCED_SETTINGS
+        ACTION_OPEN_EXPERIMENTAL_SETTINGS -> MainDestination.EXPERIMENTAL_SETTINGS
         Intent.ACTION_VIEW -> viewDestinationOf(intent, resolver)
         else -> SearchRequests.of(intent)?.let { MainDestination.SEARCH }
     }
@@ -243,6 +248,7 @@ object MainIntents {
         MainDestination.DATA_SETTINGS -> ACTION_OPEN_DATA_SETTINGS
         MainDestination.TRACKING_SETTINGS -> ACTION_OPEN_TRACKING_SETTINGS
         MainDestination.ADVANCED_SETTINGS -> ACTION_OPEN_ADVANCED_SETTINGS
+        MainDestination.EXPERIMENTAL_SETTINGS -> ACTION_OPEN_EXPERIMENTAL_SETTINGS
         MainDestination.RESTORE_BACKUP, MainDestination.EXTENSION_STORE ->
             error("$destination arrives as an ACTION_VIEW and is never built by the app")
         MainDestination.SEARCH -> error("$destination arrives from another app and is never built by the app")

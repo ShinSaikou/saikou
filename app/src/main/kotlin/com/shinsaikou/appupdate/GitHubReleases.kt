@@ -1,6 +1,7 @@
 package com.shinsaikou.appupdate
 
 import com.shinsaikou.core.common.coroutines.Dispatchers
+import com.shinsaikou.core.common.network.trustSystemCertificatesOnly
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
@@ -19,8 +20,10 @@ import java.util.concurrent.TimeUnit
  * The updater's two requests to GitHub: the latest release of [AppUpdateBuild.repository], and the
  * release's APK. Both go through the shared client (its connection pool, DNS over HTTPS choice and
  * user agent) without the browser check, the cookie jar or the disk cache: GitHub needs none of
- * them, and no source's cookies have any business there. The clients are built on first use, on
- * the IO dispatcher.
+ * them, and no source's cookies have any business there. When the Experimental switch has the
+ * shared client trust the CAs the owner installed, these take system trust back: what they fetch is
+ * code the app installs, and whoever holds such a CA could swap it. The clients are built on first
+ * use, on the IO dispatcher.
  */
 @SingleIn(AppScope::class)
 @Inject
@@ -31,8 +34,10 @@ class GitHubReleases(
 ) {
 
     private val apiClient: OkHttpClient by lazy {
-        networkHelper.value.client.newBuilder()
+        val helper = networkHelper.value
+        helper.client.newBuilder()
             .apply { interceptors().removeAll { it is CloudflareInterceptor } }
+            .apply { if (helper.trustsUserCertificates) trustSystemCertificatesOnly() }
             .cache(null)
             .cookieJar(CookieJar.NO_COOKIES)
             // A redirect may move between GitHub's https hosts, never down to plain http.

@@ -250,6 +250,21 @@ class WebViewViewModelTest {
         verify(exactly = 0) { sourceManager.get(any()) }
     }
 
+    /** The Experimental switch the source client was built with, which the page's certificate handler asks. */
+    @Test
+    fun `the page may trust a user certificate when the source client was built to`() {
+        every { networkHelper.trustsUserCertificates } returns true
+
+        viewModel().trustsUserCertificates shouldBe true
+    }
+
+    @Test
+    fun `the page may not trust a user certificate when the source client was not built to`() {
+        every { networkHelper.trustsUserCertificates } returns false
+
+        viewModel().trustsUserCertificates shouldBe false
+    }
+
     private fun source(headers: Map<String, String>) = mockk<Source> { every { requestHeaders } returns headers }
 
     private fun viewModel(sourceId: Long? = SOURCE_ID) = WebViewViewModel(

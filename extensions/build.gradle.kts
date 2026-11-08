@@ -41,6 +41,8 @@ dependencies {
 
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.turbine)
+    // The user-certificate trust test signs a certificate for the shared client to trust.
+    testImplementation(libs.okhttp.tls)
 }
 
 // There was an exportRuntimeClasspath task here, which wrote this module's release runtime

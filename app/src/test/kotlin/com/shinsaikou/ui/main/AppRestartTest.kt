@@ -53,6 +53,14 @@ class AppRestartTest {
     }
 
     @Test
+    fun `the restart intent for the experimental settings carries that action, so the new process opens there`() {
+        AppRestart.restartIntentOf(target(extras = null, action = MainIntents.ACTION_OPEN_EXPERIMENTAL_SETTINGS))
+
+        verify(exactly = 1) { restartTask.setAction(MainIntents.ACTION_OPEN_EXPERIMENTAL_SETTINGS) }
+        verify(exactly = 0) { restartTask.setAction(MainIntents.ACTION_OPEN_ADVANCED_SETTINGS) }
+    }
+
+    @Test
     fun `the restart intent carries the target's extras`() {
         val extras = mockk<Bundle>()
 
@@ -69,9 +77,9 @@ class AppRestartTest {
         verify(exactly = 0) { restartTask.putExtras(any<Intent>()) }
     }
 
-    private fun target(extras: Bundle?): Intent = mockk {
+    private fun target(extras: Bundle?, action: String = MainIntents.ACTION_OPEN_ADVANCED_SETTINGS): Intent = mockk {
         every { this@mockk.component } returns this@AppRestartTest.component
-        every { action } returns MainIntents.ACTION_OPEN_ADVANCED_SETTINGS
+        every { this@mockk.action } returns action
         every { this@mockk.extras } returns extras
     }
 }

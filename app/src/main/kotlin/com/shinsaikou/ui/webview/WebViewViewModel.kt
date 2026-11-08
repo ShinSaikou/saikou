@@ -116,6 +116,13 @@ class WebViewViewModel(
         }
     }
 
+    /**
+     * Whether the page may proceed past a certificate a CA the owner installed signed: the
+     * Experimental switch the source client was built with this process, so the page loads where
+     * the source's own requests do. Read only when the page reports a certificate error.
+     */
+    val trustsUserCertificates: Boolean get() = networkHelper.trustsUserCertificates
+
     /** The host the page was opened on: the source's own, and the only one its headers are for. */
     private val headersHost: String? = url.toHttpUrlOrNull()?.host
 

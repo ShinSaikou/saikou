@@ -276,6 +276,8 @@ dependencies {
 
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.turbine)
+    // GitHubReleasesTrustTest signs a certificate for the updater's client to refuse.
+    testImplementation(libs.okhttp.tls)
     // The sync worker's tests build it the way WorkManager does.
     testImplementation(libs.androidx.work.testing)
     // Migration's tests run its one transaction against the real schema and triggers (phase 4 unit MA).

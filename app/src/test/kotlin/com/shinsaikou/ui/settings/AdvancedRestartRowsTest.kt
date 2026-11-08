@@ -32,8 +32,8 @@ class AdvancedRestartRowsTest {
 
     private val advanced: String = source
         .substringAfter("private fun AdvancedSection(")
-        .substringBefore("private fun LibVersionOverrideDialog(")
-        .also { check(it.length < source.length) { "AdvancedSection or LibVersionOverrideDialog was not found" } }
+        .substringBefore("private fun ExperimentalSection(")
+        .also { check(it.length < source.length) { "AdvancedSection or ExperimentalSection was not found" } }
 
     @Test
     fun `the restart line carries the Restart action that restarts the app on Settings, Advanced`() {

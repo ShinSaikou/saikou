@@ -1,5 +1,6 @@
 package com.shinsaikou.tracking
 
+import com.shinsaikou.core.common.network.trustSystemCertificatesOnly
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
@@ -22,7 +23,10 @@ import okhttp3.logging.HttpLoggingInterceptor
  * - none of the shared client's logging, which prints every header unredacted, and a tracker's
  *   carry a bearer token;
  * - no cache, because a heuristically fresh answer would hide the service's own progress;
- * - no cookie jar, because a tracker's session has no business in the one the extensions share.
+ * - no cookie jar, because a tracker's session has no business in the one the extensions share;
+ * - system trust only, when the Experimental switch has the shared client trust the CAs the owner
+ *   installed ([NetworkHelper.trustsUserCertificates]): a tracker's requests carry its token, and
+ *   whoever holds such a CA could read it.
  *
  * Unlike `SyncHttpClient` it keeps the shared resolver, which is the owner's DNS over HTTPS choice
  * when one is set: sync took the system resolver for a LAN server's name, and trackers are public
@@ -44,6 +48,7 @@ class TrackerHttpClient(networkHelper: NetworkHelper, networkPreferences: Networ
         }
         .cache(null)
         .cookieJar(CookieJar.NO_COOKIES)
+        .apply { if (networkHelper.trustsUserCertificates) trustSystemCertificatesOnly() }
         .apply {
             if (networkPreferences.verboseLogging.get()) {
                 addInterceptor(

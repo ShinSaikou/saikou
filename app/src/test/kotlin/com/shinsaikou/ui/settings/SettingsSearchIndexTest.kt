@@ -162,6 +162,14 @@ class SettingsSearchIndexTest {
     }
 
     @Test
+    fun `Trust certificates you installed is found under the experimental section with its summary`() {
+        val entry = settingsSearchIndex.filter { it.titleRes == R.string.settings_experimental_user_certificates }
+
+        entry.map { it.section } shouldBe listOf(SettingsSection.EXPERIMENTAL)
+        entry.single().summaryRes shouldBe R.string.settings_experimental_user_certificates_summary
+    }
+
+    @Test
     fun `no two entries lead to the same row`() {
         indexKeys.groupingBy { it }.eachCount().filterValues { it > 1 }.keys.shouldBeEmpty()
     }

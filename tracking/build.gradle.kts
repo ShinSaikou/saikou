@@ -27,4 +27,6 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.turbine)
     testImplementation(libs.okhttp.mockwebserver3)
+    // The user-certificate trust test signs a certificate for the shared client to refuse.
+    testImplementation(libs.okhttp.tls)
 }

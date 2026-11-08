@@ -1,10 +1,12 @@
-// Vendored from upstream v0.20.4: core/common/src/main/kotlin/eu/kanade/tachiyomi/network/interceptor/CloudflareInterceptor.kt (modified: yes) per-host solve coalescing, user messages through NetworkUserMessages; upstream v0.21.0 ac249e366 ported (a challenge is detected by its cf-mitigated header, and an interactive one ends the solve at once), with the header read case-insensitively; upstream v0.21.3 f43a0f5d9 ported (the challenge page is loaded without the request's Origin header, which kills the renderer); upstream v0.21.1 649fc83ff ported (a renderer that dies mid-solve fails the solve instead of closing the app); the challenge's fail event from upstream v0.21.2 5ca2a3932 (it ends the solve, and a clearance a failed challenge left is dropped); upstream v0.21.2 cca6b5e2e ported (a challenge to a request other than GET is solved on the site's root), and a finished page is read whichever url it finished on, since that root may redirect
+// Vendored from upstream v0.20.4: core/common/src/main/kotlin/eu/kanade/tachiyomi/network/interceptor/CloudflareInterceptor.kt (modified: yes) per-host solve coalescing, user messages through NetworkUserMessages; upstream v0.21.0 ac249e366 ported (a challenge is detected by its cf-mitigated header, and an interactive one ends the solve at once), with the header read case-insensitively; upstream v0.21.3 f43a0f5d9 ported (the challenge page is loaded without the request's Origin header, which kills the renderer); upstream v0.21.1 649fc83ff ported (a renderer that dies mid-solve fails the solve instead of closing the app); the challenge's fail event from upstream v0.21.2 5ca2a3932 (it ends the solve, and a clearance a failed challenge left is dropped); upstream v0.21.2 cca6b5e2e ported (a challenge to a request other than GET is solved on the site's root), and a finished page is read whichever url it finished on, since that root may redirect; with the Experimental switch that trusts user-installed CAs on, the challenge page may proceed past a certificate one of them signed
 package eu.kanade.tachiyomi.network.interceptor
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.net.http.SslError
 import android.webkit.JavascriptInterface
 import android.webkit.RenderProcessGoneDetail
+import android.webkit.SslErrorHandler
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -14,6 +16,7 @@ import com.shinsaikou.core.common.network.CloudflareBudgetExceededException
 import com.shinsaikou.core.common.network.CloudflareSolveCoordinator
 import com.shinsaikou.core.common.network.CloudflareSolveRecentlyFailedException
 import com.shinsaikou.core.common.network.NetworkUserMessages
+import com.shinsaikou.core.common.network.isSignedByUserCertificate
 import eu.kanade.tachiyomi.network.AndroidCookieJar
 import eu.kanade.tachiyomi.util.system.isOutdated
 import eu.kanade.tachiyomi.util.system.toWebViewHeaders
@@ -33,6 +36,7 @@ class CloudflareInterceptor(
     defaultUserAgentProvider: () -> String,
     private val coordinator: CloudflareSolveCoordinator,
     private val messages: NetworkUserMessages,
+    private val trustsUserCertificates: Boolean,
 ) : WebViewInterceptor(context, defaultUserAgentProvider, messages) {
 
     private val executor = ContextCompat.getMainExecutor(context)
@@ -158,6 +162,18 @@ class CloudflareInterceptor(
                             // Unlock thread, the challenge wasn't found.
                             latch.countDown()
                         }
+                    }
+                }
+
+                // Modified: the network security config trusts system CAs only, so with the
+                // Experimental switch on, a challenge behind a CA the owner installed would fail
+                // here while the source client reaches the site. Anything else is refused as before.
+                @SuppressLint("WebViewClientOnReceivedSslError")
+                override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
+                    if (trustsUserCertificates && isSignedByUserCertificate(error)) {
+                        handler.proceed()
+                    } else {
+                        super.onReceivedSslError(view, handler, error)
                     }
                 }
 

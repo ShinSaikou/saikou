@@ -471,7 +471,7 @@ private fun SectionContent(
         SettingsSection.SYNC -> SyncSection()
         SettingsSection.SECURITY -> SecuritySection(viewModel)
         SettingsSection.ADVANCED -> AdvancedSection(viewModel, showMessage)
-        SettingsSection.EXPERIMENTAL -> ExperimentalSection(viewModel)
+        SettingsSection.EXPERIMENTAL -> ExperimentalSection(viewModel, showMessage)
     }
 }
 
@@ -1880,9 +1880,16 @@ private fun AdvancedSection(viewModel: SettingsViewModel, showMessage: (String, 
 /**
  * Behaviour that could make the app worse for some owners, each switch off by default (R162 item
  * 2), so the default app stays as it was. Every row says what it changes and what it can cost.
+ *
+ * Trust certificates you installed is read once per process, when the network client is built, so
+ * it says Advanced's "Requires app restart to take effect" with the Restart action, which brings the
+ * app back on this section.
  */
 @Composable
-private fun ExperimentalSection(viewModel: SettingsViewModel) {
+private fun ExperimentalSection(viewModel: SettingsViewModel, showMessage: (String, SnackbarAction?) -> Unit) {
+    val context = LocalContext.current
+    val restartNeeded = stringResource(R.string.requires_app_restart)
+    val restartLabel = stringResource(R.string.action_restart)
     InlineNotice(stringResource(R.string.settings_experimental_note))
     CheckboxRow(
         labelRes = R.string.settings_experimental_parallel_pages,
@@ -1921,6 +1928,18 @@ private fun ExperimentalSection(viewModel: SettingsViewModel) {
         labelRes = R.string.settings_experimental_parallel_sources,
         pref = viewModel.downloadPreferences.parallelSourceDownloads,
         detailRes = R.string.settings_experimental_parallel_sources_summary,
+    )
+    // Amends contract 08 section 6.5 (system CAs only), opt-in only; see UserCertificates.kt.
+    CheckboxRow(
+        labelRes = R.string.settings_experimental_user_certificates,
+        pref = viewModel.networkPreferences.trustUserCertificates,
+        detailRes = R.string.settings_experimental_user_certificates_summary,
+        onToggled = {
+            showMessage(
+                restartNeeded,
+                SnackbarAction(restartLabel) { AppRestart.restart(context, MainDestination.EXPERIMENTAL_SETTINGS) },
+            )
+        },
     )
 }
 

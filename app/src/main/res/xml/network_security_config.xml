@@ -4,6 +4,13 @@
   extension host would fail on them without this. Only preinstalled CAs are trusted: contract 08
   section 6.5 drops upstream's user-added anchors, because nothing here asks the owner to install one
   and a user CA is the shape a man in the middle takes.
+
+  Settings > Experimental's "Trust certificates you installed" amends that, opt-in only, and works in
+  code rather than here: this file is read once and cannot follow a switch, and the switch must widen
+  source traffic alone. With it on, NetworkHelper's source client trusts the user CAs too
+  (UserCertificates.kt); sync, the trackers, the extension stores and the updater take system trust
+  back, since they carry credentials or fetch code the app installs; and the source WebViews proceed
+  past a certificate a user CA signed. Everything else stays on these anchors.
 -->
 <network-security-config xmlns:tools="http://schemas.android.com/tools">
     <base-config

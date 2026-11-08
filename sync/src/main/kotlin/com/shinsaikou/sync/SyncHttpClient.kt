@@ -1,5 +1,6 @@
 package com.shinsaikou.sync
 
+import com.shinsaikou.core.common.network.trustSystemCertificatesOnly
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
@@ -27,7 +28,10 @@ import kotlin.time.Duration
  * - no cookie jar, because sync credentials have no business in the one the extensions share;
  * - the system resolver, because a DNS over HTTPS provider refuses a LAN server's name;
  * - no call timeout, because a streamed apply outlives any fixed deadline. The connect and read
- *   timeouts are kept.
+ *   timeouts are kept;
+ * - system trust only, when the Experimental switch has the shared client trust the CAs the owner
+ *   installed ([NetworkHelper.trustsUserCertificates]): this client carries the Drive token and the
+ *   WebDAV password, and whoever holds such a CA could read them.
  *
  * A request carries its credentials as a [SyncAuthorization] tag, which an application interceptor
  * turns into the `Authorization` header. Never a network interceptor: OkHttp drops the header on a
@@ -49,6 +53,7 @@ class SyncHttpClient(networkHelper: NetworkHelper, networkPreferences: NetworkPr
         .cookieJar(CookieJar.NO_COOKIES)
         .dns(Dns.SYSTEM)
         .callTimeout(Duration.ZERO)
+        .apply { if (networkHelper.trustsUserCertificates) trustSystemCertificatesOnly() }
         .addInterceptor(AuthorizationInterceptor)
         .apply {
             if (networkPreferences.verboseLogging.get()) {
