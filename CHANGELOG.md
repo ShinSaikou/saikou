@@ -7,6 +7,14 @@ release may change behaviour.
 
 ## Unreleased
 
+### Added
+
+- **Auto-scroll in long strip** in Settings > Experimental, off by default, adds a play button to
+  the reader's menu in the long strip and continuous vertical modes. It scrolls the pages down by
+  themselves, on into the next chapter, at the speed set by **Scroll speed** in the reader settings
+  (under Long strip, and in Settings > Reader). Any touch stops it, as do opening the menu or a
+  sheet and leaving the reader; the screen stays on while it runs.
+
 ## 0.1.3 - 2026-11-07
 
 ### Added

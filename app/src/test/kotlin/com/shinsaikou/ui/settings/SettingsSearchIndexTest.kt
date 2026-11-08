@@ -76,6 +76,7 @@ class SettingsSearchIndexTest {
         "pref_flash_page_interval" to "shown only while Flash on page change is on",
         "pref_flash_with" to "shown only while Flash on page change is on",
         "pref_vertical_navigator_height" to "shown only while a reading mode has the navigator",
+        "pref_auto_scroll_speed" to "shown only while the Experimental auto-scroll is on",
         "lock_when_idle" to "shown only while the app lock is on",
         "pref_adopt_summary" to "shown only once an adoption has finished",
         "pref_storage_move_left" to "shown only while a move left files behind",
@@ -149,6 +150,15 @@ class SettingsSearchIndexTest {
         listOf("CheckboxRow", "ChoiceRow", "ChoiceSetRow", "IntervalRow").forEach { helper ->
             withClue(helper) { chunks.getValue(helper).text shouldContain "SettingsSearchTarget(labelRes)" }
         }
+    }
+
+    @Test
+    fun `the auto-scroll switch is searchable under Experimental and its speed slider is not`() {
+        indexKeys.filter { it.title == "settings_experimental_auto_scroll" } shouldBe
+            listOf(Key(SettingsSection.EXPERIMENTAL, "settings_experimental_auto_scroll", null))
+        indexKeys.none { it.title == "pref_auto_scroll_speed" } shouldBe true
+        // The slider is drawn, so only the left-out list keeps the test above from asking for it.
+        source("settings/SettingsSections.kt") shouldContain "R.string.pref_auto_scroll_speed"
     }
 
     @Test

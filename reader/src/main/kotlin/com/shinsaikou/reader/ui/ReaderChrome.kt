@@ -44,6 +44,7 @@ internal fun ReaderAppBarsHost(
     onOpenInWebView: () -> Unit,
     onOpenInBrowser: () -> Unit,
     onShareChapter: () -> Unit,
+    onStartAutoScroll: () -> Unit,
 ) {
     val context = LocalContext.current
     val resources = LocalResources.current
@@ -54,6 +55,7 @@ internal fun ReaderAppBarsHost(
     val verticalNavigator by preferences.verticalNavigator.collectAsState()
     val verticalNavigatorOnLeft by preferences.verticalNavigatorOnLeft.collectAsState()
     val verticalNavigatorHeight by preferences.verticalNavigatorHeight.collectAsState()
+    val stripAutoScroll by preferences.stripAutoScroll.collectAsState()
 
     // Upstream asks ReadingMode.isPagerType(pref); :domain's enum has isWebtoon and no ViewerType, so
     // the expression inverts. This is the reader's only use of it.
@@ -101,6 +103,13 @@ internal fun ReaderAppBarsHost(
         onClickSettings = { onEvent(ReaderEvent.ShowDialog(ReaderDialog.Settings)) },
         hasNote = state.currentNote != null,
         onClickNote = { onEvent(ReaderEvent.EditCurrentNote) },
+        // Experimental, and only on the long strip, the one viewer that can run it. The menu closes
+        // so the strip is in view; ReaderScreen stops the scroll when the menu opens, not while it
+        // is still open from this tap.
+        onClickAutoScroll = {
+            onEvent(ReaderEvent.HideMenu)
+            onStartAutoScroll()
+        }.takeIf { stripAutoScroll && state.readingMode.isWebtoon },
     )
 }
 
@@ -132,17 +141,32 @@ internal fun chapterNavigatorType(
  * The view starts hidden, as upstream's layout declares it `gone`. A view built in code starts
  * visible, and `setNavigation` returns early for a visible view, so the tap regions were drawn on
  * every open until the first touch, whatever "Show tap zones overlay" said.
+ *
+ * Each rise of [dismissals] hides the overlay through the view's `performClick`, the path a touch on
+ * it takes. The Experimental auto-scroll raises it when it starts: the strip then moves with no
+ * touch, and the tap zones sat over it for the whole run.
  */
 @Composable
 internal fun ReaderNavigationOverlay(
     request: NavigationOverlayRequest?,
+    dismissals: Int,
     modifier: Modifier = Modifier,
 ) {
+    // The count when the view was last brought up to date, so a recomposition for another reason
+    // does not hide it again. It starts at the first value, which is no dismissal.
+    val seen = remember { SeenDismissals(dismissals) }
     AndroidView(
         modifier = modifier.fillMaxSize(),
         factory = { ReaderNavigationOverlayView(it, null).apply { isVisible = false } },
         update = { view ->
             request?.let { view.setNavigation(it.navigation, it.showOnStart) }
+            if (dismissals != seen.count) {
+                seen.count = dismissals
+                view.performClick()
+            }
         },
     )
 }
+
+/** The dismissal count [ReaderNavigationOverlay] has acted on. */
+private class SeenDismissals(var count: Int)

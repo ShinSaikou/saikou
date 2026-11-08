@@ -1,4 +1,4 @@
-// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/tachiyomi/ui/reader/viewer/webtoon/WebtoonViewer.kt (modified: yes)
+// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/tachiyomi/ui/reader/viewer/webtoon/WebtoonViewer.kt (modified: yes) departures in the class comment, the latest the Experimental auto-scroll
 package eu.kanade.tachiyomi.ui.reader.viewer.webtoon
 
 import android.graphics.PointF
@@ -17,8 +17,10 @@ import com.shinsaikou.reader.bench.ReaderBenchHooks
 import com.shinsaikou.reader.settings.threshold
 import com.shinsaikou.reader.state.firstPartOf
 import com.shinsaikou.reader.state.pageCount
+import com.shinsaikou.reader.viewer.StripAutoScroll
 import com.shinsaikou.reader.viewer.StripKey
 import com.shinsaikou.reader.viewer.ViewerHost
+import com.shinsaikou.reader.viewer.stripHasMoreComing
 import com.shinsaikou.reader.viewer.stripKey
 import com.shinsaikou.reader.viewer.wheelScroll
 import eu.kanade.tachiyomi.ui.reader.model.ChapterTransition
@@ -55,6 +57,10 @@ import kotlin.math.min
  *  - The tap and volume key scroll distance is read from the display on each use rather than once,
  *    because a rotation keeps this viewer.
  *  - [onSplitInserted] keeps the "always show chapter transition" setting, which it passed as off.
+ *
+ * Saikou's Experimental auto-scroll lives in [StripAutoScroll]; this viewer only holds it, starts
+ * and stops it ([startAutoScroll], [stopAutoScroll]), stops it in [moveToPage], since a move to a
+ * page is a jump the reader asked for, and releases it in [destroy].
  *
  * The first layout and the chapter preload trigger count pages, not tall-strip parts, which sit in
  * the page list after their page with its index. The recycler is told the side padding, as in
@@ -106,6 +112,9 @@ class WebtoonViewer(val host: ViewerHost, val isContinuous: Boolean = true) : Vi
 
     /** Pixels per unit of a wheel or touchpad scroll, the platform's own. */
     private val wheelScrollFactor = ViewConfiguration.get(host.context).scaledVerticalScrollFactor
+
+    /** Saikou: the Experimental auto-scroll, idle until the menu's button starts it. */
+    private val autoScroll = StripAutoScroll(recycler) { stripHasMoreComing(adapter.items) }
 
     init {
         recycler.sidePaddingPercent = config.sidePadding
@@ -239,8 +248,15 @@ class WebtoonViewer(val host: ViewerHost, val isContinuous: Boolean = true) : Vi
      */
     override fun destroy() {
         super.destroy()
+        autoScroll.release() // Saikou
         scope.cancel()
     }
+
+    /** Saikou: starts the Experimental auto-scroll at the speed set in the reader settings. */
+    fun startAutoScroll() = autoScroll.start(host.readerPreferences.stripAutoScrollSpeed.get())
+
+    /** Saikou: stops the Experimental auto-scroll; nothing happens when it is not running. */
+    fun stopAutoScroll() = autoScroll.stop()
 
     /**
      * Called from the RecyclerView listener when a [page] is marked as active. It notifies the
@@ -297,6 +313,7 @@ class WebtoonViewer(val host: ViewerHost, val isContinuous: Boolean = true) : Vi
      * Tells this viewer to move to the given [page].
      */
     override fun moveToPage(page: ReaderPage) {
+        autoScroll.stop() // Saikou
         ReaderBenchHooks.trace(ReaderBenchHooks.SECTION_MOVE_TO_PAGE) {
             val position = adapter.items.indexOf(page)
             if (position != -1) {

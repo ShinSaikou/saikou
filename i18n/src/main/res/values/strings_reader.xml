@@ -30,6 +30,13 @@
     <string name="page_note_empty_removes">Leave it empty to remove the note</string>
     <string name="page_note_marker">This page has a note</string>
 
+    <!--
+      Fresh. Experimental auto-scroll in the long strip: the bottom bar's button that starts it and
+      the speed slider in the long strip's settings. Upstream has no auto-scroll.
+    -->
+    <string name="reader_auto_scroll_start">Start auto-scroll</string>
+    <string name="pref_auto_scroll_speed">Scroll speed</string>
+
     <!-- Fresh. Phase 5 unit FX, R128 carry-over 1: a note saved after its entry was removed from the database. -->
     <string name="note_not_saved_entry_removed">Couldn\'t save the note: this entry was removed</string>
 

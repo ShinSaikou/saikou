@@ -891,6 +891,8 @@ private fun ReaderLongStripRows(preferences: ReaderPreferences) {
     val hideThreshold by preferences.readerHideThreshold.collectAsState()
     val dualPageSplit by preferences.dualPageSplitWebtoon.collectAsState()
     val rotateToFit by preferences.dualPageRotateToFitWebtoon.collectAsState()
+    val autoScroll by preferences.stripAutoScroll.collectAsState()
+    val autoScrollSpeed by preferences.stripAutoScrollSpeed.collectAsState()
     val percent = remember { NumberFormat.getPercentInstance() }
     SettingsSearchGroup(R.string.webtoon_viewer) {
         TapZoneRows(
@@ -931,6 +933,15 @@ private fun ReaderLongStripRows(preferences: ReaderPreferences) {
         )
         CheckboxRow(labelRes = R.string.pref_double_tap_zoom, pref = preferences.webtoonDoubleTapZoomEnabled)
         CheckboxRow(labelRes = R.string.pref_webtoon_disable_zoom_out, pref = preferences.webtoonDisableZoomOut)
+        // The Experimental auto-scroll's speed, as the reader's sheet shows it: only while it is on.
+        ShownWhen(autoScroll) {
+            SliderItem(
+                value = autoScrollSpeed,
+                valueRange = ReaderSettingsOptions.AUTO_SCROLL_SPEED_MIN..ReaderSettingsOptions.AUTO_SCROLL_SPEED_MAX,
+                label = stringResource(R.string.pref_auto_scroll_speed),
+                onChange = preferences.stripAutoScrollSpeed::set,
+            )
+        }
     }
 }
 
@@ -1871,6 +1882,11 @@ private fun ExperimentalSection(viewModel: SettingsViewModel) {
         labelRes = R.string.settings_experimental_merged_entries,
         pref = viewModel.libraryPreferences.mergedEntries,
         detailRes = R.string.settings_experimental_merged_entries_summary,
+    )
+    CheckboxRow(
+        labelRes = R.string.settings_experimental_auto_scroll,
+        pref = viewModel.readerPreferences.stripAutoScroll,
+        detailRes = R.string.settings_experimental_auto_scroll_summary,
     )
 }
 

@@ -30,7 +30,7 @@ enum class TappingInvertMode {
 }
 
 /**
- * Reader settings. Every key but the two marked fresh is upstream's, so an upstream backup restores them
+ * Reader settings. Every key but the ones marked fresh is upstream's, so an upstream backup restores them
  * generically by name. The reader resolves the effective mode as the manga's own reading mode
  * unless it is DEFAULT, else [defaultReadingMode]; orientation likewise.
  */
@@ -195,4 +195,17 @@ class ReaderPreferences(preferenceStore: PreferenceStore) {
      * time. Off by default, because a source may refuse requests that come together.
      */
     val parallelPageLoading: Preference<Boolean> = preferenceStore.getBoolean("reader_parallel_page_loading", false)
+
+    /**
+     * Fresh, Experimental: a play button in the long strip's menu that scrolls the strip by
+     * itself. Off by default. App state, so it stays on this device and out of backups.
+     */
+    val stripAutoScroll: Preference<Boolean> =
+        preferenceStore.getBoolean(Preference.appStateKey("reader_strip_auto_scroll"), false)
+
+    /**
+     * Fresh: the auto-scroll speed, a level from 1 to 10 that is 25 dp per second each. An ordinary
+     * reader setting, harmless in a backup; shown only while [stripAutoScroll] is on.
+     */
+    val stripAutoScrollSpeed: Preference<Int> = preferenceStore.getInt("reader_strip_auto_scroll_speed", 4)
 }

@@ -1,4 +1,4 @@
-// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/presentation/reader/appbars/ReaderAppBars.kt (modified: yes)
+// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/presentation/reader/appbars/ReaderAppBars.kt (modified: yes) departures in the comment, the latest the Experimental auto-scroll button
 package eu.kanade.presentation.reader.appbars
 
 import androidx.compose.animation.AnimatedVisibility
@@ -45,7 +45,8 @@ import tachiyomi.presentation.core.components.material.padding
  * `onPageIndexRelease(Int)`, and the flat parameter list is kept rather than folded into
  * `ReaderState`, because six of its values come from preferences the state does not carry
  * (decision D20). `ReaderChrome.ReaderAppBarsHost` is what computes them. [hasNote] and
- * [onClickNote] are the bottom bar's page note marker (phase 4 unit BN).
+ * [onClickNote] are the bottom bar's page note marker (phase 4 unit BN), and [onClickAutoScroll] its
+ * Experimental auto-scroll button, null where it is not offered.
  */
 private val readerBarsSlideAnimationSpec = tween<IntOffset>(200)
 private val readerBarsFadeAnimationSpec = tween<Float>(150)
@@ -84,6 +85,7 @@ fun ReaderAppBars(
     onClickSettings: () -> Unit,
     hasNote: Boolean,
     onClickNote: () -> Unit,
+    onClickAutoScroll: (() -> Unit)?,
 ) {
     val backgroundColor = MaterialTheme.colorScheme
         .surfaceColorAtElevation(3.dp)
@@ -185,6 +187,7 @@ fun ReaderAppBars(
                     onClickSettings = onClickSettings,
                     hasNote = hasNote,
                     onClickNote = onClickNote,
+                    onClickAutoScroll = onClickAutoScroll,
                 )
             }
         }

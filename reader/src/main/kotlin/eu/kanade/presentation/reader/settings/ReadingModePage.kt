@@ -1,4 +1,4 @@
-// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/presentation/reader/settings/ReadingModePage.kt (modified: yes)
+// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/presentation/reader/settings/ReadingModePage.kt (modified: yes) departures in the comment, the latest the Experimental auto-scroll speed
 package eu.kanade.presentation.reader.settings
 
 import androidx.compose.foundation.layout.ColumnScope
@@ -30,7 +30,8 @@ import java.text.NumberFormat
  * flows (which mirror `ReaderState.mangaReadingMode` and `mangaOrientation`) rather than being
  * decoded out of `manga.viewer_flags` here, `viewerFlow` is a boolean `isWebtoonFlow` because
  * `:reader` never hands a live `Viewer` to Compose, and the four option lists moved to
- * [ReaderSettingsOptions].
+ * [ReaderSettingsOptions]. The long strip's group ends with the Experimental auto-scroll's speed,
+ * shown only while its switch is on (upstream has no auto-scroll).
  */
 @Composable
 internal fun ColumnScope.ReadingModePage(viewModel: ReaderSettingsViewModel) {
@@ -209,6 +210,18 @@ private fun ColumnScope.WebtoonViewerSettings(viewModel: ReaderSettingsViewModel
         label = stringResource(R.string.pref_webtoon_disable_zoom_out),
         pref = viewModel.preferences.webtoonDisableZoomOut,
     )
+
+    val stripAutoScroll by viewModel.preferences.stripAutoScroll.collectAsState()
+    if (stripAutoScroll) {
+        val autoScrollSpeed by viewModel.preferences.stripAutoScrollSpeed.collectAsState()
+        SliderItem(
+            value = autoScrollSpeed,
+            valueRange = ReaderSettingsOptions.let { it.AUTO_SCROLL_SPEED_MIN..it.AUTO_SCROLL_SPEED_MAX },
+            label = stringResource(R.string.pref_auto_scroll_speed),
+            onChange = viewModel.preferences.stripAutoScrollSpeed::set,
+            pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+        )
+    }
 }
 
 @Composable

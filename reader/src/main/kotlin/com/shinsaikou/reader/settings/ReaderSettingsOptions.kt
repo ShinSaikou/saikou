@@ -24,6 +24,10 @@ object ReaderSettingsOptions {
     const val WEBTOON_PADDING_MIN = 0
     const val WEBTOON_PADDING_MAX = 25
 
+    /** The Experimental auto-scroll's speed levels; level n is n times 25 dp per second. */
+    const val AUTO_SCROLL_SPEED_MIN = 1
+    const val AUTO_SCROLL_SPEED_MAX = 10
+
     /** The flash-duration preference is stored in milliseconds and shown in tenths of a second. */
     const val MILLI_CONVERSION = 100
 

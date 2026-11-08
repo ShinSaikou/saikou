@@ -476,6 +476,8 @@
     <string name="settings_experimental_merged_entries">Merged entries</string>
     <string name="settings_experimental_merged_entries_summary">Shows one title from several sources as one library entry with one chapter list, so a chapter one source lacks comes from another. Merge entries from an entry\'s menu, a library selection or the duplicate question. Each source stays a whole entry of its own, and merges sync between devices. Turning this off shows the entries separately again.</string>
     <string name="settings_experimental_custom_interval_summary">Lets you set how many days apart an entry is checked, from its Update interval dialog, instead of the estimate from its release dates. The library\'s Custom update interval filter finds those entries. The setting stays on this device and is not in backups. Turning this off puts every entry back on its estimate.</string>
+    <string name="settings_experimental_auto_scroll">Auto-scroll in long strip</string>
+    <string name="settings_experimental_auto_scroll_summary">Adds a play button to the reader\'s menu in long strip that scrolls the pages by itself at the speed you set in the reader settings. Any touch stops it, and the screen stays on while it runs. The setting stays on this device and is not in backups.</string>
     <string name="settings_theme">Theme</string>
     <string name="settings_theme_mode">Light and dark</string>
     <string name="settings_tablet_ui">Two pane layout</string>

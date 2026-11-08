@@ -1,10 +1,11 @@
-// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/presentation/reader/appbars/ReaderBottomBar.kt (modified: yes)
+// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/presentation/reader/appbars/ReaderBottomBar.kt (modified: yes) departures in the comment, the latest the Experimental auto-scroll button
 package eu.kanade.presentation.reader.appbars
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -25,7 +26,9 @@ import com.shinsaikou.reader.R as ReaderR
  * Modified (S), plus: `readingMode.iconRes` and `orientation.icon` are `ModeResources` extensions
  * rather than enum members, and the two crop drawables come from `:reader`'s own `res/`. While the
  * page on screen has a note, a marker leads the row and opens the note ([hasNote], [onClickNote],
- * phase 4 unit BN; upstream has no page notes).
+ * phase 4 unit BN; upstream has no page notes). While the Experimental auto-scroll is on and the
+ * strip is the viewer, a play button before the settings starts it ([onClickAutoScroll], null
+ * otherwise; upstream has no auto-scroll).
  */
 
 @Composable
@@ -39,6 +42,7 @@ fun ReaderBottomBar(
     onClickSettings: () -> Unit,
     hasNote: Boolean,
     onClickNote: () -> Unit,
+    onClickAutoScroll: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -75,6 +79,15 @@ fun ReaderBottomBar(
                 painter = painterResource(if (cropEnabled) ReaderR.drawable.ic_crop_24dp else ReaderR.drawable.ic_crop_off_24dp),
                 contentDescription = stringResource(R.string.pref_crop_borders),
             )
+        }
+
+        if (onClickAutoScroll != null) {
+            IconButton(onClick = onClickAutoScroll) {
+                Icon(
+                    imageVector = Icons.Outlined.PlayArrow,
+                    contentDescription = stringResource(R.string.reader_auto_scroll_start),
+                )
+            }
         }
 
         IconButton(onClick = onClickSettings) {

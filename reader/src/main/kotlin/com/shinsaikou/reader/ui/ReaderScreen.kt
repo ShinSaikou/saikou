@@ -14,16 +14,20 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.shinsaikou.core.common.network.CloudflareSolveCoordinator
 import com.shinsaikou.domain.preferences.ReaderPreferences
@@ -40,6 +44,7 @@ import com.shinsaikou.reader.state.ModeResolver
 import com.shinsaikou.reader.state.ReaderEffect
 import com.shinsaikou.reader.state.ReaderEvent
 import com.shinsaikou.reader.state.ReaderPhase
+import com.shinsaikou.reader.state.ReaderState
 import com.shinsaikou.reader.viewer.PageImageActions
 import com.shinsaikou.reader.viewer.ReaderViewerHost
 import com.shinsaikou.reader.viewer.ViewerHolder
@@ -47,6 +52,7 @@ import eu.kanade.presentation.reader.DisplayRefreshHost
 import eu.kanade.presentation.reader.ReaderContentOverlay
 import eu.kanade.presentation.reader.ReaderPageIndicator
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderSettingsViewModel
+import eu.kanade.tachiyomi.ui.reader.viewer.webtoon.WebtoonViewer
 import eu.kanade.tachiyomi.util.system.isNightMode
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.coroutines.launch
@@ -117,6 +123,9 @@ fun ReaderScreen(
     }
 
     val displayRefreshHost = remember { DisplayRefreshHost(prefs) }
+    // Raised when the Experimental auto-scroll starts, which hides the tap zone overlay as a first
+    // touch does (see ReaderNavigationOverlay).
+    var overlayDismissals by remember { mutableIntStateOf(0) }
     val settingsViewModel = remember {
         ReaderSettingsViewModel(
             preferences = prefs,
@@ -150,6 +159,7 @@ fun ReaderScreen(
 
     ReaderSystemBars(state = state, preferences = prefs, onEvent = viewModel::send)
     ReaderEffects(viewModel, viewerHolder, displayRefreshHost, messages)
+    AutoScrollStops(state, viewerHolder)
 
     Box(
         modifier = modifier
@@ -174,7 +184,7 @@ fun ReaderScreen(
             )
         }
 
-        ReaderNavigationOverlay(request = host.navigationOverlay.value)
+        ReaderNavigationOverlay(request = host.navigationOverlay.value, dismissals = overlayDismissals)
 
         if (!state.menuVisible && showPageNumber) {
             ReaderPageIndicator(
@@ -232,6 +242,12 @@ fun ReaderScreen(
             onShareChapter = {
                 val url = chapterUrl ?: return@ReaderAppBarsHost
                 context.startActivitySafely(webActions.shareIntent(context, url), messages)
+            },
+            onStartAutoScroll = {
+                (viewerHolder.viewer as? WebtoonViewer)?.let { viewer ->
+                    viewer.startAutoScroll()
+                    overlayDismissals++
+                }
             },
         )
 
@@ -327,6 +343,25 @@ private fun ReaderEffects(
         } finally {
             readingModeToast?.cancel()
         }
+    }
+}
+
+/**
+ * The shell's share of what stops the Experimental auto-scroll (`StripAutoScroll`): the menu
+ * opening, a sheet or dialog opening over the reader, and the activity pausing. The viewer stops it
+ * itself on a touch, a move to a page, the end of the strip and its own destroy.
+ *
+ * Keyed on the two values, so it acts when one changes and not while it stays: the button that
+ * starts the scroll sits in the open menu, which closes only once the reducer has the event.
+ */
+@Composable
+private fun AutoScrollStops(state: ReaderState, holder: ViewerHolder) {
+    val dialogOpen = state.dialog != null
+    LaunchedEffect(state.menuVisible, dialogOpen) {
+        if (state.menuVisible || dialogOpen) (holder.viewer as? WebtoonViewer)?.stopAutoScroll()
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) {
+        (holder.viewer as? WebtoonViewer)?.stopAutoScroll()
     }
 }
 
