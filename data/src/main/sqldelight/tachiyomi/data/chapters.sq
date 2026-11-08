@@ -14,7 +14,9 @@
 -- take every one of its lookups and scans; the partial last_page_read, which no plan used; and
 -- read and date_fetch, which served only updatesView.sq's getUpdatesByReadStatus and
 -- getRecentUpdates, deleted with them because nothing called them. getChaptersByMangaIdsAndNumbers
--- is merged entries', for the Updates tab.
+-- is merged entries', for the Updates tab. Schema version 6 (R165, migrations/5.sqm) adds
+-- read_modified_at and bookmark_modified_at, the clocks the sync merge decides read and bookmark by,
+-- and the two triggers that stamp them; syncInsert and syncUpdate write them.
 
 import kotlin.Boolean;
 import kotlinx.serialization.json.JsonObject;
@@ -40,6 +42,8 @@ CREATE TABLE chapters(
     deleted_at INTEGER,
     bookmark_notes_modified_at INTEGER,
     restored_at INTEGER,
+    read_modified_at INTEGER NOT NULL DEFAULT 0,
+    bookmark_modified_at INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY(manga_id) REFERENCES mangas (_id) ON DELETE CASCADE
 );
 
@@ -109,6 +113,27 @@ WHEN new.is_syncing = 0 AND old.deleted_at IS NOT NULL AND new.deleted_at IS NUL
 BEGIN
     UPDATE chapters
     SET restored_at = max(strftime('%s', 'now') * 1000, coalesce(restored_at, 0) + 1, old.deleted_at + 1)
+    WHERE _id = new._id;
+END;
+
+-- The owner's read and bookmark clocks (R165), in milliseconds; 0 is a row never stamped, from
+-- before schema version 6 or never changed. A local write that changes the value moves its clock,
+-- past its own last value too, so a change always beats the value it replaced even when a pulled
+-- clock is ahead of this device's. The sync apply writes under is_syncing and stores the merged
+-- clock itself, and an insert keeps what it writes.
+CREATE TRIGGER update_chapter_read_modified_at AFTER UPDATE OF read ON chapters
+WHEN new.is_syncing = 0 AND new.read != old.read
+BEGIN
+    UPDATE chapters
+    SET read_modified_at = max(strftime('%s', 'now') * 1000, read_modified_at + 1)
+    WHERE _id = new._id;
+END;
+
+CREATE TRIGGER update_chapter_bookmark_modified_at AFTER UPDATE OF bookmark ON chapters
+WHEN new.is_syncing = 0 AND new.bookmark != old.bookmark
+BEGIN
+    UPDATE chapters
+    SET bookmark_modified_at = max(strftime('%s', 'now') * 1000, bookmark_modified_at + 1)
     WHERE _id = new._id;
 END;
 
@@ -277,17 +302,18 @@ WHERE _id = :chapterId;
 syncInsert:
 INSERT INTO chapters(manga_id, url, name, scanlator, read, bookmark, last_page_read, chapter_number,
     source_order, date_fetch, date_upload, last_modified_at, version, is_syncing, memo, volume,
-    deleted_at, restored_at, bookmark_notes_modified_at)
+    deleted_at, restored_at, bookmark_notes_modified_at, read_modified_at, bookmark_modified_at)
 VALUES (:mangaId, :url, :name, :scanlator, :read, :bookmark, :lastPageRead, :chapterNumber,
     :sourceOrder, :dateFetch, :dateUpload, 0, :version, 1, :memo, :volume,
-    :deletedAt, :restoredAt, :bookmarkNotesModifiedAt);
+    :deletedAt, :restoredAt, :bookmarkNotesModifiedAt, :readModifiedAt, :bookmarkModifiedAt);
 
 syncUpdate:
 UPDATE chapters SET
     read = :read, bookmark = :bookmark, last_page_read = :lastPageRead, date_fetch = :dateFetch,
     version = :version, name = :name, scanlator = :scanlator, chapter_number = :chapterNumber,
     date_upload = :dateUpload, volume = :volume, deleted_at = :deletedAt, restored_at = :restoredAt,
-    bookmark_notes_modified_at = :bookmarkNotesModifiedAt
+    bookmark_notes_modified_at = :bookmarkNotesModifiedAt, read_modified_at = :readModifiedAt,
+    bookmark_modified_at = :bookmarkModifiedAt
 WHERE _id = :chapterId;
 
 syncSetNotesModifiedAt:

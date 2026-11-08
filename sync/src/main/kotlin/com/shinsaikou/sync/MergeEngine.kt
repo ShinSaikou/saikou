@@ -22,10 +22,11 @@ import kotlin.math.max
  *
  * A value a source owns is decided by the row `version`, which counts writes and so says nothing
  * about which of the owner's edits is newer. A value the owner sets is decided by its own
- * modification clock, the greater winning. Progress is decided by no clock: read state, page and
- * reading time take the side that got further. Every tie, of a version or of a clock, is broken by
- * the value's canonical encoding and never by which side is local, so each rule gives both devices
- * the same row whichever of them runs it, and gives the same row however a run of rows is grouped.
+ * modification clock, the greater winning; a chapter's read state and bookmark are such values
+ * (R165). Progress is decided by no clock: page and reading time take the side that got further.
+ * Every tie, of a version or of a clock, is broken by the value's canonical encoding and never by
+ * which side is local, so each rule gives both devices the same row whichever of them runs it, and
+ * gives the same row however a run of rows is grouped.
  *
  * Each merged clock is the greater of the two. A child collection's function returns the value
  * alone, and its caller stores that greater clock beside it.
@@ -136,11 +137,19 @@ class MergeEngine {
         }
         val (deletedAt, restoredAt) = tombstone(local.deletedAt, remote.deletedAt, local.restoredAt, remote.restoredAt)
 
+        // Each by its own clock (R165), so an unread and an unbookmark travel. Equal clocks, both 0
+        // included (a row from before format 4, or never changed), take the OR, as before.
+        val read = byClock(local.readModifiedAt, remote.readModifiedAt, local.read, remote.read) { a, b -> a || b }
+        val bookmark = byClock(
+            local.bookmarkModifiedAt, remote.bookmarkModifiedAt, local.bookmark, remote.bookmark,
+        ) { a, b -> a || b }
+
         val merged = ChapterRecord(
             key = local.key,
-            // Known limit: an unread or an unbookmark never travels; the other side's true returns.
-            read = local.read || remote.read,
-            bookmark = local.bookmark || remote.bookmark,
+            read = read,
+            readModifiedAt = max(local.readModifiedAt, remote.readModifiedAt),
+            bookmark = bookmark,
+            bookmarkModifiedAt = max(local.bookmarkModifiedAt, remote.bookmarkModifiedAt),
             // Plain max: the reader ignores the page of a read chapter, so no reset is needed.
             lastPageRead = max(local.lastPageRead, remote.lastPageRead),
             // The first fetch, so the chapter holds one place in Updates on every device.

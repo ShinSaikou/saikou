@@ -68,6 +68,9 @@ data class StoredChapter(
     val deletedAt: Long?,
     val restoredAt: Long?,
     val bookmarkNotesModifiedAt: Long?,
+    /** The read and bookmark clocks (R165), 0 while never stamped. */
+    val readModifiedAt: Long,
+    val bookmarkModifiedAt: Long,
 )
 
 /**

@@ -297,6 +297,8 @@ class SyncDigestTest {
         "chapter.volume" to row<ChapterRow> { copy(volume = (volume ?: 0.0) + 1) },
         "chapter.deletedAt" to row<ChapterRow> { copy(deletedAt = (deletedAt ?: 0) + 1) },
         "chapter.restoredAt" to row<ChapterRow> { copy(restoredAt = (restoredAt ?: 0) + 1) },
+        "chapter.readModifiedAt" to row<ChapterRow> { copy(readModifiedAt = readModifiedAt + 1) },
+        "chapter.bookmarkModifiedAt" to row<ChapterRow> { copy(bookmarkModifiedAt = bookmarkModifiedAt + 1) },
         "category.key" to row<CategoryRow> { copy(key = "$key-2") },
         "category.name" to row<CategoryRow> { copy(name = "$name changed") },
         "category.order" to row<CategoryRow> { copy(order = order + 1) },

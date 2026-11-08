@@ -167,7 +167,9 @@ internal fun StoredChapter.toRecord(manga: MangaKey, notes: List<StoredNote> = e
     ChapterRecord(
         key = ChapterKey(manga, url),
         read = read,
+        readModifiedAt = readModifiedAt,
         bookmark = bookmark,
+        bookmarkModifiedAt = bookmarkModifiedAt,
         lastPageRead = lastPageRead,
         dateFetch = dateFetch,
         version = version,
@@ -201,6 +203,8 @@ internal fun ChapterRecord.toStored(id: Long, mangaId: Long, sourceOrder: Long):
     deletedAt = deletedAt,
     restoredAt = restoredAt,
     bookmarkNotesModifiedAt = bookmarkNotesModifiedAt,
+    readModifiedAt = readModifiedAt,
+    bookmarkModifiedAt = bookmarkModifiedAt,
 )
 
 internal fun List<StoredNote>.toNoteRecords(): Map<Long, BookmarkNoteRecord> =
@@ -428,6 +432,8 @@ internal fun ChapterRecord.toRow(sourceOrder: Long): ChapterRow = ChapterRow(
     sourceOrder = sourceOrder,
     deletedAt = deletedAt,
     restoredAt = restoredAt,
+    readModifiedAt = readModifiedAt,
+    bookmarkModifiedAt = bookmarkModifiedAt,
 )
 
 internal fun ChapterRecord.notesRow(): BookmarkNotesRow = BookmarkNotesRow(
@@ -441,7 +447,9 @@ internal fun ChapterRecord.notesRow(): BookmarkNotesRow = BookmarkNotesRow(
 internal fun ChapterRow.toRecord(key: ChapterKey): ChapterRecord = ChapterRecord(
     key = key,
     read = read,
+    readModifiedAt = readModifiedAt,
     bookmark = bookmark,
+    bookmarkModifiedAt = bookmarkModifiedAt,
     lastPageRead = lastPageRead,
     dateFetch = dateFetch,
     version = version,

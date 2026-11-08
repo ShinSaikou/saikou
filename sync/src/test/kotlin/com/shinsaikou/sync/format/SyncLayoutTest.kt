@@ -63,14 +63,14 @@ class SyncLayoutTest {
         val done = ExportDone(SyncFormat.CURRENT, parts = 4, lastSeq = 812)
         val bytes = SyncLayout.encodeDone(done)
 
-        bytes.decodeToString() shouldBe """{"format":3,"parts":4,"lastSeq":812}"""
+        bytes.decodeToString() shouldBe """{"format":4,"parts":4,"lastSeq":812}"""
         SyncLayout.decodeDone(bytes) shouldBe done
-        SyncLayout.decodeDone("""{"format":3,"parts":4,"lastSeq":812,"later":[1]}""".encodeToByteArray()) shouldBe done
+        SyncLayout.decodeDone("""{"format":4,"parts":4,"lastSeq":812,"later":[1]}""".encodeToByteArray()) shouldBe done
 
         val newer = shouldThrow<NewerFormatException> {
-            SyncLayout.decodeDone("""{"format":4,"shape":"unknown"}""".encodeToByteArray())
+            SyncLayout.decodeDone("""{"format":5,"shape":"unknown"}""".encodeToByteArray())
         }
-        newer.found shouldBe 4
+        newer.found shouldBe 5
         shouldThrow<MalformedSyncFileException> { SyncLayout.decodeDone("""{"parts":4}""".encodeToByteArray()) }
         shouldThrow<MalformedSyncFileException> { SyncLayout.decodeDone("""{"format":1}""".encodeToByteArray()) }
         shouldThrow<MalformedSyncFileException> { SyncLayout.decodeDone("[]".encodeToByteArray()) }

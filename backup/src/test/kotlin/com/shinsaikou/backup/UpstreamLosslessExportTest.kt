@@ -553,6 +553,8 @@ class UpstreamLosslessExportTest {
             "chapters.deleted_at" to "Saikou only: a soft-deleted chapter is left out of the file",
             "chapters.bookmark_notes_modified_at" to "Saikou only: an owner clock of the sync merge (R85)",
             "chapters.restored_at" to "Saikou only: the restore clock of the sync merge (R82)",
+            "chapters.read_modified_at" to "Saikou only: an owner clock of the sync merge (R165)",
+            "chapters.bookmark_modified_at" to "Saikou only: an owner clock of the sync merge (R165)",
             "categories.parent_id" to "Saikou only: the format has no category parent (contract 06 section 1.7)",
             "categories.version" to "Saikou only: the category's sync version",
             "categories.is_syncing" to "Saikou only: the sync apply flag",
@@ -795,6 +797,7 @@ private object LosslessFixture {
             "last_modified_at" to T + id * 2,
             "version" to id - 28, "is_syncing" to 0L, "memo" to """{"c":$id}""".encodeToByteArray(), "volume" to 2.5,
             "deleted_at" to deletedAt, "bookmark_notes_modified_at" to T + id * 3, "restored_at" to T + id * 4,
+            "read_modified_at" to T + id * 5, "bookmark_modified_at" to T + id * 6,
         ),
     )
 

@@ -60,6 +60,14 @@ release may change behaviour.
 - A History row works as in Mihon: tap it to resume reading, tap the cover to open the entry. The
   Resume button is gone, and the trash button is the row's only button.
 
+### Changed
+
+- Marking a chapter unread or removing its bookmark now reaches your other devices through sync,
+  where the next sync used to bring the read mark or the bookmark back. Sync uses a new format, so
+  every syncing device needs this version before it can sync again. One exception remains with
+  Merged entries on: if another device has a source in a merged title that this device lacks, and
+  holds that source's copy of the chapter as read, the chapter can come back as read after a sync.
+
 ## 0.1.3 - 2026-11-07
 
 ### Added

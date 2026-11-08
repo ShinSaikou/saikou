@@ -58,7 +58,9 @@ internal object MergeFixtures {
     val chapter = ChapterRecord(
         key = CHAPTER_KEY,
         read = false,
+        readModifiedAt = 0L,
         bookmark = false,
+        bookmarkModifiedAt = 0L,
         lastPageRead = 0L,
         dateFetch = 0L,
         version = 0L,

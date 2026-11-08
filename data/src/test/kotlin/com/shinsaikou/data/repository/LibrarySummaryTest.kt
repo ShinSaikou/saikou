@@ -264,7 +264,8 @@ class LibrarySummaryTest : RepositoryTest() {
             mangaId = manga, url = url, name = "Synced", scanlator = SCANLATORS.random(random),
             read = random.nextBoolean(), bookmark = random.nextBoolean(), lastPageRead = 0, chapterNumber = 1.0,
             sourceOrder = 0, dateFetch = date(random), dateUpload = date(random), version = 0, memo = MEMO,
-            volume = null, deletedAt = null, restoredAt = null, bookmarkNotesModifiedAt = null,
+            volume = null, deletedAt = null, restoredAt = null, bookmarkNotesModifiedAt = null, readModifiedAt = 0,
+            bookmarkModifiedAt = 0,
         )
         chapters.syncSetIsSyncing(0, scalar("SELECT _id FROM chapters WHERE url = '$url'")!!.toLong())
         return "sync insert on $manga"
@@ -276,7 +277,8 @@ class LibrarySummaryTest : RepositoryTest() {
             read = random.nextBoolean(), bookmark = random.nextBoolean(), lastPageRead = 0, dateFetch = date(random),
             version = 1, name = "Merged", scanlator = SCANLATORS.random(random), chapterNumber = 1.0,
             dateUpload = date(random), volume = null, deletedAt = if (random.nextInt(4) == 0) 50 else null,
-            restoredAt = null, bookmarkNotesModifiedAt = null, chapterId = chapter,
+            restoredAt = null, bookmarkNotesModifiedAt = null, readModifiedAt = 0, bookmarkModifiedAt = 0,
+            chapterId = chapter,
         )
         chapters.syncSetIsSyncing(0, chapter)
     }

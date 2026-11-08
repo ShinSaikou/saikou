@@ -262,7 +262,7 @@ class SyncEnginePullTest {
             backend.create(SyncLayout.segmentPath(a.deviceId, 0, 2), SyncContent(newerFormatFile(a.deviceId)))
         }
 
-        shouldThrow<NewerFormatException> { b.sync() }.found shouldBe 4
+        shouldThrow<NewerFormatException> { b.sync() }.found shouldBe 5
 
         b.preferences.pullCursors.get() shouldBe mapOf(a.deviceId to 0L)
         b.preferences.lastPushedSeq.get() shouldBe 0
@@ -310,12 +310,12 @@ class SyncEnginePullTest {
         b.preferences.pullCursors.get() shouldBe emptyMap()
     }
 
-    /** A gzip JSON Lines file whose header names format 3 and whose one row this build cannot know. */
+    /** A gzip JSON Lines file whose header names format 5 and whose one row this build cannot know. */
     private fun newerFormatFile(deviceId: String): ByteArray {
         val bytes = ByteArrayOutputStream()
         GZIPOutputStream(bytes).bufferedWriter().use { writer ->
             writer.write(
-                """{"format":4,"deviceId":"$deviceId","scope":{"kind":"segment","afterSeq":0,"lastSeq":2,"rawRows":2},""" +
+                """{"format":5,"deviceId":"$deviceId","scope":{"kind":"segment","afterSeq":0,"lastSeq":2,"rawRows":2},""" +
                     """"counts":{"manga_v2":1}}""",
             )
             writer.write("\n")

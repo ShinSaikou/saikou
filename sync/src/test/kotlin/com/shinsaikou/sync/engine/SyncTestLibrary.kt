@@ -28,7 +28,7 @@ private val mangaColumns = listOf(
 private val chapterColumns = listOf(
     "M.source", "M.url", "C.url", "C.name", "C.scanlator", "C.read", "C.bookmark", "C.last_page_read",
     "C.chapter_number", "C.source_order", "C.date_fetch", "C.date_upload", "C.version", "C.volume",
-    "C.deleted_at", "C.restored_at", "C.bookmark_notes_modified_at",
+    "C.deleted_at", "C.restored_at", "C.bookmark_notes_modified_at", "C.read_modified_at", "C.bookmark_modified_at",
 )
 
 /** Every synced value of every row, by natural key, so two devices' libraries compare as lists. */

@@ -45,7 +45,8 @@ class MigrationToVersion5Test {
         openVersion4()
         fillVersion4()
         val objectsBefore = objects()
-        val rowsBefore = TABLES.associateWith { dump(it) }
+        val columnsBefore = TABLES.associateWith { columnCount(it) }
+        val rowsBefore = TABLES.associateWith { dump(it, columnsBefore.getValue(it)) }
         val logBefore = dump("sync_change_log")
         val libraryBefore = rows("SELECT _id, totalCount, readCount, bookmarkCount FROM libraryView ORDER BY _id", 4)
         rowsBefore.getValue("mangas").shouldNotBeEmpty()
@@ -57,8 +58,8 @@ class MigrationToVersion5Test {
 
         scalar("PRAGMA user_version") shouldBe Database.Schema.version.toString()
         (Database.Schema.version >= 5L) shouldBe true
-        objects().filterNot { MERGED in it[1].orEmpty() } shouldContainExactly objectsBefore
-        TABLES.associateWith { dump(it) } shouldBe rowsBefore
+        withoutVersion6(objects()).filterNot { MERGED in it[1].orEmpty() } shouldContainExactly objectsBefore
+        TABLES.associateWith { dump(it, columnsBefore.getValue(it)) } shouldBe rowsBefore
         dump("sync_change_log") shouldContainExactly logBefore
         rows("SELECT _id, totalCount, readCount, bookmarkCount FROM libraryView ORDER BY _id", 4) shouldContainExactly
             libraryBefore
@@ -300,11 +301,15 @@ class MigrationToVersion5Test {
     private fun objects(): List<List<String?>> =
         rows("SELECT type, name, sql FROM sqlite_master ORDER BY type, name", 3)
 
-    /** Every row of [table] in storage order, each column as text. */
-    private fun dump(table: String): List<List<String?>> {
-        val columns = rows("SELECT count(*) FROM pragma_table_info('$table')", 1).single().single()!!.toInt()
-        return rows("SELECT * FROM $table ORDER BY rowid", columns)
-    }
+    private fun columnCount(table: String): Int =
+        rows("SELECT count(*) FROM pragma_table_info('$table')", 1).single().single()!!.toInt()
+
+    /**
+     * Every row of [table] in storage order, each column as text: its first [columns] columns, those
+     * it had before the migration, since a later version can append some (R165's chapter clocks).
+     */
+    private fun dump(table: String, columns: Int = columnCount(table)): List<List<String?>> =
+        rows("SELECT * FROM $table ORDER BY rowid", columns)
 
     private fun logOf(entity: String): List<List<String?>> =
         rows("SELECT entity_id, change_type FROM sync_change_log WHERE entity_type = '$entity' ORDER BY seq", 2)

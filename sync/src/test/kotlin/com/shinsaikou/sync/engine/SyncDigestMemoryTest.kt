@@ -122,6 +122,8 @@ class SyncDigestMemoryTest {
             deletedAt = null,
             restoredAt = null,
             bookmarkNotesModifiedAt = null,
+            readModifiedAt = 0,
+            bookmarkModifiedAt = 0,
         )
 
         override suspend fun readForPush(request: SyncPushRequest): SyncPushRows =

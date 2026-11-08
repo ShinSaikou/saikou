@@ -73,22 +73,39 @@ class SegmentCodecTest {
     }
 
     /**
-     * The fixture is format 3 as a text editor shows it once gunzipped. Encoding the sample rows must
+     * The fixture is format 4 as a text editor shows it once gunzipped. Encoding the sample rows must
      * give it byte for byte, so a renamed property or row is a failing test rather than a new wire,
-     * and a build still writing an older format fails here: format 3 carries the merged group line
-     * (R163), which an older reader must refuse (R81 item 10) rather than read and drop.
+     * and a build still writing an older format fails here: format 4 carries the chapter line's read
+     * and bookmark clocks (R165), which an older reader must refuse (R81 item 10) rather than read and
+     * drop.
      */
     @Test
-    fun `format 3 encodes exactly as its fixture and the fixture decodes to the sample rows`() {
+    fun `format 4 encodes exactly as its fixture and the fixture decodes to the sample rows`() {
         val fixture = fixtureText()
         val header = segmentHeader(SampleRows.full)
 
         gunzip(encode(header, SampleRows.full)) shouldBe fixture
-        fixture.lineSequence().first() shouldContain "\"format\":3,"
+        fixture.lineSequence().first() shouldContain "\"format\":4,"
+        fixture.lines().single { "\"entity\":\"chapter\"" in it } shouldContain
+            "\"readModifiedAt\":1600000000019,\"bookmarkModifiedAt\":1600000000020}"
 
         val (readHeader, rows) = decode(gzip(fixture))
         readHeader shouldBe header
         rows shouldContainExactly SampleRows.full
+    }
+
+    /**
+     * Format 3's fixture, kept as it was written (Q4): its chapter line has no read or bookmark clock
+     * and reads both as 0, a clock never stamped, which merges as before.
+     */
+    @Test
+    fun `format 3's fixture still decodes, its chapter line with both clocks 0`() {
+        val (readHeader, rows) = decode(gzip(fixtureText("format3.jsonl")))
+
+        readHeader shouldBe segmentHeader(SampleRows.full).copy(format = 3)
+        rows shouldContainExactly SampleRows.full.map(::withoutChapterClocks)
+        rows.filterIsInstance<ChapterRow>().single().readModifiedAt shouldBe 0L
+        rows.filterIsInstance<ChapterRow>().single().bookmarkModifiedAt shouldBe 0L
     }
 
     /** Format 2's fixture, kept as it was written (Q4): it has no merged group line and says nothing of merges. */
@@ -266,10 +283,14 @@ class SegmentCodecTest {
 
     // endregion
 
-    /** The sample rows a format before 3 can carry. */
-    private val olderRows = SampleRows.full.filterNot { it is MergedGroupRow }
+    /** The sample rows a format before 3 can carry, as such a file reads: no chapter clocks. */
+    private val olderRows = SampleRows.full.filterNot { it is MergedGroupRow }.map(::withoutChapterClocks)
 
-    private fun fixtureText(name: String = "format3.jsonl"): String =
+    /** [row] as a line of a format before 4 reads: a chapter's read and bookmark clocks at 0. */
+    private fun withoutChapterClocks(row: SyncRow): SyncRow =
+        if (row is ChapterRow) row.copy(readModifiedAt = 0, bookmarkModifiedAt = 0) else row
+
+    private fun fixtureText(name: String = "format4.jsonl"): String =
         requireNotNull(javaClass.getResourceAsStream("/$name")) { "$name is missing" }
             .use { it.readBytes().decodeToString() }
 

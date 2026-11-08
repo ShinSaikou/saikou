@@ -5,14 +5,15 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 
 /*
- * The rows of format 3 (Q4; format 1 plus the manga line's edit of phase 5 unit ED and the merged
- * group line of R163). Local ids never leave the device (Q5): every row names what it is about by
- * natural key, and a child collection travels whole, keyed by its parent and decided by its own
- * clock (Q6). Clocks are epoch milliseconds; a null clock is a value the owner never set.
+ * The rows of format 4 (Q4; format 1 plus the manga line's edit of phase 5 unit ED, the merged
+ * group line of R163 and the chapter line's read and bookmark clocks of R165). Local ids never leave
+ * the device (Q5): every row names what it is about by natural key, and a child collection travels
+ * whole, keyed by its parent and decided by its own clock (Q6). Clocks are epoch milliseconds; a
+ * null clock is a value the owner never set.
  *
- * Property names are the JSON keys. Renaming one changes the wire, which `format1.jsonl`,
- * `format2.jsonl` and `format3.jsonl` in the tests pin; a field or row added later raises
- * [SyncFormat.CURRENT] and gets a written rule for rows of the older formats.
+ * Property names are the JSON keys. Renaming one changes the wire, which `format1.jsonl` to
+ * `format4.jsonl` in the tests pin; a field or row added later raises [SyncFormat.CURRENT] and gets
+ * a written rule for rows of the older formats.
  */
 
 /** A manga across devices: its source id and its url on that source. */
@@ -117,7 +118,9 @@ data class MangaRow(
  * A chapter, live or soft-deleted. `version` decides the source values (name to volume).
  * [sourceOrder] is not merged by any rule; a device that does not have the chapter yet uses it
  * when it inserts the row, to place it among its own, so the chapter list keeps the source's order
- * until the next update.
+ * until the next update. Format 4 adds [readModifiedAt] and [bookmarkModifiedAt], the clocks that
+ * decide `read` and `bookmark` (R165); a line of format 1 to 3 has neither and reads them as 0, a
+ * clock never stamped, so it merges as it did before: equal clocks take the OR.
  */
 @Serializable
 @SerialName("chapter")
@@ -136,6 +139,8 @@ data class ChapterRow(
     val sourceOrder: Long,
     val deletedAt: Long?,
     val restoredAt: Long?,
+    val readModifiedAt: Long = 0,
+    val bookmarkModifiedAt: Long = 0,
 ) : SyncRow() {
     override val kind: RowKind get() = RowKind.CHAPTER
     override val parentManga: MangaKey get() = key.manga

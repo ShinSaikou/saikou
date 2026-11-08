@@ -20,9 +20,13 @@ object SyncFormat {
      * Format 3 (R163) adds the `merged_group` line. A file of format 1 or 2 has none and says nothing
      * about merges, so it leaves every group as it is. A build older than format 3 stops at the header
      * of a format 3 file, and it runs push and compaction only after a pull that returned, so it never
-     * rewrites a snapshot without these lines.
+     * rewrites a snapshot without these lines. Format 4 (R165) adds the chapter line's
+     * `readModifiedAt` and `bookmarkModifiedAt`, so an unread and a removed bookmark travel. A line
+     * of format 1 to 3 has neither and reads them as 0, which merges as before: equal clocks take the
+     * OR. A build older than format 4 stops at the header of a format 4 file in the same way, so it
+     * never writes a snapshot that drops these clocks.
      */
-    const val CURRENT: Int = 3
+    const val CURRENT: Int = 4
 
     /** The most raw change log rows one segment folds: `SyncChangeLogRepositoryImpl.MAX_LIMIT` (Q3). */
     const val MAX_RAW_ROWS: Int = 5_000

@@ -51,7 +51,7 @@ class MigrationToVersion4Test {
         migrate()
 
         scalar("PRAGMA user_version") shouldBe Database.Schema.version.toString()
-        rows("SELECT type, name, sql FROM sqlite_master ORDER BY type, name", 3)
+        withoutVersion6(rows("SELECT type, name, sql FROM sqlite_master ORDER BY type, name", 3))
             .filterNot { MERGED_ENTRIES in it[1].orEmpty() } shouldContainExactly
             objectsBefore.filterNot { it[0] == "index" && it[1] in DROPPED }
         objectsBefore.map { it[1] }.filter { it in DROPPED } shouldContainExactly DROPPED.sorted()

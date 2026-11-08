@@ -340,6 +340,8 @@ class SyncStoreImpl(
                 deletedAt = chapter.deletedAt,
                 restoredAt = chapter.restoredAt,
                 bookmarkNotesModifiedAt = chapter.bookmarkNotesModifiedAt,
+                readModifiedAt = chapter.readModifiedAt,
+                bookmarkModifiedAt = chapter.bookmarkModifiedAt,
             )
             return db.chaptersQueries.selectLastInsertedRowId().awaitAsOne().also { raisedChapters += it }
         }
@@ -360,6 +362,8 @@ class SyncStoreImpl(
                 deletedAt = chapter.deletedAt,
                 restoredAt = chapter.restoredAt,
                 bookmarkNotesModifiedAt = chapter.bookmarkNotesModifiedAt,
+                readModifiedAt = chapter.readModifiedAt,
+                bookmarkModifiedAt = chapter.bookmarkModifiedAt,
                 chapterId = chapter.id,
             )
         }
@@ -693,6 +697,8 @@ private fun Chapters.toStored() = StoredChapter(
     deletedAt = deleted_at,
     restoredAt = restored_at,
     bookmarkNotesModifiedAt = bookmark_notes_modified_at,
+    readModifiedAt = read_modified_at,
+    bookmarkModifiedAt = bookmark_modified_at,
 )
 
 private fun History.toStored() = StoredHistory(chapterId = chapter_id, lastRead = last_read?.time, timeRead = time_read)

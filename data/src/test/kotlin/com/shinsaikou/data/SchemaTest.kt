@@ -29,10 +29,10 @@ import java.util.Properties
 import com.shinsaikou.source.model.UpdateStrategy
 
 /**
- * The current schema, version 5, created fresh on the JVM driver: the DDL the `.sq` files create,
+ * The current schema, version 6, created fresh on the JVM driver: the DDL the `.sq` files create,
  * the seeds, the foreign keys, the triggers, the views, the query plans and the column adapters
- * (05-data section 6.2). The migrations are [MigrationTest]'s, [MigrationToVersion3Test]'s and
- * [MigrationToVersion4Test]'s.
+ * (05-data section 6.2). The migrations are [MigrationTest]'s, [MigrationToVersion3Test]'s,
+ * [MigrationToVersion4Test]'s, [MigrationToVersion5Test]'s and [MigrationToVersion6Test]'s.
  */
 class SchemaTest {
 
@@ -64,8 +64,8 @@ class SchemaTest {
     // 1. Creates -------------------------------------------------------------------------------
 
     @Test
-    fun `the schema creates at version 5 with every declared object`() {
-        scalar("PRAGMA user_version") shouldBe "5"
+    fun `the schema creates at version 6 with every declared object`() {
+        scalar("PRAGMA user_version") shouldBe "6"
 
         names("table") shouldContainExactly EXPECTED_TABLES.sorted()
         names("view") shouldContainExactly listOf("historyView", "libraryView", "updatesView")
@@ -545,6 +545,8 @@ class SchemaTest {
             "update_category_modified_at",
             "update_category_restored_at",
             "update_category_version",
+            "update_chapter_bookmark_modified_at",
+            "update_chapter_read_modified_at",
             "update_chapter_restored_at",
             "update_chapter_version",
             "update_excluded_scanlator_change",
@@ -664,6 +666,8 @@ class SchemaTest {
                 deleted_at|INTEGER|0||0
                 bookmark_notes_modified_at|INTEGER|0||0
                 restored_at|INTEGER|0||0
+                read_modified_at|INTEGER|1|0|0
+                bookmark_modified_at|INTEGER|1|0|0
             """,
             "excluded_scanlators" to """
                 manga_id|INTEGER|1||0

@@ -82,6 +82,8 @@ internal object SampleRows {
             sourceOrder = 3,
             deletedAt = 1_600_000_000_009,
             restoredAt = 1_600_000_000_010,
+            readModifiedAt = 1_600_000_000_019,
+            bookmarkModifiedAt = 1_600_000_000_020,
         ),
         ChapterRemovedRow(ChapterKey(manga, "/series/42/chapter/8"), removedAt = 1_600_000_000_011),
         HistoryRow(chapter, lastRead = 1_600_000_000_012, timeRead = 345_000),

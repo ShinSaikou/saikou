@@ -6,12 +6,13 @@ import com.shinsaikou.sync.MergeFixtures.track
 import com.shinsaikou.sync.format.ChapterKey
 import com.shinsaikou.sync.merge.ChapterRecord
 import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.assertions.withClue
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 
 /**
- * The chapter rows of Q6's table, and the row for one tracker bound on both sides, each written
- * from the row's wording and each tie checked both ways round.
+ * The chapter rows of Q6's table, as R165 amends read and bookmark, and the row for one tracker
+ * bound on both sides, each written from the row's wording and each tie checked both ways round.
  */
 class ChapterMergeRulesTest {
 
@@ -21,23 +22,94 @@ class ChapterMergeRulesTest {
     private fun both(local: ChapterRecord, remote: ChapterRecord) =
         engine.mergeChapter(local, remote).also { engine.mergeChapter(remote, local).value shouldBe it.value }
 
-    // Row: Chapter read, bookmark | none | OR.
+    // Row: Chapter read, bookmark | read_modified_at, bookmark_modified_at | the newer clock's value;
+    // tie, both 0 included: OR (R165). The merged clock is the greater.
+
+    /** One side's value and clock against the other's, and what both devices must store. */
+    private data class ClockCase(
+        val name: String,
+        val local: Boolean,
+        val localClock: Long,
+        val remote: Boolean,
+        val remoteClock: Long,
+        val value: Boolean,
+        val clock: Long,
+    )
+
+    private val clockCases = listOf(
+        ClockCase("a later false beats an earlier true", false, 200L, true, 100L, value = false, clock = 200L),
+        ClockCase("a later true beats an earlier false", true, 200L, false, 100L, value = true, clock = 200L),
+        ClockCase("a stamped false beats a true never stamped", false, 100L, true, 0L, value = false, clock = 100L),
+        ClockCase("a stamped true beats a false never stamped", true, 100L, false, 0L, value = true, clock = 100L),
+        ClockCase("equal clocks take the OR", false, 100L, true, 100L, value = true, clock = 100L),
+        ClockCase("both clocks 0, as before format 4, take the OR", false, 0L, true, 0L, value = true, clock = 0L),
+        ClockCase("equal clocks, both false, stay false", false, 100L, false, 100L, value = false, clock = 100L),
+        ClockCase("both clocks 0, both false, stay false", false, 0L, false, 0L, value = false, clock = 0L),
+        ClockCase("equal clocks, both true, stay true", true, 100L, true, 100L, value = true, clock = 100L),
+    )
 
     @Test
-    fun `read and bookmark are each the OR of the two sides`() {
-        val read = chapter.copy(read = true)
-        val bookmarked = chapter.copy(bookmark = true)
+    fun `read takes the newer clock's value, and equal clocks take the OR`() {
+        for (case in clockCases) {
+            withClue("read: ${case.name}") {
+                val merged = both(
+                    chapter.copy(read = case.local, readModifiedAt = case.localClock),
+                    chapter.copy(read = case.remote, readModifiedAt = case.remoteClock),
+                )
+                merged.value.read shouldBe case.value
+                merged.value.readModifiedAt shouldBe case.clock
+                merged.fieldsFromRemote shouldBe if (case.value != case.local) setOf("read") else emptySet()
+            }
+        }
+    }
 
-        val merged = both(read, bookmarked)
+    @Test
+    fun `bookmark takes the newer clock's value, and equal clocks take the OR`() {
+        for (case in clockCases) {
+            withClue("bookmark: ${case.name}") {
+                val merged = both(
+                    chapter.copy(bookmark = case.local, bookmarkModifiedAt = case.localClock),
+                    chapter.copy(bookmark = case.remote, bookmarkModifiedAt = case.remoteClock),
+                )
+                merged.value.bookmark shouldBe case.value
+                merged.value.bookmarkModifiedAt shouldBe case.clock
+                merged.fieldsFromRemote shouldBe if (case.value != case.local) setOf("bookmark") else emptySet()
+            }
+        }
+    }
 
-        merged.value.read shouldBe true
-        merged.value.bookmark shouldBe true
+    @Test
+    fun `read and bookmark are decided apart, each by its own clock`() {
+        // Local unread the chapter last; remote removed the bookmark last.
+        val local = chapter.copy(read = false, readModifiedAt = 200L, bookmark = true, bookmarkModifiedAt = 50L)
+        val remote = chapter.copy(read = true, readModifiedAt = 100L, bookmark = false, bookmarkModifiedAt = 300L)
+
+        val merged = both(local, remote)
+
+        merged.value.read shouldBe false
+        merged.value.readModifiedAt shouldBe 200L
+        merged.value.bookmark shouldBe false
+        merged.value.bookmarkModifiedAt shouldBe 300L
         merged.fieldsFromRemote shouldBe setOf("bookmark")
     }
 
     @Test
-    fun `an unread does not travel, which is the row's known limit`() {
-        both(chapter.copy(read = false, version = 9L), chapter.copy(read = true)).value.read shouldBe true
+    fun `a read clock never decides the bookmark, nor a bookmark clock the read`() {
+        val local = chapter.copy(read = false, readModifiedAt = 900L, bookmark = false, bookmarkModifiedAt = 0L)
+        val remote = chapter.copy(read = true, readModifiedAt = 0L, bookmark = true, bookmarkModifiedAt = 0L)
+
+        val merged = both(local, remote).value
+
+        merged.read shouldBe false
+        merged.bookmark shouldBe true
+    }
+
+    @Test
+    fun `an unread with the newer clock travels whatever the versions say`() {
+        val unread = chapter.copy(read = false, readModifiedAt = 500L, version = 1L)
+        val read = chapter.copy(read = true, readModifiedAt = 400L, version = 9L)
+
+        both(read, unread).value.read shouldBe false
     }
 
     // Row: Chapter last page read | none | max, with no reset to zero.
@@ -47,6 +119,22 @@ class ChapterMergeRulesTest {
         val merged = both(chapter.copy(read = true, lastPageRead = 12L), chapter.copy(read = true, lastPageRead = 30L))
 
         merged.value.lastPageRead shouldBe 30L
+    }
+
+    /**
+     * R165 item 4 asked for the unread side's page when an unread beats a read, and it is not built:
+     * that rule is not associative (MergePropertiesTest found three rows it groups two ways), so a
+     * compaction could store a different page from the device that merged the rows one by one.
+     */
+    @Test
+    fun `the last page read stays the max when an unread beats a read`() {
+        val unread = chapter.copy(read = false, readModifiedAt = 200L, lastPageRead = 3L)
+        val read = chapter.copy(read = true, readModifiedAt = 100L, lastPageRead = 25L)
+
+        val merged = both(unread, read).value
+
+        merged.read shouldBe false
+        merged.lastPageRead shouldBe 25L
     }
 
     // Row: Chapter dateFetch | none | the earliest non-zero value.

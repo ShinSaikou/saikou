@@ -78,6 +78,8 @@ class MergeColumnCoverageTest {
                 "volume" to "ChapterRecord.volume", "deleted_at" to "ChapterRecord.deletedAt",
                 "restored_at" to "ChapterRecord.restoredAt",
                 "bookmark_notes_modified_at" to "ChapterRecord.bookmarkNotesModifiedAt",
+                "read_modified_at" to "ChapterRecord.readModifiedAt",
+                "bookmark_modified_at" to "ChapterRecord.bookmarkModifiedAt",
             ),
             excluded = mapOf(
                 "_id" to LOCAL_ID,
@@ -186,7 +188,9 @@ class MergeColumnCoverageTest {
             "categoriesModifiedAt", "exclusionsModifiedAt", "priorityModifiedAt", "trackersModifiedAt",
             "detailsModifiedAt",
         ),
-        ChapterRecord::class.java to setOf("version", "restoredAt", "bookmarkNotesModifiedAt"),
+        ChapterRecord::class.java to setOf(
+            "version", "restoredAt", "bookmarkNotesModifiedAt", "readModifiedAt", "bookmarkModifiedAt",
+        ),
         CategoryRecord::class.java to setOf("modifiedAt", "restoredAt"),
         MergedGroupRecord::class.java to setOf("modifiedAt"),
     )

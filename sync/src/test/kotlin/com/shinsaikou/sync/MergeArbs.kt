@@ -35,6 +35,9 @@ import kotlinx.serialization.json.JsonPrimitive
  */
 internal object MergeArbs {
     val clock: Arb<Long?> = Arb.element(null, 1L, 2L, 3L)
+
+    /** A clock that is never null, where 0 is a value never stamped: a chapter's read and bookmark clocks. */
+    val ownerClock: Arb<Long> = Arb.element(0L, 1L, 2L, 3L)
     val version: Arb<Long> = Arb.element(0L, 1L, 2L)
     val date: Arb<Long> = Arb.element(0L, 1L, 2L)
     val text: Arb<String> = Arb.element("", "a", "b", "ab")
@@ -134,7 +137,9 @@ internal object MergeArbs {
         ChapterRecord(
             key = MergeFixtures.CHAPTER_KEY,
             read = Arb.boolean().bind(),
+            readModifiedAt = ownerClock.bind(),
             bookmark = Arb.boolean().bind(),
+            bookmarkModifiedAt = ownerClock.bind(),
             lastPageRead = small.bind(),
             dateFetch = date.bind(),
             version = version.bind(),

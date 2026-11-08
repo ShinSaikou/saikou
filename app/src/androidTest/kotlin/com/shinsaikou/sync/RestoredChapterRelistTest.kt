@@ -263,7 +263,9 @@ class RestoredChapterRelistTest {
     private fun record(row: Chapters) = ChapterRecord(
         key = ChapterKey(MangaKey(SOURCE_ID, entryUrl), row.url),
         read = row.read,
+        readModifiedAt = row.read_modified_at,
         bookmark = row.bookmark,
+        bookmarkModifiedAt = row.bookmark_modified_at,
         lastPageRead = row.last_page_read,
         dateFetch = row.date_fetch,
         version = row.version,

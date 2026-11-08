@@ -1,0 +1,25 @@
+-- Fresh: schema version 5 to 6, the read and bookmark clocks (R165 item 1), so an unread and a
+-- removed bookmark travel through sync. Version 5 is the committed schemas/5.db; verifyMigrations
+-- applies this file to it and diffs the result against the .sq files, so every statement here
+-- mirrors one in chapters.sq, where the reasons are. Every existing row reads 0 in both columns, a
+-- clock never stamped, which the merge treats as it treated every row before: equal clocks take the
+-- OR. No row moves and the change log gains nothing.
+
+ALTER TABLE chapters ADD COLUMN read_modified_at INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE chapters ADD COLUMN bookmark_modified_at INTEGER NOT NULL DEFAULT 0;
+
+CREATE TRIGGER update_chapter_read_modified_at AFTER UPDATE OF read ON chapters
+WHEN new.is_syncing = 0 AND new.read != old.read
+BEGIN
+    UPDATE chapters
+    SET read_modified_at = max(strftime('%s', 'now') * 1000, read_modified_at + 1)
+    WHERE _id = new._id;
+END;
+
+CREATE TRIGGER update_chapter_bookmark_modified_at AFTER UPDATE OF bookmark ON chapters
+WHEN new.is_syncing = 0 AND new.bookmark != old.bookmark
+BEGIN
+    UPDATE chapters
+    SET bookmark_modified_at = max(strftime('%s', 'now') * 1000, bookmark_modified_at + 1)
+    WHERE _id = new._id;
+END;

@@ -112,6 +112,8 @@ internal fun mapChapter(
     deletedAt: Long?,
     @Suppress("UNUSED_PARAMETER") bookmarkNotesModifiedAt: Long?,
     @Suppress("UNUSED_PARAMETER") restoredAt: Long?,
+    @Suppress("UNUSED_PARAMETER") readModifiedAt: Long,
+    @Suppress("UNUSED_PARAMETER") bookmarkModifiedAt: Long,
 ): Chapter = Chapter(
     id = id,
     mangaId = mangaId,

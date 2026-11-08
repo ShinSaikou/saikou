@@ -91,6 +91,8 @@ class RowMappingTest {
         deletedAt = 306,
         restoredAt = 307,
         bookmarkNotesModifiedAt = 308,
+        readModifiedAt = 309,
+        bookmarkModifiedAt = 310,
     )
 
     @Test
@@ -167,6 +169,8 @@ class RowMappingTest {
 
         row.key shouldBe ChapterKey(key, chapter.url)
         row.sourceOrder shouldBe 305L
+        row.readModifiedAt shouldBe 309L
+        row.bookmarkModifiedAt shouldBe 310L
         notesRow.notes shouldBe listOf(NoteEntry(2, "two", 201), NoteEntry(4, "four", 401))
         notesRow.bookmarkNotesModifiedAt shouldBe 308L
 

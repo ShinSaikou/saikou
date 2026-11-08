@@ -7,8 +7,8 @@ import tachiyomi.domain.chapter.model.Chapter
 /**
  * Extracted from upstream's private `ChapterRepositoryImpl.mapChapter` so the fresh repositories
  * under `com.shinsaikou.data` can read chapter rows too (05-data 4.1). Modified: the tuple gains
- * `volume` and `deletedAt`, then schema version 2's two clocks, which the domain model does not
- * carry (phase 3 unit C).
+ * `volume` and `deletedAt`, then schema version 2's two clocks (phase 3 unit C) and version 6's read
+ * and bookmark clocks (R165), which the domain model does not carry.
  */
 object ChapterMapper {
     @Suppress("UNUSED_PARAMETER")
@@ -33,6 +33,8 @@ object ChapterMapper {
         deletedAt: Long?,
         bookmarkNotesModifiedAt: Long?,
         restoredAt: Long?,
+        readModifiedAt: Long,
+        bookmarkModifiedAt: Long,
     ): Chapter = Chapter(
         id = id,
         mangaId = mangaId,

@@ -85,9 +85,14 @@ data class TrackRecord(
 data class ChapterRecord(
     val key: ChapterKey,
 
-    // Progress, decided by no clock.
+    // Read and bookmark, each decided by its own clock (R165). Unlike the other clocks these are
+    // never null: 0 is a value never stamped, from before schema version 6 or format 4.
     val read: Boolean,
+    val readModifiedAt: Long,
     val bookmark: Boolean,
+    val bookmarkModifiedAt: Long,
+
+    // Progress, decided by no clock.
     val lastPageRead: Long,
     val dateFetch: Long,
 
