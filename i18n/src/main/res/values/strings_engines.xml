@@ -61,6 +61,26 @@
     <string name="notification_tracker_sign_in_expired">%1$s needs a new sign-in</string>
     <string name="notification_tracker_sign_in_expired_detail">Your reading progress is kept and sent once you sign in again.</string>
 
+    <!-- Settings > Experimental's automatic extension updates: the one notification a daily run posts when it updated an extension or could not. Each %1$s is a list of extension names; the counts replace them while notification content is hidden. -->
+    <string name="channel_extension_updates">Extension updates</string>
+    <string name="notification_extensions_updated">Extensions updated</string>
+    <string name="notification_extensions_not_updated">Extension updates not installed</string>
+    <string name="notification_extensions_updated_names">Updated: %1$s</string>
+    <string name="notification_extensions_failed_names">Could not update: %1$s</string>
+    <string name="notification_extensions_needs_you_names">Signed with a different key, waiting for you: %1$s</string>
+    <plurals name="notification_extensions_updated_count">
+        <item quantity="one">%1$d extension updated</item>
+        <item quantity="other">%1$d extensions updated</item>
+    </plurals>
+    <plurals name="notification_extensions_failed_count">
+        <item quantity="one">%1$d extension could not update</item>
+        <item quantity="other">%1$d extensions could not update</item>
+    </plurals>
+    <plurals name="notification_extensions_needs_you_count">
+        <item quantity="one">%1$d extension update waits for you</item>
+        <item quantity="other">%1$d extension updates wait for you</item>
+    </plurals>
+
     <!-- Downloads -->
     <string name="downloads_phase2">Downloading arrives in a later phase</string>
     <string name="channel_download_progress">Download progress</string>

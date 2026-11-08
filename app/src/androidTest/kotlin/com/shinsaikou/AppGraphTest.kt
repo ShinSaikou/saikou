@@ -11,6 +11,7 @@ import kotlinx.coroutines.withTimeout
 import com.shinsaikou.domain.storage.StorageLocation
 import com.shinsaikou.downloads.export.DownloadExportWorker
 import com.shinsaikou.storage.StorageMoveWorker
+import com.shinsaikou.extensionupdate.ExtensionUpdateWorker
 import com.shinsaikou.storage.StorageNotifier
 import com.shinsaikou.ui.backup.KeptBackupCopyViewModel
 import com.shinsaikou.ui.storage.StorageLocationViewModel
@@ -1041,7 +1042,7 @@ class AppGraphTest {
      * map is the complete list of workers the app can build by hand.
      */
     @Test
-    fun workerProvidersHoldTheTwelveWorkers() {
+    fun workerProvidersHoldTheThirteenWorkers() {
         val providers = graph.workerProviders
         for (worker in WORKERS) {
             assertNotNull("no worker factory bound for ${worker.java.name}", providers[worker])
@@ -1264,6 +1265,8 @@ class AppGraphTest {
             DownloadExportWorker::class,
             // The in-app updater's download and install.
             AppUpdateWorker::class,
+            // Settings > Experimental's automatic extension updates.
+            ExtensionUpdateWorker::class,
         )
     }
 }

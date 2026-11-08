@@ -174,6 +174,9 @@ class SaikouApp : Application(), Configuration.Provider, SingletonImageLoader.Fa
 
             graph.backupScheduler.setup()
             graph.libraryUpdateScheduler.setup()
+            // The daily automatic extension updates follow their Experimental switch from here on,
+            // and the schedule matches it from this start.
+            graph.extensionUpdateScheduler.followSetting(graph.appScope)
             graph.downloadScheduler.followNetworkSetting(graph.appScope)
             if (startMode.afterWithoutExtensions) {
                 runCatching { graph.downloadScheduler.resumeAfterWithoutExtensions() }

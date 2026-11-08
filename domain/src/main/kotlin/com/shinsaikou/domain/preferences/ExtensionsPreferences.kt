@@ -29,4 +29,12 @@ class ExtensionsPreferences(preferenceStore: PreferenceStore) {
         preferenceStore.getLong(Preference.appStateKey("extension_index_last_refresh"), 0L)
 
     val autoCheckUpdates: Preference<Boolean> = preferenceStore.getBoolean("automatic_ext_updates", true)
+
+    /**
+     * Fresh, Settings > Experimental, off by default (R162 item 2). On, a daily job installs the
+     * updates the configured indexes list. App state, so it stays on this device and out of
+     * backups: a restore never starts unattended installs on another device.
+     */
+    val autoInstallUpdates: Preference<Boolean> =
+        preferenceStore.getBoolean(Preference.appStateKey("extension_auto_install_updates"), false)
 }

@@ -76,6 +76,9 @@ enum class InstallRejection {
     /** The candidate is not signed by every signer of the installed copy. */
     SIGNER_MISMATCH,
 
+    /** A download is a different package than the one it was fetched for. Refused before the copy. */
+    PACKAGE_MISMATCH,
+
     COPY_FAILED,
 
     /**

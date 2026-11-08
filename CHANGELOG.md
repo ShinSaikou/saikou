@@ -19,6 +19,11 @@ release may change behaviour.
   one of your sources reads opens that source's search for the page. Other apps, such as an
   extension's link handler or a voice search, can open a search too. Each search another app sends
   asks your sources as one you type does, and with the switch off no other app can send one.
+- **Update extensions automatically** in Settings > Experimental, off by default, checks your
+  extension stores once a day while the device is on Wi-Fi and installs the updates it finds, one at
+  a time. A notification names the extensions it updated and any it could not; tap it to open
+  Extensions. An update signed with a different key than the installed copy, or one you would have
+  to trust again, is left for you. A new version can change how a source behaves or break it.
 
 ## 0.1.3 - 2026-11-07
 

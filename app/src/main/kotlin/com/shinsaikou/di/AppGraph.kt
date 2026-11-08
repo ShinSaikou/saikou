@@ -78,6 +78,8 @@ import com.shinsaikou.extensions.ExtensionManager
 import com.shinsaikou.extensions.di.InjektBootstrap
 import com.shinsaikou.extensions.store.AddExtensionStore
 import com.shinsaikou.extensions.store.UpdateExtensionStores
+import com.shinsaikou.extensionupdate.ExtensionUpdateNotifier
+import com.shinsaikou.extensionupdate.ExtensionUpdateScheduler
 import com.shinsaikou.libraryupdate.FlatLibraryUpdate
 import com.shinsaikou.libraryupdate.LibraryUpdateScheduler
 import com.shinsaikou.migration.MigrateManga
@@ -325,6 +327,13 @@ interface AppGraph : MetroViewModelMultibindings {
 
     /** The Experimental share and search alias, which `SaikouApp` has follow its switch. */
     val searchLinksAlias: SearchLinksAlias
+
+    /**
+     * Settings > Experimental's automatic extension updates: the scheduler `SaikouApp` starts to
+     * follow the switch, and the notifier the daily worker posts through.
+     */
+    val extensionUpdateScheduler: ExtensionUpdateScheduler
+    val extensionUpdateNotifier: ExtensionUpdateNotifier
 
     /**
      * The download engine's three interfaces, which the chapter list and the download settings

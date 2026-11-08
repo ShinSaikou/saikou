@@ -1894,6 +1894,12 @@ private fun ExperimentalSection(viewModel: SettingsViewModel) {
         pref = viewModel.sourcePreferences.searchLinks,
         detailRes = R.string.settings_experimental_search_links_summary,
     )
+    // ExtensionUpdateScheduler follows the preference, so the row needs no hook to arm or cancel.
+    CheckboxRow(
+        labelRes = R.string.settings_experimental_extension_auto_update,
+        pref = viewModel.extensionsPreferences.autoInstallUpdates,
+        detailRes = R.string.settings_experimental_extension_auto_update_summary,
+    )
 }
 
 /**

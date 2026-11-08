@@ -9,6 +9,7 @@
     <string name="ext_install_rejected_downgrade">A newer version is already installed</string>
     <string name="ext_install_rejected_unsigned">The file is not signed</string>
     <string name="ext_install_rejected_signer_mismatch">Signed by a different key than the installed copy</string>
+    <string name="ext_install_rejected_package_mismatch">The download is a different extension than the one listed</string>
     <string name="ext_install_rejected_copy_failed">The file could not be copied to app storage</string>
     <string name="ext_install_rejected_unsupported_lib">Built for an extension library this version of Saikou does not load</string>
 

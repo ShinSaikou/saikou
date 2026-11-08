@@ -36,6 +36,7 @@ internal val InstallRejection.messageRes: Int
         InstallRejection.DOWNGRADE -> R.string.ext_install_rejected_downgrade
         InstallRejection.UNSIGNED -> R.string.ext_install_rejected_unsigned
         InstallRejection.SIGNER_MISMATCH -> R.string.ext_install_rejected_signer_mismatch
+        InstallRejection.PACKAGE_MISMATCH -> R.string.ext_install_rejected_package_mismatch
         InstallRejection.COPY_FAILED -> R.string.ext_install_rejected_copy_failed
         InstallRejection.UNSUPPORTED_LIB_VERSION -> R.string.ext_install_rejected_unsupported_lib
     }

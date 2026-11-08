@@ -480,6 +480,8 @@
     <string name="settings_experimental_custom_interval_summary">Lets you set how many days apart an entry is checked, from its Update interval dialog, instead of the estimate from its release dates. The library\'s Custom update interval filter finds those entries. The setting stays on this device and is not in backups. Turning this off puts every entry back on its estimate.</string>
     <string name="settings_experimental_auto_scroll">Auto-scroll in long strip</string>
     <string name="settings_experimental_auto_scroll_summary">Adds a play button to the reader\'s menu in long strip that scrolls the pages by itself at the speed you set in the reader settings. Any touch stops it, and the screen stays on while it runs. The setting stays on this device and is not in backups.</string>
+    <string name="settings_experimental_extension_auto_update">Update extensions automatically</string>
+    <string name="settings_experimental_extension_auto_update_summary">Once a day on Wi-Fi, Saikou checks your extension stores and installs the updates it finds. An update signed with a different key still waits for you. A new version can change how a source behaves or break it.</string>
     <string name="settings_theme">Theme</string>
     <string name="settings_theme_mode">Light and dark</string>
     <string name="settings_tablet_ui">Two pane layout</string>

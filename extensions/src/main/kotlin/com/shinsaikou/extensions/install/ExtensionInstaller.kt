@@ -53,6 +53,11 @@ class ExtensionInstaller(
 
             emit(InstallStep.Installing)
             val archive = loader.readArchive(temp) ?: throw InstallFailedException(InstallRejection.NOT_AN_EXTENSION)
+            // The loader writes a file under the package it carries and compares signers only with a
+            // copy of that package already installed. A download for one package that turned out to
+            // be another, not installed yet, would otherwise be written unchecked and load trusted at
+            // the next start if any configured key signed it.
+            if (archive.packageName != packageName) throw InstallFailedException(InstallRejection.PACKAGE_MISMATCH)
             // Trust is decided at load time, but an unsigned APK never reaches the .ext directory.
             if (archive.signerFingerprints.isEmpty()) throw InstallFailedException(InstallRejection.UNSIGNED)
 
