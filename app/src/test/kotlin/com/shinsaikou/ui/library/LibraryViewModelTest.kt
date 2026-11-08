@@ -8,7 +8,6 @@ import com.shinsaikou.domain.chapter.interactor.SetReadStatus
 import com.shinsaikou.domain.download.DownloadedChapters
 import com.shinsaikou.domain.download.model.DownloadQueueEntry
 import com.shinsaikou.domain.download.model.DownloadState
-import com.shinsaikou.domain.error.ErrorKey
 import com.shinsaikou.domain.library.interactor.FilterLibrary
 import com.shinsaikou.domain.library.interactor.GetLibraryItems
 import com.shinsaikou.domain.library.interactor.SetManualLibraryOrder
@@ -20,12 +19,9 @@ import com.shinsaikou.domain.merged.interactor.MergeEntries
 import com.shinsaikou.domain.preferences.LibraryPreferences
 import com.shinsaikou.downloads.DownloadQueue
 import com.shinsaikou.i18n.R
-import com.shinsaikou.libraryupdate.LibraryUpdateError
-import com.shinsaikou.libraryupdate.LibraryUpdateErrorStore
 import com.shinsaikou.libraryupdate.LibraryUpdateScheduler
 import com.shinsaikou.libraryupdate.LibraryUpdateWorker
 import com.shinsaikou.source.CatalogueSource
-import com.shinsaikou.source.Source
 import com.shinsaikou.source.SourceManager
 import com.shinsaikou.source.StubSource
 import com.shinsaikou.source.model.MangaStatus
@@ -36,7 +32,6 @@ import com.shinsaikou.ui.fixture.RecordingReadChapterCleanup
 import com.shinsaikou.ui.fixture.deletingSetReadStatus
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.types.shouldBeInstanceOf
 import io.kotest.matchers.types.shouldBeSameInstanceAs
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -98,12 +93,6 @@ class LibraryViewModelTest {
     private val sourceManager = mockk<SourceManager>()
     private val libraryUpdateScheduler = mockk<LibraryUpdateScheduler>()
 
-    /**
-     * Mocked rather than real: the store's own `load()` hardcodes
-     * `kotlinx.coroutines.Dispatchers.IO`, which a test scheduler cannot drive.
-     */
-    private val errorStore = mockk<LibraryUpdateErrorStore>()
-    private val errorsFlow = MutableStateFlow<List<LibraryUpdateError>>(emptyList())
     private val getCategories = mockk<GetCategories>()
     private val setMangaCategories = mockk<SetMangaCategories>()
     private val setReadStatus = mockk<SetReadStatus>()
@@ -141,10 +130,8 @@ class LibraryViewModelTest {
         Dispatchers.setMain(testDispatcher)
         // Runs wait only in a start without extensions, which one test sets up.
         every { libraryUpdateScheduler.isPaused } returns false
-        coEvery { errorStore.load() } returns Unit
         // Unranked unless a test ranks the title.
         coEvery { getScanlatorPriority.await(any()) } returns emptyMap()
-        every { errorStore.errors } returns errorsFlow
         every { downloadQueue.subscribe() } returns queueRows
         every { downloadedChapters.subscribeByMangaId(any()) } answers {
             flowOf(downloadedIds[firstArg()].orEmpty())
@@ -1098,27 +1085,6 @@ class LibraryViewModelTest {
         viewModel.state.value.selection shouldBe emptySet()
     }
 
-    @Test
-    fun `Retry on the update errors starts an update over the failed entries`() = runTest(testDispatcher) {
-        feed(emptyList())
-        errorsFlow.value = listOf(
-            updateError(4L, "Fixture 4", sourceId = 1L),
-            updateError(9L, "Fixture 9", sourceId = 2L),
-        )
-        coEvery { libraryUpdateScheduler.startNow(mangaIds = any()) } returns false
-
-        val viewModel = viewModel()
-        advanceUntilIdle()
-
-        viewModel.events.test {
-            viewModel.retryUpdateErrors()
-            advanceUntilIdle()
-
-            awaitItem() shouldBe LibraryViewModel.Event.Snackbar(R.string.library_update_already_running)
-        }
-        coVerify(exactly = 1) { libraryUpdateScheduler.startNow(null, false, listOf(4L, 9L)) }
-    }
-
     /** The ids travel in the run's input, which WorkManager caps, so a larger choice asks for fewer. */
     @Test
     fun `more chosen entries than a run can name start nothing and say how many it can`() = runTest(testDispatcher) {
@@ -1138,31 +1104,6 @@ class LibraryViewModelTest {
             )
         }
         coVerify(exactly = 0) { libraryUpdateScheduler.startNow(any(), any(), any()) }
-    }
-
-    /**
-     * More failed entries than a run can name: Retry takes the first of them. The rows of the
-     * entries that run checks leave the front of the list, so the next Retry takes the rest.
-     */
-    @Test
-    fun `Retry over more failed entries than a run can name updates as many as it can`() = runTest(testDispatcher) {
-        feed(emptyList())
-        errorsFlow.value = (1L..LibraryUpdateWorker.MAX_MANGA_IDS + 1L)
-            .map { updateError(it, "Fixture $it", sourceId = 1L) }
-        coEvery { libraryUpdateScheduler.startNow(mangaIds = any()) } returns true
-
-        val viewModel = viewModel()
-        advanceUntilIdle()
-
-        viewModel.events.test {
-            viewModel.retryUpdateErrors()
-            advanceUntilIdle()
-
-            awaitItem() shouldBe LibraryViewModel.Event.Snackbar(R.string.library_update_entries_started)
-        }
-        coVerify(exactly = 1) {
-            libraryUpdateScheduler.startNow(null, false, (1L..LibraryUpdateWorker.MAX_MANGA_IDS).toList())
-        }
     }
 
     // ---- The download menu (phase 3 unit AD) ----
@@ -2311,89 +2252,6 @@ class LibraryViewModelTest {
         viewModel.state.value.hasActiveFilters shouldBe true
     }
 
-    @Test
-    fun `the update error count reaches state from the error store`() = runTest(testDispatcher) {
-        feed(listOf(fixtureItem(id = 1L, title = "Wandering Cartographer")))
-        errorsFlow.value = listOf(updateError(mangaId = 1L, title = "Anvil", sourceId = 10L))
-
-        val viewModel = viewModel()
-        advanceUntilIdle()
-
-        // The store starts empty in a process that did not run the update, so the read is what
-        // fills it: a badge that never calls load() is a badge that is always zero.
-        coVerify(exactly = 1) { errorStore.load() }
-        viewModel.state.value.updateErrorCount shouldBe 1
-        // Written field by field, so the projection it lands beside is untouched.
-        viewModel.state.value.visibleItems.map { it.id } shouldContainExactly listOf(1L)
-
-        errorsFlow.value = errorsFlow.value + updateError(mangaId = 2L, title = "Bellows", sourceId = 20L)
-        advanceUntilIdle()
-
-        viewModel.state.value.updateErrorCount shouldBe 2
-        viewModel.state.value.visibleItems.map { it.id } shouldContainExactly listOf(1L)
-    }
-
-    @Test
-    fun `showUpdateErrors opens the sheet grouped by source`() = runTest(testDispatcher) {
-        feed(listOf(fixtureItem(id = 1L, title = "Wandering Cartographer")))
-        errorsFlow.value = listOf(
-            updateError(mangaId = 1L, title = "Zither", sourceId = 20L),
-            updateError(mangaId = 2L, title = "Anvil", sourceId = 10L),
-            updateError(mangaId = 3L, title = "Bellows", sourceId = 10L),
-        )
-        every { sourceManager.getOrStub(10L) } returns namedSource("Almanac")
-        every { sourceManager.getOrStub(20L) } returns namedSource("Beacon")
-        val viewModel = viewModel()
-        advanceUntilIdle()
-
-        viewModel.showUpdateErrors()
-        advanceUntilIdle()
-
-        val dialog = viewModel.state.value.dialog
-        dialog.shouldBeInstanceOf<LibraryViewModel.Dialog.UpdateErrors>()
-        dialog.groups.map { it.sourceName } shouldContainExactly listOf("Almanac", "Beacon")
-        dialog.groups[0].errors.map { it.title } shouldContainExactly listOf("Anvil", "Bellows")
-        dialog.groups[1].errors.map { it.title } shouldContainExactly listOf("Zither")
-    }
-
-    @Test
-    fun `showUpdateErrors carries how many entries a stopped site left unchecked`() = runTest(testDispatcher) {
-        feed(listOf(fixtureItem(id = 1L, title = "Wandering Cartographer")))
-        errorsFlow.value = listOf(
-            updateError(mangaId = 1L, title = "Zither", sourceId = 20L, key = ErrorKey.SITE_STOPPED),
-            updateError(mangaId = 2L, title = "Anvil", sourceId = 10L, key = ErrorKey.TIMEOUT),
-            updateError(mangaId = 3L, title = "Bellows", sourceId = 20L, key = ErrorKey.SITE_STOPPED),
-        )
-        every { sourceManager.getOrStub(10L) } returns namedSource("Almanac")
-        every { sourceManager.getOrStub(20L) } returns namedSource("Beacon")
-        val viewModel = viewModel()
-        advanceUntilIdle()
-
-        viewModel.showUpdateErrors()
-        advanceUntilIdle()
-
-        val dialog = viewModel.state.value.dialog
-        dialog.shouldBeInstanceOf<LibraryViewModel.Dialog.UpdateErrors>()
-        dialog.stoppedEntries shouldBe 2
-        dialog.groups.map { it.sourceName } shouldContainExactly listOf("Almanac", "Beacon")
-    }
-
-    private fun updateError(
-        mangaId: Long,
-        title: String,
-        sourceId: Long,
-        key: ErrorKey = ErrorKey.NO_CHAPTERS,
-    ) = LibraryUpdateError(
-        mangaId = mangaId,
-        title = title,
-        sourceId = sourceId,
-        key = key,
-        detail = null,
-        at = 1_000L,
-    )
-
-    private fun namedSource(name: String): Source = mockk<Source>().also { every { it.name } returns name }
-
     private fun feed(
         items: List<LibraryItem>,
         categories: List<Category> = listOf(DEFAULT_CATEGORY),
@@ -2425,7 +2283,6 @@ class LibraryViewModelTest {
         libraryPreferences = libraryPreferences,
         basePreferences = basePreferences,
         libraryUpdateScheduler = libraryUpdateScheduler,
-        errorStore = errorStore,
         dispatchers = AppDispatchers(io = testDispatcher, default = testDispatcher, main = testDispatcher),
         downloadQueue = downloadQueue,
         downloadedChapters = downloadedChapters,

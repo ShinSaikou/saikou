@@ -22,7 +22,6 @@ import com.shinsaikou.domain.merged.interactor.MergeEntries
 import com.shinsaikou.domain.preferences.LibraryPreferences
 import com.shinsaikou.downloads.DownloadQueue
 import com.shinsaikou.i18n.R
-import com.shinsaikou.libraryupdate.LibraryUpdateErrorStore
 import com.shinsaikou.libraryupdate.LibraryUpdateScheduler
 import com.shinsaikou.libraryupdate.LibraryUpdateWorker
 import com.shinsaikou.presentation.core.viewmodel.StateViewModel
@@ -36,9 +35,6 @@ import com.shinsaikou.ui.components.CategoryCheck
 import com.shinsaikou.ui.components.DownloadAction
 import com.shinsaikou.ui.components.categoryChecks
 import com.shinsaikou.ui.longPressSelection
-import com.shinsaikou.ui.util.UpdateErrorGroup
-import com.shinsaikou.ui.util.groupUpdateErrors
-import com.shinsaikou.ui.util.stoppedEntries
 import com.shinsaikou.ui.util.withCurrent
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
@@ -118,7 +114,6 @@ class LibraryViewModel(
     val libraryPreferences: LibraryPreferences,
     private val basePreferences: BasePreferences,
     private val libraryUpdateScheduler: LibraryUpdateScheduler,
-    private val errorStore: LibraryUpdateErrorStore,
     private val dispatchers: Dispatchers,
     private val downloadQueue: DownloadQueue,
     private val downloadedChapters: DownloadedChapters,
@@ -197,8 +192,6 @@ class LibraryViewModel(
          * (phase 3 unit AD).
          */
         val localManga: Set<Long> = emptySet(),
-        /** How many entries the last library update run could not refresh. */
-        val updateErrorCount: Int = 0,
         /**
          * The signed-in trackers, by id: the filter tab's tracker rows and the tracker score sort
          * are offered only while there is one (phase 3 unit T3).
@@ -272,12 +265,6 @@ class LibraryViewModel(
 
         /** The selected entries to merge in selection order, which is the chapter order. */
         data class MergeSelected(val entries: List<MergeChoice>) : Dialog
-
-        /**
-         * Grouped by source once, when the sheet opens; the rows open the entry that failed.
-         * [stoppedEntries] is how many of the errors are a stopped site's, counted from the same read.
-         */
-        data class UpdateErrors(val groups: List<UpdateErrorGroup>, val stoppedEntries: Int) : Dialog
     }
 
     sealed interface Event {
@@ -376,26 +363,6 @@ class LibraryViewModel(
                 mutableState.update { it.copy(updating = running) }
             }
         }
-        // Not part of settingsChanges(): this reads no preference, and the count is written field
-        // by field for the same reason every other writer here is, so a projection landing from
-        // the default dispatcher cannot take a selection with it.
-        viewModelScope.launch {
-            errorStore.load()
-            errorStore.errors.collect { errors ->
-                mutableState.update { it.copy(updateErrorCount = errors.size) }
-            }
-        }
-    }
-
-    /** The last run's failures, grouped by source once, when the sheet opens. */
-    fun showUpdateErrors() {
-        viewModelScope.launch {
-            val errors = errorStore.errors.value
-            val groups = withContext(dispatchers.io) {
-                groupUpdateErrors(errors, sourceManager::getOrStub)
-            }
-            mutableState.update { it.copy(dialog = Dialog.UpdateErrors(groups, stoppedEntries(errors))) }
-        }
     }
 
     fun search(query: String) {
@@ -438,17 +405,6 @@ class LibraryViewModel(
         if (ids.isEmpty()) return
         clearSelection()
         startUpdateOf(withMembers(ids))
-    }
-
-    /**
-     * The error sheet's Retry: a manual run over the entries the stored errors name, as many as a
-     * run can take. A row the run checks leaves the list, or goes to its end when the entry fails
-     * again, so the next Retry takes the rest.
-     */
-    fun retryUpdateErrors() {
-        val ids = errorStore.errors.value.map { it.mangaId }.distinct().take(LibraryUpdateWorker.MAX_MANGA_IDS)
-        dismissDialog()
-        if (ids.isNotEmpty()) startUpdateOf(ids)
     }
 
     private fun startUpdateOf(ids: List<Long>) {

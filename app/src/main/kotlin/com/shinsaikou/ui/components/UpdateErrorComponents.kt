@@ -25,8 +25,8 @@ import tachiyomi.presentation.core.i18n.pluralStringResource
 import tachiyomi.presentation.core.i18n.stringResource
 
 /**
- * The pieces the Library tab and the Updates tab both show for the last library update run's
- * failures. One entry point, one notice, one list; the two screens differ only in what they host the list in.
+ * The pieces the Updates tab shows for the last library update run's failures: one entry point,
+ * one notice, one list, which its sheet hosts. The Library tab no longer shows them.
  */
 
 /**
@@ -46,7 +46,7 @@ fun UpdateErrorAction(count: Int, onClick: () -> Unit) {
 }
 
 /**
- * The rows both error surfaces show: a [ListGroupHeader] per source, then that source's entries,
+ * The rows of the error sheet: a [ListGroupHeader] per source, then that source's entries,
  * each naming its failure, with the source's own message under it for one no key names.
  * [onMigrate] puts a Migrate action on each header, for moving a source's failed entries elsewhere
  * in one go (the usual way out when the source is gone or broken).

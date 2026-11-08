@@ -4,6 +4,7 @@ import com.shinsaikou.domain.merged.model.MergedGroup
 import com.shinsaikou.domain.merged.model.MergedMember
 import com.shinsaikou.domain.preferences.LibraryPreferences
 import com.shinsaikou.domain.preferences.UiPreferences
+import com.shinsaikou.domain.preferences.UpcomingPreferences
 import com.shinsaikou.source.model.MangaStatus
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
@@ -11,6 +12,7 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -163,6 +165,8 @@ class UpcomingMergedTest {
             mockk<GetLibraryManga> { every { subscribe() } returns library },
             mockk { every { subscribe() } returns groups },
             LibraryPreferences(InMemoryPreferenceStore()),
+            UpcomingPreferences(InMemoryPreferenceStore()),
+            mockk { every { subscribe() } returns flowOf(emptyList()) },
             UiPreferences(InMemoryPreferenceStore()),
             AppDispatchers(io = testDispatcher, default = testDispatcher, main = testDispatcher),
         )

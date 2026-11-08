@@ -7,6 +7,7 @@ import com.shinsaikou.source.model.UpdateStrategy
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.shouldBeInstanceOf
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
@@ -48,7 +49,8 @@ class UpcomingUiModelTest {
         vararg library: LibraryManga,
         included: Set<Long> = emptySet(),
         excluded: Set<Long> = emptySet(),
-    ) = upcomingEntries(library.toList(), included, excluded, startOfToday).map { it.id }
+        filter: UpcomingViewModel.Filter = UpcomingViewModel.Filter(),
+    ) = upcomingEntries(library.toList(), included, excluded, startOfToday, filter = filter).map { it.id }
 
     @Test
     fun `ongoing and publishing finished entries are listed`() {
@@ -116,6 +118,81 @@ class UpcomingUiModelTest {
     fun `an empty included set lists entries in any category or none`() {
         entries(item(1L, categories = listOf(9L)), item(2L, categories = emptyList())) shouldContainExactly
             listOf(1L, 2L)
+    }
+
+    @Test
+    fun `the filter's included categories keep only entries in them`() {
+        entries(
+            item(1L, categories = listOf(5L)),
+            item(2L, categories = listOf(9L)),
+            item(3L, categories = listOf(9L, 5L)),
+            filter = UpcomingViewModel.Filter(included = setOf(5L)),
+        ) shouldContainExactly listOf(1L, 3L)
+    }
+
+    @Test
+    fun `the filter's excluded categories drop entries in them`() {
+        entries(
+            item(1L, categories = listOf(5L)),
+            item(2L, categories = listOf(9L)),
+            item(3L, categories = listOf(9L, 5L)),
+            filter = UpcomingViewModel.Filter(excluded = setOf(5L)),
+        ) shouldContainExactly listOf(2L)
+    }
+
+    @Test
+    fun `the filter's excluded categories beat its included ones`() {
+        entries(
+            item(1L, categories = listOf(5L, 6L)),
+            item(2L, categories = listOf(5L)),
+            filter = UpcomingViewModel.Filter(included = setOf(5L), excluded = setOf(6L)),
+        ) shouldContainExactly listOf(2L)
+    }
+
+    @Test
+    fun `an uncategorised entry counts as category 0 and is kept by an included 0`() {
+        entries(
+            item(1L, categories = listOf(0L)),
+            item(2L, categories = listOf(5L)),
+            filter = UpcomingViewModel.Filter(included = setOf(0L)),
+        ) shouldContainExactly listOf(1L)
+    }
+
+    @Test
+    fun `an uncategorised entry counts as category 0 and is dropped by an excluded 0`() {
+        entries(
+            item(1L, categories = listOf(0L)),
+            item(2L, categories = listOf(5L)),
+            filter = UpcomingViewModel.Filter(excluded = setOf(0L)),
+        ) shouldContainExactly listOf(2L)
+    }
+
+    @Test
+    fun `an empty filter lists every entry`() {
+        entries(item(1L, categories = listOf(0L)), item(2L, categories = listOf(5L))) shouldContainExactly
+            listOf(1L, 2L)
+    }
+
+    @Test
+    fun `the filter and the update categories must both pass`() {
+        entries(
+            item(1L, categories = listOf(5L, 7L)),
+            item(2L, categories = listOf(5L)),
+            item(3L, categories = listOf(7L)),
+            item(4L, categories = listOf(5L, 8L)),
+            included = setOf(5L),
+            excluded = setOf(8L),
+            filter = UpcomingViewModel.Filter(included = setOf(5L, 7L), excluded = setOf(7L)),
+        ) shouldContainExactly listOf(2L)
+    }
+
+    @Test
+    fun `an entry the update categories drop stays dropped when the filter includes it`() {
+        entries(
+            item(1L, categories = listOf(5L)),
+            excluded = setOf(5L),
+            filter = UpcomingViewModel.Filter(included = setOf(5L)),
+        ).shouldBeEmpty()
     }
 
     @Test
@@ -255,5 +332,28 @@ class UpcomingUiModelTest {
 
         UpcomingUiModel.Item(manga).key shouldBe 7L
         UpcomingUiModel.Header(today, 1).key shouldBe "upcoming-header-2026-11-10"
+    }
+
+    @Test
+    fun `no models give no days`() {
+        upcomingDays(emptyList()) shouldBe emptyMap()
+    }
+
+    @Test
+    fun `each day maps to its count and the position of its header in the list`() {
+        val sorted = listOf(
+            item(1L, nextUpdate = startOfToday + 2 * hour),
+            item(2L, nextUpdate = startOfToday + 5 * hour),
+            item(3L, nextUpdate = startOfToday + day + hour),
+        ).map { it.manga }
+        val models = upcomingUiModels(sorted, zone)
+
+        val days = upcomingDays(models)
+
+        days shouldBe mapOf(
+            today to UpcomingDay(count = 2, headerIndex = 0),
+            LocalDate(2026, 11, 11) to UpcomingDay(count = 1, headerIndex = 3),
+        )
+        days.values.forEach { models[it.headerIndex].shouldBeInstanceOf<UpcomingUiModel.Header>() }
     }
 }

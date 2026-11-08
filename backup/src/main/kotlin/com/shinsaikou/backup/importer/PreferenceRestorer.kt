@@ -6,6 +6,7 @@ import com.shinsaikou.domain.extension.ExtensionStoreDuplicates
 import com.shinsaikou.domain.extension.repository.ExtensionStoreRepository
 import com.shinsaikou.domain.preferences.DownloadPreferences
 import com.shinsaikou.domain.preferences.LibraryPreferences
+import com.shinsaikou.domain.preferences.UpcomingPreferences
 import com.shinsaikou.domain.preferences.UpdatesPreferences
 import dev.zacsweers.metro.Inject
 import eu.kanade.tachiyomi.data.backup.models.BackupPreference
@@ -193,7 +194,7 @@ class PreferenceRestorer(
         }
 
         if (key in CATEGORY_LIST_KEYS && value is StringPreferenceValue) {
-            // The Updates filter's category lists, stored as upstream's `getLongArray` stores them:
+            // The Updates and Upcoming filters' category lists, stored as upstream's `getLongArray` stores them:
             // one comma-joined string. Remapped as the sets above are, with the same two outcomes
             // for an empty list and for a list none of whose ids resolved (phase 4 unit UF). The
             // empty list is the empty string, and the guard reads the raw string as the set branch
@@ -299,6 +300,7 @@ class PreferenceRestorer(
                 LibraryPreferences.DEFAULT_CATEGORY_PREF_KEY
 
         /** Category ids in one comma-joined string rather than a string set. */
-        val CATEGORY_LIST_KEYS: Set<String> = UpdatesPreferences.categoryPreferenceKeys
+        val CATEGORY_LIST_KEYS: Set<String> =
+            UpdatesPreferences.categoryPreferenceKeys + UpcomingPreferences.categoryPreferenceKeys
     }
 }

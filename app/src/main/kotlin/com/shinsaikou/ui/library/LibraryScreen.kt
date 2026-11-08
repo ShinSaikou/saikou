@@ -28,7 +28,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.shinsaikou.i18n.R
 import com.shinsaikou.navigation.LocalNavigator
 import com.shinsaikou.navigation.Route
-import com.shinsaikou.navigation.SettingsSection
 import com.shinsaikou.presentation.core.util.isLandscape
 import com.shinsaikou.presentation.core.util.isTabletUi
 import com.shinsaikou.ui.components.SearchTopBar
@@ -36,7 +35,6 @@ import com.shinsaikou.ui.components.TopBarAction
 import com.shinsaikou.ui.components.TopBarMenuItem
 import com.shinsaikou.ui.components.TopBarOverflow
 import com.shinsaikou.ui.components.SaikouSnackbarHost
-import com.shinsaikou.ui.components.UpdateErrorAction
 import dev.zacsweers.metrox.viewmodel.metroViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -188,7 +186,7 @@ fun LibraryScreen(searchRequest: String? = null, onSearchRequestConsumed: () -> 
                 )
             } else {
                 // Upstream's library bar: the search opens in the bar itself, in place of the title, and
-                // the actions after it stay put. The update errors come first, as they come and go.
+                // the actions after it stay put. The update errors are the Updates tab's alone.
                 SearchTopBar(
                     title = toolbarTitle(state),
                     searchQuery = searchQuery.takeIf { searchOpen },
@@ -198,12 +196,6 @@ fun LibraryScreen(searchRequest: String? = null, onSearchRequestConsumed: () -> 
                     },
                     placeholder = stringResource(R.string.library_search_hint),
                     scrollBehavior = scrollBehavior,
-                    statusAction = {
-                        UpdateErrorAction(
-                            count = state.updateErrorCount,
-                            onClick = viewModel::showUpdateErrors,
-                        )
-                    },
                     actions = {
                         // A filter that is on and invisible is how a library comes to look half
                         // missing, so the icon itself says one is applied.
@@ -316,21 +308,6 @@ fun LibraryScreen(searchRequest: String? = null, onSearchRequestConsumed: () -> 
         onSort = viewModel::setSort,
         onDisplayMode = viewModel::setDisplayMode,
         onColumns = viewModel::setColumns,
-        onOpenManga = { mangaId ->
-            viewModel.dismissDialog()
-            // The same route the grid takes, so a row of the update error sheet lands in the pane
-            // on a tablet and on its own screen on a phone.
-            openManga(mangaId)
-        },
-        onOpenLibrarySettings = {
-            viewModel.dismissDialog()
-            navigator.open(Route.Settings(SettingsSection.LIBRARY))
-        },
-        onRetryUpdateErrors = viewModel::retryUpdateErrors,
-        onMigrateUpdateErrors = { ids ->
-            viewModel.dismissDialog()
-            navigator.open(Route.MigrationConfig(ids))
-        },
     )
 }
 

@@ -28,7 +28,9 @@ private val UPCOMING_STATUSES = setOf(MangaStatus.ONGOING.code.toLong(), MangaSt
 /**
  * The entries with a release predicted from [startOfToday] on, soonest first: upstream's statuses,
  * less what no update would ever check, an entry only fetched once and one the update's category
- * settings leave out. An entry never fetched has a next update of 0 and so is not here.
+ * settings leave out, and then upstream's own Filter by category ([filter]), where an entry in no
+ * category counts as in the default one, as upstream's query has it. An entry never fetched has a
+ * next update of 0 and so is not here.
  *
  * A merged title of [groups] is one entry: its main entry at the earliest date of its members that
  * pass, a member with Check for updates off counting for nothing. A title whose main entry is not
@@ -40,6 +42,7 @@ fun upcomingEntries(
     excluded: Set<Long>,
     startOfToday: Long,
     groups: List<MergedGroup> = emptyList(),
+    filter: UpcomingViewModel.Filter = UpcomingViewModel.Filter(),
 ): List<Manga> {
     val upcoming = library.filter { item ->
         val manga = item.manga
@@ -47,7 +50,9 @@ fun upcomingEntries(
             manga.status in UPCOMING_STATUSES &&
             manga.updateStrategy != UpdateStrategy.ONLY_FETCH_ONCE &&
             item.categories.none { it in excluded } &&
-            (included.isEmpty() || item.categories.any { it in included })
+            (included.isEmpty() || item.categories.any { it in included }) &&
+            item.categories.none { it in filter.excluded } &&
+            (filter.included.isEmpty() || item.categories.any { it in filter.included })
     }
     val entries = if (groups.isEmpty()) upcoming.map { it.manga } else mergedTitles(upcoming, library, groups)
     return entries.sortedBy { it.nextUpdate }
@@ -74,6 +79,18 @@ private fun mergedTitles(
         .map { (mainId, members) ->
             mains.getValue(mainId).copy(nextUpdate = members.minOf { it.manga.nextUpdate })
         }
+}
+
+/** A day of the list as the calendar sees it: how many entries it has, and where its header is. */
+data class UpcomingDay(val count: Int, val headerIndex: Int)
+
+/** Each day [models] has a header for, keyed by its date, for the calendar's dots and its taps. */
+fun upcomingDays(models: List<UpcomingUiModel>): Map<LocalDate, UpcomingDay> {
+    val days = HashMap<LocalDate, UpcomingDay>()
+    models.forEachIndexed { index, model ->
+        if (model is UpcomingUiModel.Header) days[model.date] = UpcomingDay(model.count, index)
+    }
+    return days
 }
 
 /** The list for [entries], which [upcomingEntries] answers soonest first, by the day in [zone]. */

@@ -42,14 +42,10 @@ import com.shinsaikou.ui.components.ChangeCategoryDialog
 import com.shinsaikou.ui.components.DownloadAction
 import com.shinsaikou.ui.components.DownloadDropdownMenu
 import com.shinsaikou.ui.components.ScreenTopBar
-import com.shinsaikou.ui.components.UpdateErrorList
-import com.shinsaikou.ui.components.UpdateErrorSiteStoppedNotice
 import com.shinsaikou.ui.components.selectionTopBarColors
 import tachiyomi.core.common.preference.TriState
 import tachiyomi.domain.library.model.LibraryDisplayMode
 import tachiyomi.domain.library.model.LibrarySort
-import tachiyomi.presentation.core.components.AdaptiveSheet
-import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
 
 /**
@@ -219,10 +215,6 @@ internal fun LibraryDialogs(
     onSort: (LibrarySort.Type, LibrarySort.Direction) -> Unit,
     onDisplayMode: (LibraryDisplayMode) -> Unit,
     onColumns: (Int) -> Unit,
-    onOpenManga: (Long) -> Unit,
-    onOpenLibrarySettings: () -> Unit,
-    onRetryUpdateErrors: () -> Unit,
-    onMigrateUpdateErrors: (List<Long>) -> Unit,
 ) {
     when (val dialog = state.dialog) {
         LibraryViewModel.Dialog.SettingsSheet -> LibrarySettingsSheet(
@@ -263,30 +255,6 @@ internal fun LibraryDialogs(
             onDismissRequest = onDismissRequest,
             onConfirm = onConfirmMerge,
         )
-        is LibraryViewModel.Dialog.UpdateErrors -> AdaptiveSheet(
-            onDismissRequest = onDismissRequest,
-            enableImplicitDismiss = true,
-        ) {
-            Column {
-                UpdateErrorSiteStoppedNotice(
-                    count = dialog.stoppedEntries,
-                    onOpenLibrarySettings = onOpenLibrarySettings,
-                    modifier = Modifier.padding(top = MaterialTheme.padding.medium),
-                )
-                UpdateErrorList(
-                    groups = dialog.groups,
-                    onRow = onOpenManga,
-                    onMigrate = { group -> onMigrateUpdateErrors(group.errors.map { it.mangaId }) },
-                    modifier = Modifier.heightIn(max = 420.dp),
-                )
-                TextButton(
-                    onClick = onRetryUpdateErrors,
-                    modifier = Modifier.align(Alignment.End).padding(MaterialTheme.padding.small),
-                ) {
-                    Text(stringResource(R.string.action_retry))
-                }
-            }
-        }
         null -> Unit
     }
 }

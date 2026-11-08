@@ -141,9 +141,6 @@ fun selectionTopBarColors(): TopAppBarColors =
  *
  * [onBack] is the back arrow of a pushed screen while no search is open, as [ScreenTopBar] draws it;
  * a tab's bar passes none.
- *
- * [statusAction] is an icon that comes and goes (the library's update errors), drawn ahead of the
- * search action, so the search and [actions] stay put when it appears.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -154,7 +151,6 @@ fun SearchTopBar(
     placeholder: String,
     scrollBehavior: TopAppBarScrollBehavior? = null,
     onBack: (() -> Unit)? = null,
-    statusAction: @Composable () -> Unit = {},
     actions: @Composable () -> Unit = {},
 ) {
     val focusRequester = remember { FocusRequester() }
@@ -226,7 +222,6 @@ fun SearchTopBar(
             }
         },
         actions = {
-            statusAction()
             when {
                 searchQuery == null -> TopBarAction(
                     label = stringResource(R.string.action_search),

@@ -40,7 +40,7 @@ fun groupUpdateErrors(
 
 /**
  * The entries the run never asked because their site was stopped for the rest of it
- * ([ErrorKey.SITE_STOPPED]), which both error surfaces explain above the list with the way to update
+ * ([ErrorKey.SITE_STOPPED]), which the Updates error sheet explains above the list with the way to update
  * fewer entries at once (F7). A row stored before keys were has a null key and is not counted.
  */
 fun stoppedEntries(errors: List<LibraryUpdateError>): Int = errors.count { it.key == ErrorKey.SITE_STOPPED }

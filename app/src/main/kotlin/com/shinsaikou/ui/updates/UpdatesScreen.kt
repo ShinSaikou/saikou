@@ -20,8 +20,8 @@ import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.RemoveDone
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -38,6 +38,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -75,6 +76,7 @@ import com.shinsaikou.ui.util.relativeTimeSpanString
 import dev.zacsweers.metrox.viewmodel.metroViewModel
 import eu.kanade.presentation.components.relativeDateText
 import tachiyomi.domain.updates.model.UpdatesWithRelations
+import tachiyomi.presentation.core.components.AdaptiveSheet
 import tachiyomi.presentation.core.components.ListGroupHeader
 import tachiyomi.presentation.core.components.material.PullRefresh
 import tachiyomi.presentation.core.components.material.padding
@@ -87,7 +89,7 @@ import tachiyomi.presentation.core.screens.LoadingScreen
 /**
  * [showErrorsOnArrival] is how the library update's error notification lands here: `Route.Updates`
  * is a tab compared by identity, so the flag travels beside the route rather than on it, and the
- * screen reports back through [onErrorsShown] so a rotation does not reopen the dialog.
+ * screen reports back through [onErrorsShown] so a rotation does not reopen the sheet.
  */
 @Composable
 fun UpdatesScreen(showErrorsOnArrival: Boolean = false, onErrorsShown: () -> Unit = {}) {
@@ -161,6 +163,12 @@ fun UpdatesScreen(showErrorsOnArrival: Boolean = false, onErrorsShown: () -> Uni
                             label = stringResource(R.string.upcoming_title),
                             icon = Icons.Outlined.CalendarMonth,
                             onClick = { navigator.open(Route.Upcoming) },
+                        )
+                        // Upstream's bar ends with the library update, the same run the pull starts.
+                        TopBarAction(
+                            label = stringResource(R.string.action_update_library),
+                            icon = Icons.Outlined.Refresh,
+                            onClick = viewModel::refresh,
                         )
                     },
                 )
@@ -273,7 +281,7 @@ fun UpdatesScreen(showErrorsOnArrival: Boolean = false, onErrorsShown: () -> Uni
     }
 
     when (val dialog = state.dialog) {
-        is UpdatesViewModel.Dialog.ErrorList -> UpdateErrorsDialog(
+        is UpdatesViewModel.Dialog.ErrorList -> UpdateErrorsSheet(
             groups = dialog.groups,
             stoppedEntries = dialog.stoppedEntries,
             onDismissRequest = viewModel::dismissDialog,
@@ -327,14 +335,15 @@ private fun skippedText(skipped: Map<String, Int>): String? {
 }
 
 /**
- * The last run's failures, one row per entry under the source that failed it. The message is the
- * one the update run already resolved and stored, not a fresh mapping of a throwable this screen
- * never saw. When the run stopped asking a site, [stoppedEntries] of the rows are that site's, and
- * the notice above the list says why, with the way to Settings > Library. Retry updates these
- * entries again, and each source's Migrate opens a migration of that source's rows.
+ * The last run's failures, one row per entry under the source that failed it, in a sheet from the
+ * bottom. This tab is the one place they show. The message is the one the update run already
+ * resolved and stored, not a fresh mapping of a throwable this screen never saw. When the run
+ * stopped asking a site, [stoppedEntries] of the rows are that site's, and the notice above the
+ * list says why, with the way to Settings > Library. Retry updates these entries again, and each
+ * source's Migrate opens a migration of that source's rows. A drag down or a tap outside closes it.
  */
 @Composable
-private fun UpdateErrorsDialog(
+private fun UpdateErrorsSheet(
     groups: List<UpdateErrorGroup>,
     stoppedEntries: Int,
     onDismissRequest: () -> Unit,
@@ -343,27 +352,33 @@ private fun UpdateErrorsDialog(
     onRetry: () -> Unit,
     onMigrate: (List<Long>) -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = onDismissRequest,
-        title = { Text(stringResource(R.string.update_errors_title)) },
-        text = {
-            Column {
-                UpdateErrorSiteStoppedNotice(count = stoppedEntries, onOpenLibrarySettings = onOpenLibrarySettings)
-                UpdateErrorList(
-                    groups = groups,
-                    onRow = onRow,
-                    onMigrate = { group -> onMigrate(group.errors.map { it.mangaId }) },
-                    modifier = Modifier.heightIn(max = 360.dp),
-                )
+    AdaptiveSheet(onDismissRequest = onDismissRequest, enableImplicitDismiss = true) {
+        Column(modifier = Modifier.padding(top = MaterialTheme.padding.medium)) {
+            Text(
+                text = stringResource(R.string.update_errors_title),
+                modifier = Modifier.padding(horizontal = MaterialTheme.padding.medium),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            UpdateErrorSiteStoppedNotice(
+                count = stoppedEntries,
+                onOpenLibrarySettings = onOpenLibrarySettings,
+                modifier = Modifier.padding(top = MaterialTheme.padding.small),
+            )
+            UpdateErrorList(
+                groups = groups,
+                onRow = onRow,
+                onMigrate = { group -> onMigrate(group.errors.map { it.mangaId }) },
+                // Measured after Retry, so a short window shrinks the list rather than hiding the button.
+                modifier = Modifier.weight(1f, fill = false).heightIn(max = 420.dp),
+            )
+            TextButton(
+                onClick = onRetry,
+                modifier = Modifier.align(Alignment.End).padding(MaterialTheme.padding.small),
+            ) {
+                Text(stringResource(R.string.action_retry))
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismissRequest) { Text(stringResource(R.string.action_close)) }
-        },
-        dismissButton = {
-            TextButton(onClick = onRetry) { Text(stringResource(R.string.action_retry)) }
-        },
-    )
+        }
+    }
 }
 
 /**

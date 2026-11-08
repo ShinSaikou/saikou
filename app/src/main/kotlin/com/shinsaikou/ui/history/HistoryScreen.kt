@@ -2,6 +2,7 @@ package com.shinsaikou.ui.history
 
 import androidx.activity.compose.BackHandler
 import android.text.format.DateFormat
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -195,15 +196,18 @@ fun HistoryScreen() {
                                     item = item,
                                     selected = item.id in state.selection,
                                     selectionMode = state.selectionMode,
+                                    // Upstream's row: a tap resumes the chapter, the cover opens the entry.
                                     onOpen = {
                                         if (state.selectionMode) {
                                             viewModel.toggleSelection(item.id)
                                         } else {
-                                            navigator.open(Route.MangaDetail(item.mangaId))
+                                            viewModel.resume(item)
                                         }
                                     },
                                     onLongPress = { viewModel.toggleSelection(item.id) },
-                                    onResume = { viewModel.resume(item) },
+                                    onCover = {
+                                        navigator.open(Route.MangaDetail(item.mangaId))
+                                    }.takeUnless { state.selectionMode },
                                     onDelete = { viewModel.askRemove(item) },
                                 )
                             }
@@ -304,11 +308,12 @@ private fun HistorySelectionBar(
 }
 
 /**
- * The shared `MangaListRow` carries one trailing action and a history row needs two, resume and
- * delete, so the row fills [ListRowLayout] itself, which keeps the cover slot, the paddings and the
- * divider of every other list row.
+ * Upstream's history row: a tap resumes the chapter ([onOpen]), the cover opens the entry
+ * ([onCover], null while rows are selected), and the one button removes the entry's history. The
+ * row fills [ListRowLayout] itself, which keeps the cover slot, the paddings and the divider of
+ * every other list row.
  *
- * The trailing actions disappear while [selectionMode] is on. Leaving them would put a delete
+ * The delete button disappears while [selectionMode] is on. Leaving it would put a delete
  * button inside a row whose only job then is to be selected, exactly where a thumb reaching for
  * the row lands, and that one is not undoable.
  */
@@ -319,7 +324,7 @@ private fun HistoryRow(
     selectionMode: Boolean,
     onOpen: () -> Unit,
     onLongPress: () -> Unit,
-    onResume: () -> Unit,
+    onCover: (() -> Unit)?,
     onDelete: () -> Unit,
 ) {
     ListRowLayout(
@@ -329,7 +334,21 @@ private fun HistoryRow(
         leading = {
             MangaCover(
                 item.coverData,
-                modifier = Modifier.width(LIST_ROW_LEADING_WIDTH),
+                modifier = Modifier
+                    .width(LIST_ROW_LEADING_WIDTH)
+                    // The row resumes and the cover opens the entry, so a screen reader names the cover's
+                    // action. A long press on the cover selects, as one on the rest of the row does.
+                    .then(
+                        if (onCover != null) {
+                            Modifier.combinedClickable(
+                                onClickLabel = stringResource(R.string.history_open_entry),
+                                onLongClick = onLongPress,
+                                onClick = onCover,
+                            )
+                        } else {
+                            Modifier
+                        },
+                    ),
                 contentDescription = item.displayTitle,
             )
         },
@@ -338,7 +357,6 @@ private fun HistoryRow(
                 IconButton(onClick = onDelete) {
                     Icon(Icons.Outlined.Delete, contentDescription = stringResource(R.string.action_delete))
                 }
-                TextButton(onClick = onResume) { Text(stringResource(R.string.action_resume)) }
             }
         },
     ) {

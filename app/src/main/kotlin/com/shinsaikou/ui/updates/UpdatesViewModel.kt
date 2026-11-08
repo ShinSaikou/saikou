@@ -235,7 +235,7 @@ class UpdatesViewModel(
 
     sealed interface Dialog {
         /**
-         * Groups are built once, when the dialog opens, the way the library's picker builds its rows.
+         * Groups are built once, when the error sheet opens, the way the library's picker builds its rows.
          * [stoppedEntries] is how many of the errors are a stopped site's, counted from the same read.
          */
         data class ErrorList(val groups: List<UpdateErrorGroup>, val stoppedEntries: Int) : Dialog
@@ -330,12 +330,12 @@ class UpdatesViewModel(
     }
 
     /**
-     * The last run's failures, grouped by source once, when the dialog opens.
+     * The last run's failures, grouped by source once, when the sheet opens.
      *
      * The store is loaded here as well as in `init`, and before the read. The error notification
-     * asks for this dialog on the first frame of a cold start, when the process that ran the update
+     * asks for this sheet on the first frame of a cold start, when the process that ran the update
      * is long dead and nothing orders the read after the `init` load; the read could win and open
-     * the dialog empty. `load()` is idempotent, so the second call costs one small file read.
+     * the sheet empty. `load()` is idempotent, so the second call costs one small file read.
      */
     fun showErrors() {
         viewModelScope.launch {
@@ -353,7 +353,7 @@ class UpdatesViewModel(
     }
 
     /**
-     * The error dialog's Retry: a manual run over the entries the stored errors name, as many as a
+     * The error sheet's Retry: a manual run over the entries the stored errors name, as many as a
      * run can take. A row the run checks leaves the list, or goes to its end when the entry fails
      * again, so the next Retry takes the rest.
      */
@@ -372,9 +372,9 @@ class UpdatesViewModel(
     }
 
     /**
-     * The manual library update behind the pull gesture. `startNow` answers false when a run is
-     * already going, which is the case the KEEP policy would otherwise swallow silently, and in a
-     * start without extensions, where runs wait.
+     * The manual library update behind the pull gesture and the bar's Update library. `startNow`
+     * answers false when a run is already going, which is the case the KEEP policy would otherwise
+     * swallow silently, and in a start without extensions, where runs wait.
      */
     fun refresh() {
         viewModelScope.launch {

@@ -19,7 +19,6 @@
     <string name="action_search">Search</string>
     <string name="action_filter">Filter</string>
     <string name="action_sort">Sort</string>
-    <string name="action_resume">Resume</string>
     <string name="action_mark_previous_as_read">Mark previous as read</string>
     <string name="action_close">Close</string>
     <string name="action_back">Back</string>
@@ -164,6 +163,10 @@
     <string name="update_interval_choice_heading">Check every</string>
     <string name="update_interval_choice_automatic">Automatic</string>
     <string name="upcoming_title">Upcoming</string>
+    <string name="upcoming_guide">Upcoming guide</string>
+    <string name="upcoming_previous_month">Previous month</string>
+    <string name="upcoming_next_month">Next month</string>
+    <string name="pref_filter_upcoming_categories_details">Titles in excluded categories are not shown, even if they are also in any of the included categories.</string>
     <string name="upcoming_empty">No releases are predicted yet. Predictions come from each entry\'s release dates after a library update.</string>
     <plurals name="upcoming_entry_count">
         <item quantity="one">%1$d entry</item>
@@ -191,6 +194,7 @@
     <string name="updates_fold_collapse">Hide the chapters</string>
 
     <!-- History -->
+    <string name="history_open_entry">Open entry</string>
     <string name="history_title">History</string>
     <string name="history_search_hint">Search history</string>
     <string name="history_empty">Reading history appears after you open a chapter.</string>

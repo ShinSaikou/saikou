@@ -530,8 +530,103 @@ class PreferenceRestorerTest {
         }
     }
 
+    // ---- The Upcoming filter's category lists (mihon#3607) ----
+
+    @Test
+    fun `both Upcoming filter category lists are remapped to the live ids`() = runTest {
+        BackupTestEnvironment(tempDir).use { env ->
+            val errors = mutableListOf<ImportError>()
+            val prefs = listOf(
+                BackupPreference(UPCOMING_INCLUDED, StringPreferenceValue("1,2")),
+                BackupPreference(UPCOMING_EXCLUDED, StringPreferenceValue("3")),
+            )
+
+            val written = env.preferenceRestorer.restoreApp(prefs, mapOf(1L to 11L, 2L to 12L, 3L to 13L), errors)
+
+            written shouldBe 2
+            env.preferenceStore.values[UPCOMING_INCLUDED] shouldBe "11,12"
+            env.preferenceStore.values[UPCOMING_EXCLUDED] shouldBe "13"
+            errors shouldBe emptyList()
+        }
+    }
+
+    @Test
+    fun `an Upcoming filter id that cannot be mapped is left out, the default category kept`() = runTest {
+        BackupTestEnvironment(tempDir).use { env ->
+            val errors = mutableListOf<ImportError>()
+            val prefs = listOf(
+                BackupPreference(UPCOMING_INCLUDED, StringPreferenceValue("0,1,99")),
+                BackupPreference(UPCOMING_EXCLUDED, StringPreferenceValue("98,2")),
+            )
+
+            env.preferenceRestorer.restoreApp(prefs, mapOf(1L to 11L, 2L to 12L), errors)
+
+            env.preferenceStore.values[UPCOMING_INCLUDED] shouldBe "0,11"
+            env.preferenceStore.values[UPCOMING_EXCLUDED] shouldBe "12"
+            errors shouldBe emptyList()
+        }
+    }
+
+    @Test
+    fun `an Upcoming filter list none of whose ids resolve is refused out loud`() = runTest {
+        BackupTestEnvironment(tempDir).use { env ->
+            val errors = mutableListOf<ImportError>()
+            val prefs = listOf(BackupPreference(UPCOMING_EXCLUDED, StringPreferenceValue("5,6")))
+
+            val written = env.preferenceRestorer.restoreApp(prefs, emptyMap(), errors)
+
+            written shouldBe 0
+            env.preferenceStore.values.containsKey(UPCOMING_EXCLUDED) shouldBe false
+            errors.single().kind shouldBe ImportError.Kind.PREFERENCE
+            errors.single().subject shouldBe UPCOMING_EXCLUDED
+        }
+    }
+
+    @Test
+    fun `an Upcoming included list none of whose ids resolve is refused out loud`() = runTest {
+        BackupTestEnvironment(tempDir).use { env ->
+            val errors = mutableListOf<ImportError>()
+            val prefs = listOf(BackupPreference(UPCOMING_INCLUDED, StringPreferenceValue("5,6")))
+
+            val written = env.preferenceRestorer.restoreApp(prefs, emptyMap(), errors)
+
+            written shouldBe 0
+            env.preferenceStore.values.containsKey(UPCOMING_INCLUDED) shouldBe false
+            errors.single().kind shouldBe ImportError.Kind.PREFERENCE
+            errors.single().subject shouldBe UPCOMING_INCLUDED
+        }
+    }
+
+    @Test
+    fun `an empty Upcoming filter list is restored as a key rather than refused`() = runTest {
+        BackupTestEnvironment(tempDir).use { env ->
+            val errors = mutableListOf<ImportError>()
+            val prefs = listOf(BackupPreference(UPCOMING_EXCLUDED, StringPreferenceValue("")))
+
+            val written = env.preferenceRestorer.restoreApp(prefs, emptyMap(), errors)
+
+            written shouldBe 1
+            env.preferenceStore.values[UPCOMING_EXCLUDED] shouldBe ""
+            errors shouldBe emptyList()
+        }
+    }
+
+    @Test
+    fun `an Upcoming filter list is added to the live list, each id once`() = runTest {
+        BackupTestEnvironment(tempDir).use { env ->
+            env.preferenceStore.values[UPCOMING_INCLUDED] = "7,11"
+            val prefs = listOf(BackupPreference(UPCOMING_INCLUDED, StringPreferenceValue("1,2")))
+
+            env.preferenceRestorer.restoreApp(prefs, mapOf(1L to 11L, 2L to 12L), mutableListOf())
+
+            env.preferenceStore.values[UPCOMING_INCLUDED] shouldBe "7,11,12"
+        }
+    }
+
     private companion object {
         const val UPDATES_INCLUDED = "pref_filter_updates_included_categories"
         const val UPDATES_EXCLUDED = "pref_filter_updates_excluded_categories"
+        const val UPCOMING_INCLUDED = "pref_filter_upcoming_included_categories"
+        const val UPCOMING_EXCLUDED = "pref_filter_upcoming_excluded_categories"
     }
 }
