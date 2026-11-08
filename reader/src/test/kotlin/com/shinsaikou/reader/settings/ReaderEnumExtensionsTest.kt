@@ -3,6 +3,7 @@ package com.shinsaikou.reader.settings
 import com.shinsaikou.domain.preferences.FlashColor
 import com.shinsaikou.domain.preferences.ReaderHideThreshold
 import com.shinsaikou.domain.preferences.TappingInvertMode
+import com.shinsaikou.domain.preferences.TwoPageLayout
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 
@@ -41,6 +42,7 @@ class ReaderEnumExtensionsTest {
         TappingInvertMode.entries.forEach { (it.titleRes != 0) shouldBe true }
         ReaderHideThreshold.entries.forEach { (it.titleRes != 0) shouldBe true }
         FlashColor.entries.forEach { (it.titleRes != 0) shouldBe true }
+        TwoPageLayout.entries.forEach { (it.titleRes != 0) shouldBe true }
     }
 
     @Test
@@ -48,5 +50,6 @@ class ReaderEnumExtensionsTest {
         TappingInvertMode.entries.map { it.titleRes }.distinct().size shouldBe TappingInvertMode.entries.size
         ReaderHideThreshold.entries.map { it.titleRes }.distinct().size shouldBe ReaderHideThreshold.entries.size
         FlashColor.entries.map { it.titleRes }.distinct().size shouldBe FlashColor.entries.size
+        TwoPageLayout.entries.map { it.titleRes }.distinct().size shouldBe TwoPageLayout.entries.size
     }
 }

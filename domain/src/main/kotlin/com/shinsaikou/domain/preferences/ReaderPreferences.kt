@@ -29,6 +29,13 @@ enum class TappingInvertMode {
     BOTH,
 }
 
+/** Fresh: when the left to right and right to left paged modes show two pages side by side. */
+enum class TwoPageLayout {
+    NEVER,
+    IN_LANDSCAPE,
+    ALWAYS,
+}
+
 /**
  * Reader settings. Every key but the ones marked fresh is upstream's, so an upstream backup restores them
  * generically by name. The reader resolves the effective mode as the manga's own reading mode
@@ -208,4 +215,26 @@ class ReaderPreferences(preferenceStore: PreferenceStore) {
      * reader setting, harmless in a backup; shown only while [stripAutoScroll] is on.
      */
     val stripAutoScrollSpeed: Preference<Int> = preferenceStore.getInt("reader_strip_auto_scroll_speed", 4)
+
+    /**
+     * Fresh, Experimental: the left to right and right to left paged modes may show two pages side
+     * by side, as [twoPageLayout] says. Off by default. App state, so it stays on this device and
+     * out of backups.
+     */
+    val twoPages: Preference<Boolean> =
+        preferenceStore.getBoolean(Preference.appStateKey("reader_two_pages"), false)
+
+    /**
+     * Fresh: when two pages show side by side. An ordinary reader setting, harmless in a backup;
+     * shown only while [twoPages] is on.
+     */
+    val twoPageLayout: Preference<TwoPageLayout> =
+        preferenceStore.getEnum("reader_two_page_layout", TwoPageLayout.IN_LANDSCAPE)
+
+    /**
+     * Fresh: the ids of the entries whose pages pair one page later, so the first page pairs with
+     * the second. App state: kept on this device only, never synced or backed up.
+     */
+    val twoPagesShifted: Preference<Set<String>> =
+        preferenceStore.getStringSet(Preference.appStateKey("reader_two_pages_shifted"), emptySet())
 }

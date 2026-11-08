@@ -52,6 +52,20 @@ release may change behaviour.
 - An **Update library** button in the Updates bar starts a library update, as pulling the list down
   does.
 
+- **Two pages side by side** in Settings > Experimental, off by default, lets the left to right and
+  right to left paged modes show two pages at once, as a printed book does. **Two pages side by
+  side** in the reader settings (and in Settings > Reader) chooses Never, In landscape (the default)
+  or Always. In right to left the earlier page is on the right. The first page stands alone unless
+  Shift pages is on. A wide page, an animated page, a tall page cut into parts and a page that
+  cannot be read always stand alone, a wide page shown whole rather than split or rotated, and the
+  pairing starts again after them. Taps, swipes and keys turn a whole spread, zoom acts on the
+  spread as one picture, and the page number reads like 5-6 / 20. **Shift pages** in the reader's
+  menu moves the pairing by one page, for that entry, on this device only. It moves only the
+  chapter's first run of pages, up to the first page that always stands alone; pages after that one
+  keep their pairing, and in a chapter that opens on such a page the run after it moves instead.
+  Until a page has loaded its size is a guess, so a pair can change when a wide page turns up; the
+  page on screen stays in view.
+
 ### Changed
 
 - Update errors show only in the Updates tab: the error button is gone from the Library bar. In

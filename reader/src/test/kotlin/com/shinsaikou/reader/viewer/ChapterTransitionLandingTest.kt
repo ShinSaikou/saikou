@@ -36,6 +36,14 @@ class ChapterTransitionLandingTest {
     }
 
     @Test
+    fun `while two pages show, a removed transition lands on the spread that holds the page`() {
+        // Shifted, so the next chapter's first page shares a spread with its second.
+        val spreads = prev.pages!! + curr.pages!! + spreadItems(next.pages!!, shift = true)
+        spreads[curr.pages!!.size + prev.pages!!.size] shouldBe PageSpread(next.pages!![0], next.pages!![1])
+        pageAfterRemovedTransition(ChapterTransition.Next(curr, next), spreads, chapters) shouldBe next.pages!!.first()
+    }
+
+    @Test
     fun `a transition that is still in the list is left where it is`() {
         val transition = ChapterTransition.Next(curr, next)
         pageAfterRemovedTransition(transition, curr.pages!! + transition + next.pages!!, chapters) shouldBe null

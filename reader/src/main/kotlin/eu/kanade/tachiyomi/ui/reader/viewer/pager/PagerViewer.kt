@@ -1,6 +1,7 @@
-// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/tachiyomi/ui/reader/viewer/pager/PagerViewer.kt (modified: yes)
+// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/tachiyomi/ui/reader/viewer/pager/PagerViewer.kt (modified: yes) departures in the comment, the latest the Experimental two-page view
 package eu.kanade.tachiyomi.ui.reader.viewer.pager
 
+import android.content.res.Configuration
 import android.graphics.PointF
 import android.view.InputDevice
 import android.view.KeyEvent
@@ -11,22 +12,32 @@ import androidx.core.view.children
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import androidx.viewpager.widget.ViewPager
+import com.shinsaikou.domain.manga.model.ReadingMode
 import com.shinsaikou.reader.R
 import com.shinsaikou.reader.bench.ReaderBenchHooks
 import com.shinsaikou.reader.state.firstPartOf
 import com.shinsaikou.reader.state.pageCount
+import com.shinsaikou.reader.viewer.PageSpread
+import com.shinsaikou.reader.viewer.SpreadShape
 import com.shinsaikou.reader.viewer.ViewerHost
+import com.shinsaikou.reader.viewer.holdsPage
+import com.shinsaikou.reader.viewer.leadPage
 import com.shinsaikou.reader.viewer.pageAfterRemovedTransition
+import com.shinsaikou.reader.viewer.positionShowing
+import com.shinsaikou.reader.viewer.twoPagesShown
 import eu.kanade.tachiyomi.ui.reader.model.ChapterTransition
 import eu.kanade.tachiyomi.ui.reader.model.InsertPage
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
+import eu.kanade.tachiyomi.ui.reader.viewer.ReaderPageImageView
 import eu.kanade.tachiyomi.ui.reader.viewer.Viewer
 import eu.kanade.tachiyomi.ui.reader.viewer.ViewerNavigation.NavigationRegion
+import eu.kanade.tachiyomi.widget.ViewPagerAdapter.PositionableView
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import tachiyomi.core.common.util.system.logcat
+import java.util.WeakHashMap
 
 /**
  * Implementation of a [Viewer] to display pages with a [ViewPager].
@@ -42,6 +53,12 @@ import tachiyomi.core.common.util.system.logcat
  * Also (T): a transition is kept only while "always show chapter transition" is on, not also while
  * it is the item shown, and the pager lands past one the update removed
  * ([pageAfterRemovedTransition]), so one-page chapters read without a transition between pages.
+ * Also the Experimental two-page view (ruling R165 item 2): while [showsTwoPages], the left to right
+ * and right to left pagers show the pages of a chapter in pairs, each pair one [PageSpread] item that
+ * [com.shinsaikou.reader.viewer.PagerSpreadHolder] draws as one picture. Every turn, tap, key and
+ * wheel step moves a whole item, so a whole spread; a spread reports both its pages
+ * ([ViewerHost.onSpreadSelected]); [moveToPage] goes to the spread holding the page; and a change of
+ * layout, of shift or of a page found wide keeps the page on screen in view ([keepShownPage]).
  */
 @Suppress("LeakingThis")
 abstract class PagerViewer(val host: ViewerHost) : Viewer {
@@ -58,6 +75,23 @@ abstract class PagerViewer(val host: ViewerHost) : Viewer {
      * Configuration used by the pager, like allow taps, scale mode on images, page transitions...
      */
     val config = PagerConfig(this, scope, host.readerPreferences)
+
+    /**
+     * Fresh. Whether this viewer shows two pages side by side now: the Experimental switch, the
+     * layout setting and the screen's orientation, read again on every change of the three.
+     */
+    var showsTwoPages = computeShowsTwoPages()
+        private set
+
+    /** Fresh. Whether the adapter's items were built for two pages, so a change rebuilds every page view. */
+    private var itemsShowTwoPages = showsTwoPages
+
+    /**
+     * Fresh. Pages a spread found wide when it opened their images, before anything else knew their
+     * size (a downloaded page has no route until a holder asks for it). Weak, so a chapter that
+     * leaves the window takes its pages with it.
+     */
+    private val measuredShapes = WeakHashMap<ReaderPage, SpreadShape>()
 
     /**
      * Adapter of the pager.
@@ -131,9 +165,13 @@ abstract class PagerViewer(val host: ViewerHost) : Viewer {
                 NavigationRegion.LEFT -> moveLeft()
             }
         }
-        pager.longTapListener = f@{
+        pager.longTapListener = f@{ event ->
             if (host.menuVisible || config.longTapEnabled) {
-                val item = adapter.items.getOrNull(pager.currentItem)
+                // A spread's sheet is for the page under the finger, the half of the screen it shows.
+                val item = when (val shown = adapter.items.getOrNull(pager.currentItem)) {
+                    is PageSpread -> shown.onScreen(this is R2LPagerViewer)[if (event.x < pager.width / 2f) 0 else 1]
+                    else -> shown
+                }
                 if (item is ReaderPage) {
                     host.onPageLongTap(item)
                     return@f true
@@ -156,6 +194,15 @@ abstract class PagerViewer(val host: ViewerHost) : Viewer {
             val showOnStart = config.navigationOverlayOnStart || config.forceNavigationOverlay
             host.setNavigationOverlay(config.navigator, showOnStart)
         }
+
+        config.twoPagesChangedListener = { updateTwoPages() }
+
+        // The reader keeps its viewer through a rotation, so "In landscape" follows the new size.
+        pager.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+            if (right - left != oldRight - oldLeft || bottom - top != oldBottom - oldTop) {
+                pager.post { updateTwoPages() }
+            }
+        }
     }
 
     override fun destroy() {
@@ -176,37 +223,41 @@ abstract class PagerViewer(val host: ViewerHost) : Viewer {
     }
 
     /**
-     * Returns the PagerPageHolder for the provided page
+     * Returns the holder of the provided item: a [PagerPageHolder] for a page, a
+     * [PagerSpreadHolder] for a spread.
      */
-    private fun getPageHolder(page: ReaderPage): PagerPageHolder? =
+    private fun getPageHolder(item: Any): ReaderPageImageView? =
         pager.children
-            .filterIsInstance(PagerPageHolder::class.java)
-            .firstOrNull { it.item == page }
+            .filterIsInstance(ReaderPageImageView::class.java)
+            .firstOrNull { (it as? PositionableView)?.item == item }
 
     /**
      * Called when a new page (either a [ReaderPage] or [ChapterTransition]) is marked as active
      */
     private fun onPageChange(position: Int) {
-        val page = adapter.items.getOrNull(position)
-        if (page != null && currentPage != page) {
+        val item = adapter.items.getOrNull(position)
+        if (item != null && currentPage != item) {
+            // A spread stands for its earlier page here, which is the one its progress is saved as.
+            val page = (item as? PageSpread)?.first ?: item
+            val shownPage = (currentPage as? PageSpread)?.first ?: currentPage
             val allowPreload = checkAllowPreload(page as? ReaderPage)
             val forward = when {
-                currentPage is ReaderPage && page is ReaderPage -> {
+                shownPage is ReaderPage && page is ReaderPage -> {
                     // if both pages have the same number, it's a split page with an InsertPage
-                    if (page.number == (currentPage as ReaderPage).number) {
+                    if (page.number == shownPage.number) {
                         // the InsertPage is always the second in the reading direction
                         page is InsertPage
                     } else {
-                        page.number > (currentPage as ReaderPage).number
+                        page.number > shownPage.number
                     }
                 }
-                currentPage is ChapterTransition.Prev && page is ReaderPage ->
+                shownPage is ChapterTransition.Prev && page is ReaderPage ->
                     false
                 else -> true
             }
-            currentPage = page
+            currentPage = item
             when (page) {
-                is ReaderPage -> onReaderPageSelected(page, allowPreload, forward)
+                is ReaderPage -> onReaderPageSelected(item, page, allowPreload, forward)
                 is ChapterTransition -> onTransitionSelected(page)
             }
         }
@@ -217,15 +268,15 @@ abstract class PagerViewer(val host: ViewerHost) : Viewer {
         page ?: return true
 
         // Initial opening - preload allowed
-        currentPage ?: return true
+        val shown = currentPage ?: return true
 
         // Allow preload for
         // 1. Going to next chapter from chapter transition
         // 2. Going between pages of same chapter
         // 3. Next chapter page
         return when (page.chapter) {
-            (currentPage as? ChapterTransition.Next)?.to -> true
-            (currentPage as? ReaderPage)?.chapter -> true
+            (shown as? ChapterTransition.Next)?.to -> true
+            leadPage(shown)?.chapter -> true
             adapter.nextTransition?.to -> true
             else -> false
         }
@@ -234,14 +285,16 @@ abstract class PagerViewer(val host: ViewerHost) : Viewer {
     /**
      * Called when a [ReaderPage] is marked as active. It notifies the
      * activity of the change and requests the preload of the next chapter if this is the last page.
+     * [item] is [page] itself, or the spread whose earlier page it is.
      */
-    private fun onReaderPageSelected(page: ReaderPage, allowPreload: Boolean, forward: Boolean) {
+    private fun onReaderPageSelected(item: Any, page: ReaderPage, allowPreload: Boolean, forward: Boolean) {
         val pages = page.chapter.pages ?: return
         logcat { "onReaderPageSelected: ${page.number}/${pages.size}" }
-        host.onPageSelected(page)
+        val last = (item as? PageSpread)?.second
+        if (last != null) host.onSpreadSelected(page, last) else host.onPageSelected(page)
 
         // Notify holder of page change
-        getPageHolder(page)?.onPageSelected(forward)
+        getPageHolder(item)?.onPageSelected(forward)
 
         // Skip preload on inserts it causes unwanted page jumping
         if (page is InsertPage) {
@@ -249,7 +302,7 @@ abstract class PagerViewer(val host: ViewerHost) : Viewer {
         }
 
         // Preload the next chapter once we are inside the session's chapter-preload window.
-        val inPreloadRange = pages.pageCount() - page.number < host.preloadWindow().chapterPreloadAt
+        val inPreloadRange = pages.pageCount() - (last ?: page).number < host.preloadWindow().chapterPreloadAt
         if (inPreloadRange && allowPreload && page.chapter == adapter.currentChapter) {
             logcat { "Request preload next chapter because we're at page ${page.number} of ${pages.size}" }
             adapter.nextTransition?.to?.let(host::requestPreloadChapter)
@@ -295,9 +348,18 @@ abstract class PagerViewer(val host: ViewerHost) : Viewer {
             val shownIndex = pager.currentItem
             val shown = adapter.items.getOrNull(shownIndex)
             adapter.setChapters(chapters, config.alwaysShowChapterTransition)
+            // The two-page view turned on or off: every page view is built anew, so split and rotate
+            // apply to a page alone again, or stop applying while it shares the screen.
+            val layoutChanged = itemsShowTwoPages != showsTwoPages
+            if (layoutChanged) {
+                itemsShowTwoPages = showsTwoPages
+                pager.adapter = adapter
+            }
             val landing = pageAfterRemovedTransition(shown, adapter.items, chapters)
             if (landing != null) {
-                pager.setCurrentItem(adapter.items.indexOf(landing), false)
+                pager.setCurrentItem(adapter.items.positionShowing(landing), false)
+            } else if (showsTwoPages || layoutChanged) {
+                keepShownPage(shown)
             } else {
                 keepShownItem(shownIndex, shown)
             }
@@ -334,11 +396,33 @@ abstract class PagerViewer(val host: ViewerHost) : Viewer {
     }
 
     /**
-     * Tells this viewer to move to the given [page].
+     * Fresh. Keeps the page that was on screen in view when the items are built again with spreads
+     * in them: the pairing changed (the two-page view turned on or off, the screen turned, Shift, a
+     * page found wide), so the item that showed it may be gone. The pager goes to the item that
+     * shows the same page now, a spread's earlier page standing for the spread. A transition is
+     * found again by itself.
+     */
+    private fun keepShownPage(shown: Any?) {
+        shown ?: return
+        val current = adapter.items.getOrNull(pager.currentItem)
+        val lead = leadPage(shown)
+        val index = if (lead != null) {
+            if (holdsPage(current, lead)) return
+            adapter.items.positionShowing(lead)
+        } else {
+            if (current == shown) return
+            adapter.items.indexOf(shown)
+        }
+        if (index != -1) pager.setCurrentItem(index, false)
+    }
+
+    /**
+     * Tells this viewer to move to the given [page]: the spread that holds it, while two pages
+     * show.
      */
     override fun moveToPage(page: ReaderPage) {
         ReaderBenchHooks.trace(ReaderBenchHooks.SECTION_MOVE_TO_PAGE) {
-            val position = adapter.items.indexOf(page)
+            val position = adapter.items.positionShowing(page)
             if (position != -1) {
                 val currentPosition = pager.currentItem
                 pager.setCurrentItem(position, true)
@@ -371,7 +455,7 @@ abstract class PagerViewer(val host: ViewerHost) : Viewer {
      */
     protected open fun moveRight() {
         if (pager.currentItem != adapter.count - 1) {
-            val holder = (currentPage as? ReaderPage)?.let(::getPageHolder)
+            val holder = currentPage?.takeIf { it is ReaderPage || it is PageSpread }?.let(::getPageHolder)
             if (holder != null && config.navigateToPan && holder.canPanRight()) {
                 holder.panRight()
             } else {
@@ -385,7 +469,7 @@ abstract class PagerViewer(val host: ViewerHost) : Viewer {
      */
     protected open fun moveLeft() {
         if (pager.currentItem != 0) {
-            val holder = (currentPage as? ReaderPage)?.let(::getPageHolder)
+            val holder = currentPage?.takeIf { it is ReaderPage || it is PageSpread }?.let(::getPageHolder)
             if (holder != null && config.navigateToPan && holder.canPanLeft()) {
                 holder.panLeft()
             } else {
@@ -485,8 +569,9 @@ abstract class PagerViewer(val host: ViewerHost) : Viewer {
         // Still has to run on the main thread or the inserted images go blank; `host.scope` is the
         // composition's scope, which is main-dispatched.
         scope.launch {
-            // A split that finished after split was turned off would put a half back.
-            if (config.dualPageSplit) adapter.onPageSplit(currentPage, newPage)
+            // A split that finished after split was turned off would put a half back, and so would
+            // one that finished as two pages came to share the screen.
+            if (config.dualPageSplit && !showsTwoPages) adapter.onPageSplit(currentPage, newPage)
         }
     }
 
@@ -497,8 +582,8 @@ abstract class PagerViewer(val host: ViewerHost) : Viewer {
     override fun trimMemory() {
         ReaderBenchHooks.trace(ReaderBenchHooks.SECTION_TRIM) {
             pager.children
-                .filterIsInstance(PagerPageHolder::class.java)
-                .filter { it.item != currentPage }
+                .filterIsInstance(ReaderPageImageView::class.java)
+                .filter { (it as? PositionableView)?.item != currentPage }
                 .toList()
                 .forEach { it.recycle() }
         }
@@ -524,4 +609,47 @@ abstract class PagerViewer(val host: ViewerHost) : Viewer {
     private fun cleanupPageSplit() {
         adapter.cleanupPageSplit()
     }
+
+    /** Fresh. Whether the entry's pages pair one page later, as Shift pages sets it. */
+    val shiftsPages: Boolean
+        get() = host.manga?.id?.toString() in config.twoPagesShifted
+
+    /** Fresh. What a spread found [page] to be when it opened its image, if it opened one. */
+    fun measuredShape(page: ReaderPage): SpreadShape? = measuredShapes[page]
+
+    /**
+     * Fresh. A spread opened [page]'s image and found it wide, or found no decoder for it, before
+     * its route said so. The page stands alone from now on and the pairing after it is laid out
+     * again, keeping the page on screen in view.
+     */
+    fun onSpreadPageWide(page: ReaderPage) {
+        if (measuredShapes[page] == SpreadShape.WIDE) return
+        measuredShapes[page] = SpreadShape.WIDE
+        val chapters = awaitingIdleViewerChapters ?: adapter.lastChapters ?: return
+        setChapters(chapters)
+    }
+
+    /**
+     * Fresh. The switch, the layout, the shifted entries or the screen's size changed. While two
+     * pages show, or when they start or stop showing, the items are built again (the page on screen
+     * stays in view); otherwise nothing changes.
+     */
+    private fun updateTwoPages() {
+        val showed = showsTwoPages
+        showsTwoPages = computeShowsTwoPages()
+        if (!showed && !showsTwoPages) return
+        val chapters = awaitingIdleViewerChapters ?: adapter.lastChapters ?: return
+        setChapters(chapters)
+    }
+
+    private fun computeShowsTwoPages(): Boolean = twoPagesShown(
+        enabled = config.twoPagesEnabled,
+        layout = config.twoPageLayout,
+        mode = when (this) {
+            is L2RPagerViewer -> ReadingMode.LEFT_TO_RIGHT
+            is R2LPagerViewer -> ReadingMode.RIGHT_TO_LEFT
+            else -> ReadingMode.VERTICAL
+        },
+        landscape = host.context.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE,
+    )
 }

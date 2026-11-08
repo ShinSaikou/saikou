@@ -55,7 +55,12 @@ sealed interface ReaderEvent {
 
     // region From the viewer
 
-    data class PageSelected(val page: ReaderPage) : ReaderEvent
+    /**
+     * [page] is on screen. While two pages show side by side (the Experimental two-page view),
+     * [alsoShown] is the later page of the spread and [page] the earlier one, which the progress is
+     * saved as.
+     */
+    data class PageSelected(val page: ReaderPage, val alsoShown: ReaderPage? = null) : ReaderEvent
     data class TransitionSelected(val transition: ChapterTransition) : ReaderEvent
     data class PreloadRequested(val chapter: ReaderChapter) : ReaderEvent
     data class PageLongTapped(val page: ReaderPage) : ReaderEvent

@@ -1,4 +1,4 @@
-// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/presentation/reader/appbars/ReaderAppBars.kt (modified: yes) departures in the comment, the latest the Experimental auto-scroll button
+// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/presentation/reader/appbars/ReaderAppBars.kt (modified: yes) departures in the comment, the latest the Experimental two-page view's Shift pages
 package eu.kanade.presentation.reader.appbars
 
 import androidx.compose.animation.AnimatedVisibility
@@ -45,8 +45,9 @@ import tachiyomi.presentation.core.components.material.padding
  * `onPageIndexRelease(Int)`, and the flat parameter list is kept rather than folded into
  * `ReaderState`, because six of its values come from preferences the state does not carry
  * (decision D20). `ReaderChrome.ReaderAppBarsHost` is what computes them. [hasNote] and
- * [onClickNote] are the bottom bar's page note marker (phase 4 unit BN), and [onClickAutoScroll] its
- * Experimental auto-scroll button, null where it is not offered.
+ * [onClickNote] are the bottom bar's page note marker (phase 4 unit BN), [onClickAutoScroll] its
+ * Experimental auto-scroll button and [onClickShiftPages] the Experimental two-page view's Shift
+ * pages, each null where it is not offered.
  */
 private val readerBarsSlideAnimationSpec = tween<IntOffset>(200)
 private val readerBarsFadeAnimationSpec = tween<Float>(150)
@@ -86,6 +87,7 @@ fun ReaderAppBars(
     hasNote: Boolean,
     onClickNote: () -> Unit,
     onClickAutoScroll: (() -> Unit)?,
+    onClickShiftPages: (() -> Unit)?,
 ) {
     val backgroundColor = MaterialTheme.colorScheme
         .surfaceColorAtElevation(3.dp)
@@ -188,6 +190,7 @@ fun ReaderAppBars(
                     hasNote = hasNote,
                     onClickNote = onClickNote,
                     onClickAutoScroll = onClickAutoScroll,
+                    onClickShiftPages = onClickShiftPages,
                 )
             }
         }

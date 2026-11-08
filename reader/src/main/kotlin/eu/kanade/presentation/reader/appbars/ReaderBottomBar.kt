@@ -1,4 +1,4 @@
-// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/presentation/reader/appbars/ReaderBottomBar.kt (modified: yes) departures in the comment, the latest the Experimental auto-scroll button
+// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/presentation/reader/appbars/ReaderBottomBar.kt (modified: yes) departures in the comment, the latest the Experimental two-page view's Shift pages
 package eu.kanade.presentation.reader.appbars
 
 import androidx.compose.foundation.layout.Arrangement
@@ -7,6 +7,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
@@ -28,7 +29,9 @@ import com.shinsaikou.reader.R as ReaderR
  * page on screen has a note, a marker leads the row and opens the note ([hasNote], [onClickNote],
  * phase 4 unit BN; upstream has no page notes). While the Experimental auto-scroll is on and the
  * strip is the viewer, a play button before the settings starts it ([onClickAutoScroll], null
- * otherwise; upstream has no auto-scroll).
+ * otherwise; upstream has no auto-scroll). While the Experimental two-page view shows two pages, a
+ * Shift pages button moves the pairing by one ([onClickShiftPages], null otherwise; upstream has no
+ * two-page view).
  */
 
 @Composable
@@ -43,6 +46,7 @@ fun ReaderBottomBar(
     hasNote: Boolean,
     onClickNote: () -> Unit,
     onClickAutoScroll: (() -> Unit)?,
+    onClickShiftPages: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -79,6 +83,15 @@ fun ReaderBottomBar(
                 painter = painterResource(if (cropEnabled) ReaderR.drawable.ic_crop_24dp else ReaderR.drawable.ic_crop_off_24dp),
                 contentDescription = stringResource(R.string.pref_crop_borders),
             )
+        }
+
+        if (onClickShiftPages != null) {
+            IconButton(onClick = onClickShiftPages) {
+                Icon(
+                    imageVector = Icons.Outlined.SwapHoriz,
+                    contentDescription = stringResource(R.string.reader_shift_pages),
+                )
+            }
         }
 
         if (onClickAutoScroll != null) {

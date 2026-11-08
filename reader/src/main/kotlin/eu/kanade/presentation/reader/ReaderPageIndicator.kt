@@ -1,4 +1,4 @@
-// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/presentation/reader/ReaderPageIndicator.kt (modified: yes)
+// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/presentation/reader/ReaderPageIndicator.kt (modified: yes) [lastPage, for the Experimental two-page view]
 package eu.kanade.presentation.reader
 
 import androidx.compose.foundation.layout.Box
@@ -16,15 +16,20 @@ import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.theme.SaikouPreviewTheme
 
+/**
+ * Modified: [lastPage] is the later page while two pages show side by side (the Experimental
+ * two-page view), and the text reads "5-6 / 20" then. Upstream shows one page.
+ */
 @Composable
 fun ReaderPageIndicator(
     currentPage: Int,
     totalPages: Int,
     modifier: Modifier = Modifier,
+    lastPage: Int = currentPage,
 ) {
     if (currentPage <= 0 || totalPages <= 0) return
 
-    val text = "$currentPage / $totalPages"
+    val text = if (lastPage > currentPage) "$currentPage-$lastPage / $totalPages" else "$currentPage / $totalPages"
 
     val style = TextStyle(
         color = Color(235, 235, 235),

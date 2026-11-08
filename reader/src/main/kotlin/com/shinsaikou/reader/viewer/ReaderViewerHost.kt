@@ -60,6 +60,9 @@ class ReaderViewerHost(
 
     override fun onPageSelected(page: ReaderPage) = send(ReaderEvent.PageSelected(page))
 
+    override fun onSpreadSelected(page: ReaderPage, alsoShown: ReaderPage) =
+        send(ReaderEvent.PageSelected(page, alsoShown))
+
     override fun onTransitionSelected(transition: ChapterTransition) =
         send(ReaderEvent.TransitionSelected(transition))
 

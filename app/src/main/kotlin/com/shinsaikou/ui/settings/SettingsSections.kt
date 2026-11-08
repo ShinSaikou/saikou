@@ -72,6 +72,7 @@ import com.shinsaikou.domain.preferences.ReaderPreferences
 import com.shinsaikou.domain.preferences.TabletUiMode
 import com.shinsaikou.domain.preferences.TappingInvertMode
 import com.shinsaikou.domain.preferences.ThemeMode
+import com.shinsaikou.domain.preferences.TwoPageLayout
 import com.shinsaikou.domain.preferences.UiPreferences
 import com.shinsaikou.i18n.R
 import com.shinsaikou.image.GLUtil
@@ -846,6 +847,8 @@ private fun ReaderPagedRows(preferences: ReaderPreferences) {
     val zoomStart by preferences.zoomStart.collectAsState()
     val dualPageSplit by preferences.dualPageSplitPaged.collectAsState()
     val rotateToFit by preferences.dualPageRotateToFit.collectAsState()
+    val twoPages by preferences.twoPages.collectAsState()
+    val twoPageLayout by preferences.twoPageLayout.collectAsState()
     SettingsSearchGroup(R.string.pager_viewer) {
         TapZoneRows(
             selected = navigationMode,
@@ -884,6 +887,16 @@ private fun ReaderPagedRows(preferences: ReaderPreferences) {
             pref = preferences.dualPageRotateToFitInvert,
             enabled = rotateToFit,
         )
+        // The Experimental two-page view's layout, as the reader's sheet shows it: only while it is on.
+        ShownWhen(twoPages) {
+            ChoiceRow(
+                labelRes = R.string.pref_two_pages,
+                choices = TwoPageLayout.entries,
+                selected = { it == twoPageLayout },
+                label = { stringResource(it.titleRes) },
+                onSelect = preferences.twoPageLayout::set,
+            )
+        }
     }
 }
 
@@ -1911,6 +1924,11 @@ private fun ExperimentalSection(viewModel: SettingsViewModel, showMessage: (Stri
         labelRes = R.string.settings_experimental_auto_scroll,
         pref = viewModel.readerPreferences.stripAutoScroll,
         detailRes = R.string.settings_experimental_auto_scroll_summary,
+    )
+    CheckboxRow(
+        labelRes = R.string.settings_experimental_two_pages,
+        pref = viewModel.readerPreferences.twoPages,
+        detailRes = R.string.settings_experimental_two_pages_summary,
     )
     // SearchLinksAlias follows the preference, so the row needs no hook of its own.
     CheckboxRow(

@@ -59,7 +59,7 @@ class ReaderStateMachine(
         is ReaderEvent.AdjacentChapterLoaded -> adjacentChapterLoaded(state, event)
         is ReaderEvent.AdjacentChapterLoadFailed -> state.noEffects()
 
-        is ReaderEvent.PageSelected -> pageSelected(state, event.page)
+        is ReaderEvent.PageSelected -> pageSelected(state, event.page, event.alsoShown)
         is ReaderEvent.TransitionSelected -> transitionSelected(state, event.transition)
         is ReaderEvent.PreloadRequested ->
             if (event.chapter.isPreloadable()) {
@@ -205,7 +205,8 @@ class ReaderStateMachine(
         var next = state
         val effects = mutableListOf<ReaderEffect>()
         if (mode != state.readingMode) {
-            next = next.copy(readingMode = mode, viewerGeneration = state.viewerGeneration + 1)
+            // The new viewer reports its own page, one or two.
+            next = next.copy(readingMode = mode, viewerGeneration = state.viewerGeneration + 1, spreadLastPage = null)
             effects += ReaderEffect.RebuildViewer(next.viewerGeneration, mode)
         }
         if (orientation != state.orientation) {
@@ -232,6 +233,7 @@ class ReaderStateMachine(
             phase = ReaderPhase.Ready,
             window = window,
             currentPage = shown.index,
+            spreadLastPage = null,
             totalPages = pages.pageCount(),
             bookmarked = event.chapter.chapter.bookmark,
             loadingAdjacent = false,
@@ -271,12 +273,21 @@ class ReaderStateMachine(
 
     // region Pages
 
-    private fun pageSelected(state: ReaderState, page: ReaderPage): Pair<ReaderState, List<ReaderEffect>> {
+    /**
+     * [alsoShown] is the later page of a spread of the two-page view (a spread never spans two
+     * chapters). The state keeps the earlier page as the current one, so progress, notes and the
+     * slider speak of it, and the later one in [ReaderState.spreadLastPage].
+     */
+    private fun pageSelected(
+        state: ReaderState,
+        page: ReaderPage,
+        alsoShown: ReaderPage?,
+    ): Pair<ReaderState, List<ReaderEffect>> {
         val window = state.window ?: return state.noEffects()
         return when {
-            page.chapter === window.currChapter -> pageSelectedInCurrent(state, window, page)
+            page.chapter === window.currChapter -> pageSelectedInCurrent(state, window, page, alsoShown)
             page.chapter === window.prevChapter || page.chapter === window.nextChapter ->
-                pageSelectedInAdjacent(state, window, page)
+                pageSelectedInAdjacent(state, window, page, alsoShown)
             else -> state.noEffects()
         }
     }
@@ -285,15 +296,16 @@ class ReaderStateMachine(
         state: ReaderState,
         window: ViewerChapters,
         page: ReaderPage,
+        alsoShown: ReaderPage?,
     ): Pair<ReaderState, List<ReaderEffect>> {
         if (state.phase !is ReaderPhase.Ready || state.scrubbing) return state.noEffects()
-        val next = state.copy(currentPage = page.index, movingBySlider = false)
+        val next = state.copy(currentPage = page.index, spreadLastPage = alsoShown?.index, movingBySlider = false)
         val effects = mutableListOf<ReaderEffect>()
         if (page.index != state.currentPage) {
             effects += ReaderEffect.PageChangedFlash
         }
-        effects += progressEffects(next, window.currChapter, page)
-        effects += chapterPreloadEffects(next, window, page)
+        effects += progressEffects(next, window.currChapter, page, alsoShown)
+        effects += chapterPreloadEffects(next, window, alsoShown ?: page)
         return next to effects
     }
 
@@ -301,6 +313,7 @@ class ReaderStateMachine(
         state: ReaderState,
         window: ViewerChapters,
         page: ReaderPage,
+        alsoShown: ReaderPage?,
     ): Pair<ReaderState, List<ReaderEffect>> {
         val session = state.session ?: return state.noEffects()
         val outgoing = window.currChapter
@@ -314,6 +327,7 @@ class ReaderStateMachine(
         val next = state.copy(
             window = newWindow,
             currentPage = page.index,
+            spreadLastPage = alsoShown?.index,
             // Parts not counted: a chapter whose pages split before it was entered, as the long
             // strip does with the chapter below, would otherwise never reach its last page.
             totalPages = pages.pageCount(),
@@ -327,19 +341,25 @@ class ReaderStateMachine(
         effects += ReaderEffect.SetViewerChapters(newWindow)
         effects += ReaderEffect.RestartReadTimer(page.chapter)
         effects += ReaderEffect.PageChangedFlash
-        effects += progressEffects(next, page.chapter, page)
-        effects += chapterPreloadEffects(next, newWindow, page)
+        effects += progressEffects(next, page.chapter, page, alsoShown)
+        effects += chapterPreloadEffects(next, newWindow, alsoShown ?: page)
         return next to effects
     }
 
-    /** Rules 5 and 6 of section 3.7: nothing is written in incognito, nothing for an errored page. */
+    /**
+     * Rules 5 and 6 of section 3.7: nothing is written in incognito, nothing for an errored page. A
+     * spread saves its earlier page and finishes the chapter when its later page is the last one,
+     * unless that page failed to load.
+     */
     private fun progressEffects(
         state: ReaderState,
         chapter: ReaderChapter,
         page: ReaderPage,
+        alsoShown: ReaderPage?,
     ): List<ReaderEffect> {
         if (state.incognito || page.status is PageState.Error) return emptyList()
-        val finished = page.index == state.totalPages - 1
+        val last = alsoShown?.takeUnless { it.status is PageState.Error } ?: page
+        val finished = last.index == state.totalPages - 1
         return listOf(
             ReaderEffect.CommitProgress(
                 chapter = chapter,
@@ -400,9 +420,16 @@ class ReaderStateMachine(
         val page = target.index
         // The viewer reports a page only when the release moves it, and that report is what brings
         // movingBySlider down again, so a release on the page the viewer is on does not raise it.
+        // Nor does one on the other page of the spread on screen: the viewer stays on the spread
+        // that holds it, so the state goes back to that spread's earlier page.
         val viewerPage = if (state.scrubbing) state.scrubStartPage else state.currentPage
-        return released.copy(currentPage = page, movingBySlider = page != viewerPage) to
-            listOf(ReaderEffect.MoveViewerToPage(target))
+        val viewerLast = state.spreadLastPage ?: viewerPage
+        val onScreen = viewerPage != null && viewerLast != null && page in viewerPage..viewerLast
+        return released.copy(
+            currentPage = if (onScreen) viewerPage else page,
+            spreadLastPage = state.spreadLastPage.takeIf { onScreen },
+            movingBySlider = !onScreen,
+        ) to listOf(ReaderEffect.MoveViewerToPage(target))
     }
 
     private fun switchChapter(

@@ -1,4 +1,4 @@
-// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/tachiyomi/ui/reader/viewer/pager/PagerConfig.kt (modified: yes)
+// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/tachiyomi/ui/reader/viewer/pager/PagerConfig.kt (modified: yes) departures in the comment, the latest the Experimental two-page view
 package eu.kanade.tachiyomi.ui.reader.viewer.pager
 
 import com.shinsaikou.domain.preferences.ReaderPreferences
@@ -19,7 +19,9 @@ import kotlinx.coroutines.flow.onEach
  * Configuration used by pager viewers.
  *
  * Modified (I): `readerPreferences` has no Injekt default and is passed by `PagerViewer`. The
- * `navigationModeChangedListener` is wired by the viewer to `host.setNavigationOverlay`.
+ * `navigationModeChangedListener` is wired by the viewer to `host.setNavigationOverlay`. Fresh: the
+ * three preferences of the Experimental two-page view (ruling R165 item 2), read at once so the
+ * viewer's first layout already knows them, and [twoPagesChangedListener] on any change.
  */
 class PagerConfig(
     private val viewer: PagerViewer,
@@ -49,6 +51,18 @@ class PagerConfig(
 
     var landscapeZoom = false
         private set
+
+    var twoPagesEnabled = readerPreferences.twoPages.get()
+        private set
+
+    var twoPageLayout = readerPreferences.twoPageLayout.get()
+        private set
+
+    /** The ids of the entries whose pages pair one page later. */
+    var twoPagesShifted: Set<String> = readerPreferences.twoPagesShifted.get()
+        private set
+
+    var twoPagesChangedListener: (() -> Unit)? = null
 
     init {
         readerPreferences.readerTheme
@@ -108,6 +122,15 @@ class PagerConfig(
                 { dualPageRotateToFitInvert = it },
                 { imagePropertyChangedListener?.invoke() },
             )
+
+        readerPreferences.twoPages
+            .register({ twoPagesEnabled = it }, { twoPagesChangedListener?.invoke() })
+
+        readerPreferences.twoPageLayout
+            .register({ twoPageLayout = it }, { twoPagesChangedListener?.invoke() })
+
+        readerPreferences.twoPagesShifted
+            .register({ twoPagesShifted = it }, { twoPagesChangedListener?.invoke() })
     }
 
     private fun zoomTypeFromPreference(value: Int) {

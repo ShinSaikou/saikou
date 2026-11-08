@@ -1,4 +1,4 @@
-// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/presentation/reader/settings/ReadingModePage.kt (modified: yes) departures in the comment, the latest the Experimental auto-scroll speed
+// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/presentation/reader/settings/ReadingModePage.kt (modified: yes) departures in the comment, the latest the Experimental two-page view
 package eu.kanade.presentation.reader.settings
 
 import androidx.compose.foundation.layout.ColumnScope
@@ -12,6 +12,7 @@ import androidx.compose.runtime.remember
 import com.shinsaikou.domain.manga.model.ReaderOrientation
 import com.shinsaikou.domain.manga.model.ReadingMode
 import com.shinsaikou.domain.preferences.TappingInvertMode
+import com.shinsaikou.domain.preferences.TwoPageLayout
 import com.shinsaikou.i18n.R
 import com.shinsaikou.reader.settings.ReaderSettingsOptions
 import com.shinsaikou.reader.settings.titleRes
@@ -31,7 +32,9 @@ import java.text.NumberFormat
  * decoded out of `manga.viewer_flags` here, `viewerFlow` is a boolean `isWebtoonFlow` because
  * `:reader` never hands a live `Viewer` to Compose, and the four option lists moved to
  * [ReaderSettingsOptions]. The long strip's group ends with the Experimental auto-scroll's speed,
- * shown only while its switch is on (upstream has no auto-scroll).
+ * shown only while its switch is on (upstream has no auto-scroll). The pager's group ends with the
+ * Experimental "Two pages side by side", likewise shown only while its switch is on (upstream has no
+ * two-page view).
  */
 @Composable
 internal fun ColumnScope.ReadingModePage(viewModel: ReaderSettingsViewModel) {
@@ -141,6 +144,20 @@ private fun ColumnScope.PagerViewerSettings(viewModel: ReaderSettingsViewModel) 
             label = stringResource(R.string.pref_page_rotate_invert),
             pref = viewModel.preferences.dualPageRotateToFitInvert,
         )
+    }
+
+    val twoPages by viewModel.preferences.twoPages.collectAsState()
+    if (twoPages) {
+        val twoPageLayout by viewModel.preferences.twoPageLayout.collectAsState()
+        SettingsChipRow(R.string.pref_two_pages) {
+            TwoPageLayout.entries.map {
+                FilterChip(
+                    selected = it == twoPageLayout,
+                    onClick = { viewModel.preferences.twoPageLayout.set(it) },
+                    label = { Text(stringResource(it.titleRes)) },
+                )
+            }
+        }
     }
 }
 

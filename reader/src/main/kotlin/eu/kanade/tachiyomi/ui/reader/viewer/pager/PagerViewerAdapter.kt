@@ -1,8 +1,11 @@
-// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/tachiyomi/ui/reader/viewer/pager/PagerViewerAdapter.kt (modified: yes)
+// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/tachiyomi/ui/reader/viewer/pager/PagerViewerAdapter.kt (modified: yes) departures in the comment, the latest the Experimental two-page view
 package eu.kanade.tachiyomi.ui.reader.viewer.pager
 
 import android.view.View
 import android.view.ViewGroup
+import com.shinsaikou.reader.viewer.PageSpread
+import com.shinsaikou.reader.viewer.PagerSpreadHolder
+import com.shinsaikou.reader.viewer.spreadItems
 import eu.kanade.tachiyomi.ui.reader.model.ChapterTransition
 import eu.kanade.tachiyomi.ui.reader.model.InsertPage
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
@@ -33,6 +36,10 @@ import tachiyomi.core.common.util.system.logcat
  * index, or a second chapter's half replaced the first's, and the pager crashed. They are kept with
  * their chapter now, inserted only into their own, and kept only while that chapter is adjacent.
  * Turning split off drops them with the halves shown ([cleanupPageSplit]).
+ *
+ * Also the Experimental two-page view (ruling R165 item 2): while `viewer.showsTwoPages`, each
+ * chapter's pages go in as [spreadItems] lays them out, a pair as one [PageSpread] that a
+ * [PagerSpreadHolder] draws, and no split half goes in.
  */
 class PagerViewerAdapter(private val viewer: PagerViewer) : ViewPagerAdapter() {
 
@@ -72,7 +79,7 @@ class PagerViewerAdapter(private val viewer: PagerViewer) : ViewPagerAdapter() {
         val nextHasMissingChapters = calculateChapterGap(chapters.nextChapter, chapters.currChapter) > 0
 
         // Add previous chapter pages and transition
-        chapters.prevChapter?.pages?.let(newItems::addAll)
+        chapters.prevChapter?.pages?.let { newItems.addAll(itemsOf(it)) }
 
         // Skip transition page if the chapter is loaded & current page is not a transition page
         if (prevHasMissingChapters || forceTransition || chapters.prevChapter?.state !is ReaderChapter.State.Loaded) {
@@ -83,7 +90,9 @@ class PagerViewerAdapter(private val viewer: PagerViewer) : ViewPagerAdapter() {
 
         // Add current chapter.
         val currPages = chapters.currChapter.pages
-        if (currPages != null) {
+        if (currPages != null && viewer.showsTwoPages) {
+            newItems.addAll(itemsOf(currPages))
+        } else if (currPages != null) {
             val pages = currPages.toMutableList()
 
             val lastPage = pages.last()
@@ -118,7 +127,7 @@ class PagerViewerAdapter(private val viewer: PagerViewer) : ViewPagerAdapter() {
                 }
             }
 
-        chapters.nextChapter?.pages?.let(newItems::addAll)
+        chapters.nextChapter?.pages?.let { newItems.addAll(itemsOf(it)) }
 
         // Resets double-page splits, else insert pages get misplaced
         items.filterIsInstance<InsertPage>().also { items.removeAll(it) }
@@ -139,6 +148,10 @@ class PagerViewerAdapter(private val viewer: PagerViewer) : ViewPagerAdapter() {
         }
     }
 
+    /** One chapter's items: its pages, or its spreads while two pages show side by side. */
+    private fun itemsOf(pages: List<ReaderPage>): List<Any> =
+        if (viewer.showsTwoPages) spreadItems(pages, viewer.shiftsPages, viewer::measuredShape) else pages
+
     /**
      * Returns the amount of items of the adapter.
      */
@@ -151,6 +164,7 @@ class PagerViewerAdapter(private val viewer: PagerViewer) : ViewPagerAdapter() {
      */
     override fun createView(container: ViewGroup, position: Int): View {
         return when (val item = items[position]) {
+            is PageSpread -> PagerSpreadHolder(readerThemedContext, viewer, item)
             is ReaderPage -> PagerPageHolder(readerThemedContext, viewer, item)
             is ChapterTransition -> PagerTransitionHolder(readerThemedContext, viewer, item)
             else -> throw NotImplementedError("Holder for ${item.javaClass} not implemented")

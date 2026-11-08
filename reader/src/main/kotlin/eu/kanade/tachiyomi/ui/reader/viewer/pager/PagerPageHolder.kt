@@ -1,4 +1,4 @@
-// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/tachiyomi/ui/reader/viewer/pager/PagerPageHolder.kt (modified: yes)
+// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/tachiyomi/ui/reader/viewer/pager/PagerPageHolder.kt (modified: yes) departures in the comment, the latest the Experimental two-page view
 package eu.kanade.tachiyomi.ui.reader.viewer.pager
 
 import android.annotation.SuppressLint
@@ -39,7 +39,9 @@ import tachiyomi.core.common.util.system.logcat
  * (decision D24). The dual-page split path is upstream's and is untouched: `splitInHalf`,
  * `splitAndMerge`, `rotateImage` and `isWideImage` are all `ImageUtil` calls in `:core:common`.
  * A failure the image view reports is wrapped in `PageDecodeException`, so the error layout says
- * the image could not be read rather than that it could not be loaded.
+ * the image could not be read rather than that it could not be loaded. While the viewer shows two pages
+ * side by side (the Experimental two-page view), a page alone is shown whole: split and rotate wait
+ * for the viewer to show one page again.
  */
 @SuppressLint("ViewConstructor")
 class PagerPageHolder(
@@ -201,6 +203,10 @@ class PagerPageHolder(
     }
 
     private fun process(page: ReaderPage, imageSource: BufferedSource): BufferedSource {
+        if (viewer.showsTwoPages) {
+            return imageSource
+        }
+
         if (viewer.config.dualPageRotateToFit) {
             return rotateDualPage(imageSource)
         }

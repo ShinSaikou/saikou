@@ -37,6 +37,17 @@
     <string name="reader_auto_scroll_start">Start auto-scroll</string>
     <string name="pref_auto_scroll_speed">Scroll speed</string>
 
+    <!--
+      Fresh. Experimental two pages side by side in the paged modes: the reader setting and its
+      three choices, and the bottom bar's button that moves the pairing by one page. Upstream has
+      no two-page view.
+    -->
+    <string name="pref_two_pages">Two pages side by side</string>
+    <string name="two_pages_never">Never</string>
+    <string name="two_pages_in_landscape">In landscape</string>
+    <string name="two_pages_always">Always</string>
+    <string name="reader_shift_pages">Shift pages</string>
+
     <!-- Fresh. Phase 5 unit FX, R128 carry-over 1: a note saved after its entry was removed from the database. -->
     <string name="note_not_saved_entry_removed">Couldn\'t save the note: this entry was removed</string>
 

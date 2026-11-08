@@ -77,6 +77,7 @@ class SettingsSearchIndexTest {
         "pref_flash_with" to "shown only while Flash on page change is on",
         "pref_vertical_navigator_height" to "shown only while a reading mode has the navigator",
         "pref_auto_scroll_speed" to "shown only while the Experimental auto-scroll is on",
+        "pref_two_pages" to "shown only while the Experimental two pages side by side is on",
         "lock_when_idle" to "shown only while the app lock is on",
         "pref_adopt_summary" to "shown only once an adoption has finished",
         "pref_storage_move_left" to "shown only while a move left files behind",
@@ -167,6 +168,17 @@ class SettingsSearchIndexTest {
 
         entry.map { it.section } shouldBe listOf(SettingsSection.EXPERIMENTAL)
         entry.single().summaryRes shouldBe R.string.settings_experimental_user_certificates_summary
+    }
+
+    @Test
+    fun `the two-page switch is searchable under Experimental and its layout row is not`() {
+        indexKeys.filter { it.title == "settings_experimental_two_pages" } shouldBe
+            listOf(Key(SettingsSection.EXPERIMENTAL, "settings_experimental_two_pages", null))
+        settingsSearchIndex.single { it.titleRes == R.string.settings_experimental_two_pages }.summaryRes shouldBe
+            R.string.settings_experimental_two_pages_summary
+        indexKeys.none { it.title == "pref_two_pages" } shouldBe true
+        // The row is drawn, so only the left-out list keeps the test above from asking for it.
+        source("settings/SettingsSections.kt") shouldContain "R.string.pref_two_pages"
     }
 
     @Test

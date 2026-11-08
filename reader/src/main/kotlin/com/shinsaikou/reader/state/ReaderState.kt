@@ -37,6 +37,12 @@ data class ReaderState(
     val window: ViewerChapters? = null,
     /** Index into the current chapter's pages; parts report their parent's index. -1 unknown. */
     val currentPage: Int = -1,
+    /**
+     * The index of the later page while the viewer shows two pages side by side, [currentPage]
+     * being the earlier one; null while one page shows. Only the viewer's report sets it, so a
+     * slider drag leaves it on the spread the viewer still shows.
+     */
+    val spreadLastPage: Int? = null,
     val totalPages: Int = -1,
     val bookmarked: Boolean = false,
     val loadingAdjacent: Boolean = false,

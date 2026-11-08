@@ -1,5 +1,6 @@
 package com.shinsaikou.reader.ui
 
+import android.content.res.Configuration
 import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -7,6 +8,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.viewinterop.AndroidView
@@ -19,6 +21,8 @@ import com.shinsaikou.reader.state.ReaderDialog
 import com.shinsaikou.reader.state.ReaderEvent
 import com.shinsaikou.reader.state.ReaderState
 import com.shinsaikou.reader.viewer.NavigationOverlayRequest
+import com.shinsaikou.reader.viewer.twoPagesShown
+import com.shinsaikou.reader.viewer.withShiftToggled
 import eu.kanade.presentation.reader.appbars.ReaderAppBars
 import eu.kanade.presentation.reader.components.ChapterNavigatorType
 import eu.kanade.tachiyomi.ui.reader.ReaderNavigationOverlayView
@@ -56,6 +60,15 @@ internal fun ReaderAppBarsHost(
     val verticalNavigatorOnLeft by preferences.verticalNavigatorOnLeft.collectAsState()
     val verticalNavigatorHeight by preferences.verticalNavigatorHeight.collectAsState()
     val stripAutoScroll by preferences.stripAutoScroll.collectAsState()
+    val twoPages by preferences.twoPages.collectAsState()
+    val twoPageLayout by preferences.twoPageLayout.collectAsState()
+    // The same answer the pager gives itself, from the same configuration.
+    val showsTwoPages = twoPagesShown(
+        enabled = twoPages,
+        layout = twoPageLayout,
+        mode = state.readingMode,
+        landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE,
+    )
 
     // Upstream asks ReadingMode.isPagerType(pref); :domain's enum has isWebtoon and no ViewerType, so
     // the expression inverts. This is the reader's only use of it.
@@ -110,6 +123,11 @@ internal fun ReaderAppBarsHost(
             onEvent(ReaderEvent.HideMenu)
             onStartAutoScroll()
         }.takeIf { stripAutoScroll && state.readingMode.isWebtoon },
+        // Experimental, and only while two pages show. Saved per entry on this device; the pager
+        // follows the preference and keeps the page on screen in view.
+        onClickShiftPages = state.manga?.id
+            ?.takeIf { showsTwoPages }
+            ?.let { entryId -> { preferences.twoPagesShifted.set(preferences.twoPagesShifted.get().withShiftToggled(entryId)) } },
     )
 }
 

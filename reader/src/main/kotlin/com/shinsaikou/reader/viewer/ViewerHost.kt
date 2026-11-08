@@ -81,6 +81,13 @@ interface ViewerHost {
     fun preloadWindow(): PreloadPolicy.Window
 
     fun onPageSelected(page: ReaderPage)
+
+    /**
+     * Two pages of one chapter are on screen side by side (the Experimental two-page view), [page]
+     * the earlier and [alsoShown] the later. A host that has no use for the second page reports the
+     * first alone.
+     */
+    fun onSpreadSelected(page: ReaderPage, alsoShown: ReaderPage) = onPageSelected(page)
     fun onTransitionSelected(transition: ChapterTransition)
     fun requestPreloadChapter(chapter: ReaderChapter)
     fun onPageLongTap(page: ReaderPage)

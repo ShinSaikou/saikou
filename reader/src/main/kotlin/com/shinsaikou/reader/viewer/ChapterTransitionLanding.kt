@@ -18,6 +18,7 @@ import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
  *
  * Null when [shown] is not a transition, is still among [items], or led to a chapter that is not a
  * neighbour in [chapters]. The last is a chapter switch, which moves the viewer to its own page.
+ * While two pages show, the page may be part of a spread among [items]; the spread is where it lands.
  */
 fun pageAfterRemovedTransition(shown: Any?, items: List<Any>, chapters: ViewerChapters): ReaderPage? {
     if (shown !is ChapterTransition || shown in items) return null
@@ -28,5 +29,5 @@ fun pageAfterRemovedTransition(shown: Any?, items: List<Any>, chapters: ViewerCh
         to === chapters.prevChapter -> pages.lastOrNull()
         else -> null
     }
-    return page?.takeIf { it in items }
+    return page?.takeIf { landing -> items.any { holdsPage(it, landing) } }
 }

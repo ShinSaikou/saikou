@@ -4,6 +4,7 @@ import androidx.annotation.StringRes
 import com.shinsaikou.domain.preferences.FlashColor
 import com.shinsaikou.domain.preferences.ReaderHideThreshold
 import com.shinsaikou.domain.preferences.TappingInvertMode
+import com.shinsaikou.domain.preferences.TwoPageLayout
 import com.shinsaikou.i18n.R
 
 /**
@@ -57,4 +58,12 @@ val FlashColor.titleRes: Int
         FlashColor.BLACK -> R.string.pref_flash_style_black
         FlashColor.WHITE -> R.string.pref_flash_style_white
         FlashColor.WHITE_BLACK -> R.string.pref_flash_style_white_black
+    }
+
+@get:StringRes
+val TwoPageLayout.titleRes: Int
+    get() = when (this) {
+        TwoPageLayout.NEVER -> R.string.two_pages_never
+        TwoPageLayout.IN_LANDSCAPE -> R.string.two_pages_in_landscape
+        TwoPageLayout.ALWAYS -> R.string.two_pages_always
     }

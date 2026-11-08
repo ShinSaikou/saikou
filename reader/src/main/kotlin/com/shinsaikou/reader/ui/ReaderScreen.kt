@@ -189,6 +189,7 @@ fun ReaderScreen(
         if (!state.menuVisible && showPageNumber) {
             ReaderPageIndicator(
                 currentPage = state.currentPage + 1,
+                lastPage = (state.spreadLastPage ?: state.currentPage) + 1,
                 totalPages = state.totalPages,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
