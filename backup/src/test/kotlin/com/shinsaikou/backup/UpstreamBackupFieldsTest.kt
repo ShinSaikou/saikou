@@ -2,9 +2,14 @@ package com.shinsaikou.backup
 
 import com.shinsaikou.source.model.UpdateStrategy
 import eu.kanade.tachiyomi.data.backup.models.Backup
+import eu.kanade.tachiyomi.data.backup.models.BackupCustomCover
 import eu.kanade.tachiyomi.data.backup.models.BackupManga
 import eu.kanade.tachiyomi.data.backup.models.BackupMergeSettings
 import eu.kanade.tachiyomi.data.backup.models.BackupMergedEntry
+import eu.kanade.tachiyomi.data.backup.models.BackupMergedGroup
+import eu.kanade.tachiyomi.data.backup.models.BackupMergedMember
+import eu.kanade.tachiyomi.data.backup.models.BackupPageNote
+import eu.kanade.tachiyomi.data.backup.models.BackupScanlatorPriority
 import io.kotest.assertions.withClue
 import io.kotest.matchers.shouldBe
 import kotlinx.serialization.KSerializer
@@ -43,10 +48,11 @@ import java.io.File
  * changed number. A sealed subclass's class name is on the wire (the type string of a
  * `PreferenceValue`), which is why serial names are compared too.
  *
- * The one allowed difference is [IMPORT_ONLY]: fields other readers of the format write, which Saikou
- * reads on import and never writes (R162 item 8, R163 item 4). They are left out of the comparison,
- * and of the walk, so the messages only they reach are not expected in the file, and held by a test
- * of their own to numbers upstream does not use.
+ * The one allowed difference is [EXTRA]: fields upstream does not have. Some are other readers' of
+ * the format, which Saikou reads on import (R162 item 8, R163 item 4) and, for 800 and 804, writes
+ * too; the rest are Saikou's own block (R165 item 3). They are left out of the comparison, and of the
+ * walk, so the messages only they reach are not expected in the file, and held by tests of their own
+ * to numbers upstream does not use.
  *
  * Phase 3 unit R2, part 1; the `IndexFieldNumbersTest` pattern.
  */
@@ -74,7 +80,7 @@ class UpstreamBackupFieldsTest {
                     }
                 } else {
                     for (index in 0 until descriptor.elementsCount) {
-                        if (!isImportOnly(descriptor, index)) walk(descriptor.getElementDescriptor(index), null, into)
+                        if (!isExtra(descriptor, index)) walk(descriptor.getElementDescriptor(index), null, into)
                     }
                 }
             }
@@ -128,8 +134,8 @@ class UpstreamBackupFieldsTest {
     }
 
     @Test
-    fun `the import-only fields are optional and empty by default, at numbers upstream does not use`() {
-        for ((message, fields) in IMPORT_ONLY) {
+    fun `the fields upstream does not have are optional and empty by default, at numbers upstream does not use`() {
+        for ((message, fields) in EXTRA) {
             val descriptor = reachable.getValue(message).descriptor
             val upstreamNumbers = recorded.getValue(message).jsonObject["fields"]!!.jsonArray
                 .map { it.jsonObject["number"]!!.jsonPrimitive.int }
@@ -140,11 +146,57 @@ class UpstreamBackupFieldsTest {
                     val annotated = descriptor.getElementAnnotations(index).filterIsInstance<ProtoNumber>().single()
                     annotated.number shouldBe number
                     descriptor.isElementOptional(index) shouldBe true
-                    applied[name] shouldBe if (name in IMPORT_ONLY_LISTS) JsonArray(emptyList()) else JsonNull
+                    applied[name] shouldBe when (name) {
+                        in EXTRA_LISTS -> JsonArray(emptyList())
+                        in EXTRA_ZEROS -> JsonPrimitive(0)
+                        else -> JsonNull
+                    }
                     upstreamNumbers.contains(number) shouldBe false
                 }
             }
         }
+        // Every field of a message the walk reaches that upstream lacks is one of them. A sealed
+        // message's elements are its type and value, which the file does not record.
+        for ((name, reached) in reachable) {
+            if (reached.descriptor.kind == PolymorphicKind.SEALED) continue
+            val fields = recorded[name]?.jsonObject?.get("fields")?.jsonArray ?: continue
+            val upstreamNames = fields.map { it.jsonObject["name"]!!.jsonPrimitive.content }.toSet()
+            withClue("message $name") {
+                (reached.descriptor.elementNames.toSet() - upstreamNames) shouldBe EXTRA[name].orEmpty().values.toSet()
+            }
+        }
+    }
+
+    @Test
+    fun `Saikou's own fields are in the block 5000 to 5099, and the other readers' are theirs`() {
+        val theirs = mapOf(
+            600 to "mergedEntries",
+            604 to "mergeSettings",
+            800 to "customTitle",
+            804 to "customDescription",
+        )
+        for ((message, fields) in EXTRA) {
+            for ((number, name) in fields) {
+                val other = message == "BackupManga" && theirs[number] == name
+                withClue("$message.$name") { (other || number in 5000..5099) shouldBe true }
+            }
+        }
+    }
+
+    @Test
+    fun `Saikou's own messages keep their numbers`() {
+        numbers(BackupMergedGroup.serializer().descriptor) shouldBe mapOf(
+            "title" to 1,
+            "mainSource" to 2,
+            "mainUrl" to 3,
+            "showAll" to 4,
+            "members" to 5,
+        )
+        numbers(BackupMergedMember.serializer().descriptor) shouldBe
+            mapOf("source" to 1, "url" to 2, "checkUpdates" to 3)
+        numbers(BackupCustomCover.serializer().descriptor) shouldBe mapOf("source" to 1, "url" to 2, "image" to 3)
+        numbers(BackupScanlatorPriority.serializer().descriptor) shouldBe mapOf("scanlator" to 1, "priority" to 2)
+        numbers(BackupPageNote.serializer().descriptor) shouldBe mapOf("pageIndex" to 1, "note" to 2, "dateAdded" to 3)
     }
 
     @Test
@@ -171,8 +223,8 @@ class UpstreamBackupFieldsTest {
                 descriptor.getElementAnnotations(index).filterIsInstance<ProtoNumber>().single().number
         }
 
-    private fun isImportOnly(descriptor: SerialDescriptor, index: Int): Boolean =
-        IMPORT_ONLY[simpleName(descriptor)]?.containsValue(descriptor.getElementName(index)) == true
+    private fun isExtra(descriptor: SerialDescriptor, index: Int): Boolean =
+        EXTRA[simpleName(descriptor)]?.containsValue(descriptor.getElementName(index)) == true
 
     /** One message in the file's shape, less its file name, built from the descriptor. */
     private fun describe(name: String, reached: Reached): JsonObject {
@@ -186,7 +238,7 @@ class UpstreamBackupFieldsTest {
                 emptyList()
             } else {
                 (0 until descriptor.elementsCount)
-                    .filterNot { isImportOnly(descriptor, it) }
+                    .filterNot { isExtra(descriptor, it) }
                     .map { field(descriptor, it) }
             }
             put("fields", JsonArray(fields))
@@ -319,17 +371,36 @@ class UpstreamBackupFieldsTest {
         val NUMBER = Regex("""-?\d+(\.\d+)?[FfL]?""")
         val ENUM_ENTRY = Regex("""[A-Z]\w*\.[A-Z][A-Z0-9_]*""")
 
-        /** By message, the number and name of each field Saikou reads on import only. */
-        val IMPORT_ONLY = mapOf(
+        /**
+         * By message, the number and name of each field upstream does not have: TachiyomiSY's 600 and
+         * 604, read on import only, its 800 and 804, read and written, and Saikou's own block.
+         */
+        val EXTRA = mapOf(
+            "Backup" to mapOf(
+                5000 to "mergedGroups",
+                5001 to "customCovers",
+            ),
             "BackupManga" to mapOf(
                 600 to "mergedEntries",
                 604 to "mergeSettings",
                 800 to "customTitle",
                 804 to "customDescription",
+                5000 to "manualPosition",
+                5001 to "scanlatorPriority",
+            ),
+            "BackupChapter" to mapOf(
+                5000 to "volume",
+                5001 to "pageNotes",
+            ),
+            "BackupCategory" to mapOf(
+                5000 to "parentOrder",
             ),
         )
 
-        /** The one of [IMPORT_ONLY] that defaults to an empty list, the others to null. */
-        val IMPORT_ONLY_LISTS = setOf("mergedEntries")
+        /** The ones of [EXTRA] that default to an empty list. */
+        val EXTRA_LISTS = setOf("mergedEntries", "mergedGroups", "customCovers", "scanlatorPriority", "pageNotes")
+
+        /** The ones of [EXTRA] that default to 0; the rest default to null. */
+        val EXTRA_ZEROS = setOf("manualPosition")
     }
 }

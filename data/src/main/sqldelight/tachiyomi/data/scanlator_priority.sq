@@ -59,3 +59,11 @@ VALUES (:mangaId, :scanlator, :priority);
 deleteByMangaId:
 DELETE FROM scanlator_priority
 WHERE manga_id = :mangaId;
+
+-- getByMangaId for a page of entries, for the backup export (R165 item 3), in the composite index's
+-- order; the reader breaks a tie by the scanlator.
+backupGetByMangaIds:
+SELECT manga_id, scanlator, priority
+FROM scanlator_priority
+WHERE manga_id IN :mangaIds
+ORDER BY manga_id, priority;

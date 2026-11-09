@@ -226,7 +226,7 @@
     <string name="merged_show_every_copy">Show every copy</string>
     <string name="merged_show_every_copy_summary">Lists each source\'s copy of a chapter, for when the one shown is broken.</string>
     <string name="merged_unmerge">Unmerge</string>
-    <string name="merged_sources_note">Merges sync between your devices. A backup keeps every entry and its chapters, but not the merge.</string>
+    <string name="merged_sources_note">Merges sync between your devices, and a Saikou backup keeps them.</string>
 
     <!-- Manga detail -->
     <string name="manga_title_fallback">Entry</string>

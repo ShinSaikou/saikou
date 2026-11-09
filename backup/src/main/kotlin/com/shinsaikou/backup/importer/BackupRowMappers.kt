@@ -53,8 +53,8 @@ internal fun mapManga(
     @Suppress("UNUSED_PARAMETER") trackersModifiedAt: Long?,
     @Suppress("UNUSED_PARAMETER") restoredAt: Long?,
     // Schema version 3's overrides (phase 5 units SC4 and ED): read so the merged row is the stored
-    // one, and never in the file Saikou writes (R138 item 2). A restore fills one only where the row
-    // has none, from fields 800 and 804 of another reader's file (R162 item 8).
+    // one. The file carries them at fields 800 and 804 (R162 item 8, R165 item 3), and a restore
+    // fills one only where the row has none.
     titleOverride: String?,
     descriptionOverride: String?,
     @Suppress("UNUSED_PARAMETER") detailsModifiedAt: Long?,

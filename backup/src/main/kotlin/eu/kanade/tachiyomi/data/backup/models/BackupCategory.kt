@@ -1,11 +1,15 @@
-// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/tachiyomi/data/backup/models/BackupCategory.kt (modified: yes)
+// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/tachiyomi/data/backup/models/BackupCategory.kt (modified: yes) adds Saikou's 5000
 package eu.kanade.tachiyomi.data.backup.models
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.protobuf.ProtoNumber
 import tachiyomi.domain.category.model.Category
 
-/** Modified: `backupCategoryMapper` is deleted, it was bound to upstream's `categories` column order. */
+/**
+ * Modified: `backupCategoryMapper` is deleted, it was bound to upstream's `categories` column order.
+ * [parentOrder] is Saikou's own (R165 item 3): the [order] of the category this one sits under, so
+ * the parent is named as an entry names its categories, and found by that category's [name].
+ */
 @Serializable
 class BackupCategory(
     @ProtoNumber(1) var name: String,
@@ -13,6 +17,8 @@ class BackupCategory(
     @ProtoNumber(3) var id: Long = 0,
     // @ProtoNumber(3) val updateInterval: Int = 0, 1.x value not used in 0.x
     @ProtoNumber(100) var flags: Long = 0,
+    // Saikou's own block starts here.
+    @ProtoNumber(5000) var parentOrder: Long? = null,
 ) {
     fun toCategory(id: Long) = Category(
         id = id,

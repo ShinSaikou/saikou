@@ -78,3 +78,12 @@ INSERT INTO bookmark_notes(chapter_id, page_index, note, date_added)
 VALUES (:chapterId, :pageIndex, :note, :dateAdded)
 ON CONFLICT(chapter_id, page_index)
 DO UPDATE SET note = :note, date_added = :dateAdded;
+
+-- The notes on the live chapters of a page of entries, for the backup export (R165 item 3); a
+-- soft-deleted chapter is not in the file, and neither are its notes.
+backupGetByMangaIds:
+SELECT N.chapter_id, N.page_index, N.note, N.date_added
+FROM bookmark_notes N
+JOIN chapters C ON C._id = N.chapter_id
+WHERE C.manga_id IN :mangaIds AND C.deleted_at IS NULL
+ORDER BY N.chapter_id, N.page_index;

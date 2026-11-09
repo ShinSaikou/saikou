@@ -1,7 +1,10 @@
 package com.shinsaikou.backup.export
 
 import android.content.Context
+import com.shinsaikou.backup.CustomCoverFiles
 import com.shinsaikou.domain.extension.repository.ExtensionStoreRepository
+import com.shinsaikou.domain.merged.model.MergedGroup
+import com.shinsaikou.domain.merged.repository.MergedGroupRepository
 import com.shinsaikou.source.ConfigurableSource
 import com.shinsaikou.source.SourceManager
 import com.shinsaikou.source.StubSource
@@ -10,8 +13,11 @@ import dev.zacsweers.metro.Inject
 import eu.kanade.tachiyomi.data.backup.BackupDecoder
 import eu.kanade.tachiyomi.data.backup.create.BackupOptions
 import eu.kanade.tachiyomi.data.backup.models.Backup
+import eu.kanade.tachiyomi.data.backup.models.BackupCustomCover
 import eu.kanade.tachiyomi.data.backup.models.BackupExtensionStore
 import eu.kanade.tachiyomi.data.backup.models.BackupManga
+import eu.kanade.tachiyomi.data.backup.models.BackupMergedGroup
+import eu.kanade.tachiyomi.data.backup.models.BackupMergedMember
 import com.shinsaikou.backup.UpstreamPreferenceKeys
 import eu.kanade.tachiyomi.data.backup.models.BackupPreference
 import eu.kanade.tachiyomi.data.backup.models.BackupSource
@@ -42,7 +48,9 @@ import java.io.File
 
 /**
  * Builds and writes a `.tachibk`. The output is stock protobuf over the vendored wire models,
- * gzipped, which is what upstream writes and what upstream reads.
+ * gzipped, which is what upstream writes and what upstream reads. Saikou's own data rides in fields
+ * upstream skips (R165 item 3, `BackupSaikou.kt`), in every file this writes, with no setting: the
+ * automatic backups, a backup made by hand and sync's backup before a first pull all come through here.
  */
 @Inject
 class BackupExporter(
@@ -55,6 +63,8 @@ class BackupExporter(
     private val preferenceStore: PreferenceStore,
     private val context: Context,
     private val decoder: BackupDecoder,
+    private val mergedGroupRepository: MergedGroupRepository,
+    private val customCovers: CustomCoverFiles,
 ) {
 
     /**
@@ -72,7 +82,9 @@ class BackupExporter(
      * and each entry is encoded as the field 1 frame it is in a whole [Backup]'s encoding: its tag,
      * its length as a varint, its bytes. The other fields follow as a [Backup] with no entries, whose
      * encoding is those fields alone. The bytes are the whole object's encoding, entries first, which
-     * is the field order kotlinx writes and upstream's: 1, 2, 101, 104, 105, 106.
+     * is the field order kotlinx writes and upstream's: 1, 2, 101, 104, 105, 106, then Saikou's 5000.
+     * The custom covers, field 5001, come last, each its own frame read from its file as it is written
+     * (R165 item 3): a cover is the image as picked, megabytes at times, so they are never held together.
      *
      * Each build first deletes the staged files older than [STALE_AFTER_MILLIS]: those of a process
      * that died mid-export, and the result of a build whose caller was cancelled after this returned
@@ -87,9 +99,9 @@ class BackupExporter(
         dir.listFiles { file -> file.isStaged() && file.lastModified() < staleBefore }?.forEach { it.delete() }
         val file = File.createTempFile(STAGED_PREFIX, STAGED_SUFFIX, dir)
         try {
-            val count = encode(options, file)
-            verify(file, count)
-            StagedBackup(file, count)
+            val written = encode(options, file)
+            verify(file, written)
+            StagedBackup(file, written.mangaCount)
         } catch (e: Throwable) {
             file.delete()
             throw e
@@ -105,47 +117,94 @@ class BackupExporter(
         staged.file.source().use { source -> sink.buffer().use { it.writeAll(source) } }
     }
 
-    /** Writes the file [build] stages. Returns the number of library entries in it. */
-    private suspend fun encode(options: BackupOptions, file: File): Int {
+    /** Writes the file [build] stages. Returns what it holds. */
+    private suspend fun encode(options: BackupOptions, file: File): Written {
         var count = 0
+        var coverCount = 0
         val sources = sortedSetOf<Long>()
         // Read once, so the category list and every entry agree on each category's place.
         val categories = if (options.categories) categoryPlaces() else emptyList()
         val places = categories.withIndex().associate { (place, category) -> category.id to place.toLong() }
+        // Every member of a live group is a live favourite, so each is in the file as an entry.
+        val groups = if (options.libraryEntries) mergedGroupRepository.getLiveGroups() else emptyList()
+        val mainIds = groups.mapTo(HashSet()) { it.mainMangaId }
+        val mainTitles = HashMap<Long, String>()
+        val covers = mutableListOf<Manga>()
         GzipSink(file.sink()).buffer().use { out ->
             if (options.libraryEntries) {
                 var afterId = Long.MIN_VALUE
                 do {
                     val page = reader.libraryPage(afterId, withRead = options.readEntries, limit = EXPORT_PAGE)
                     buildPage(page, options, places).forEach { entry ->
-                        val bytes = parser.encodeToByteArray(BackupManga.serializer(), entry)
-                        out.writeByte(MANGA_TAG)
-                        out.writeVarint(bytes.size)
-                        out.write(bytes)
+                        out.writeFrame(MANGA_TAG, parser.encodeToByteArray(BackupManga.serializer(), entry))
                     }
                     count += page.size
                     page.mapTo(sources) { it.source }
+                    page.filter { it.id in mainIds }.forEach { mainTitles[it.id] = it.displayTitle }
+                    page.filterTo(covers) { customCovers.exists(it.id) }
                     afterId = page.lastOrNull()?.id ?: afterId
                 } while (page.size == EXPORT_PAGE)
             }
 
-            val rest = parser.encodeToByteArray(Backup.serializer(), rest(options, sources, categories))
+            val backup = rest(options, sources, categories).apply {
+                mergedGroups = groups.mapNotNull { it.toBackupMergedGroup(mainTitles[it.mainMangaId]) }
+            }
+            val rest = parser.encodeToByteArray(Backup.serializer(), backup)
             check(count > 0 || rest.isNotEmpty()) { "The backup encoded to zero bytes" }
             out.write(rest)
+
+            covers.forEach { manga ->
+                // Read now, one at a time; a file deleted since its page was read is left out.
+                val image = customCovers.read(manga.id) ?: return@forEach
+                val cover = BackupCustomCover(source = manga.source, url = manga.url, image = image)
+                out.writeFrame(COVER_TAG, parser.encodeToByteArray(BackupCustomCover.serializer(), cover))
+                coverCount++
+            }
         }
-        return count
+        return Written(count, coverCount)
+    }
+
+    /** What [encode] wrote: how many library entries and custom covers. */
+    private class Written(val mangaCount: Int, val coverCount: Int)
+
+    /** A length-delimited top-level frame: its tag, its length as a varint, its bytes. */
+    private fun BufferedSink.writeFrame(tag: Int, bytes: ByteArray) {
+        writeVarint(tag)
+        writeVarint(bytes.size)
+        write(bytes)
+    }
+
+    /**
+     * A live group as the file names it: its members by source and url, in chapter order. [title] is
+     * the main entry's, which the file always holds; a group without it is not written.
+     */
+    private fun MergedGroup.toBackupMergedGroup(title: String?): BackupMergedGroup? {
+        val main = members.firstOrNull { it.mangaId == mainMangaId } ?: return null
+        return BackupMergedGroup(
+            title = title ?: return null,
+            mainSource = main.source,
+            mainUrl = main.url,
+            showAll = showAll,
+            members = members.sortedBy { it.position }.map { BackupMergedMember(it.source, it.url, it.checkUpdates) },
+        )
     }
 
     /**
      * The self-check, a streaming re-read as a restore reads: the header, whose entry count must be
-     * [count], then every entry decoded one at a time and counted again. Neither holds the file.
+     * the count written, then every entry decoded one at a time and counted again, then every custom
+     * cover. None of them holds the file.
      */
-    private fun verify(file: File, count: Int) {
+    private fun verify(file: File, written: Written) {
+        val count = written.mangaCount
         val header = decoder.header(file.source())
         check(header.mangaCount == count) { "The backup holds ${header.mangaCount} entries, $count were written" }
         check(header.undecodable.isEmpty()) { "The backup's entries ${header.undecodable} do not decode" }
         val read = decoder.entries(file.source()).use { it.count() }
         check(read == count) { "The backup's $read entries decoded, $count were written" }
+        val covers = decoder.customCovers(file.source()).use { it.count() }
+        check(covers == written.coverCount) {
+            "The backup's $covers covers decoded, ${written.coverCount} were written"
+        }
     }
 
     /**
@@ -158,10 +217,20 @@ class BackupExporter(
         .filterNot { it.isSystemCategory }
         .sortedWith(compareBy({ it.order }, { it.id }))
 
-    /** Every field but the entries, as a [Backup] whose `backupManga` is empty. */
+    /**
+     * Every field but the entries and the covers, as a [Backup] whose `backupManga` is empty. A
+     * category's parent is named by its place, as an entry names its categories.
+     */
     private suspend fun rest(options: BackupOptions, sources: Set<Long>, categories: List<Category>) = Backup(
         backupManga = emptyList(),
-        backupCategories = categories.mapIndexed { place, category -> category.toBackupCategory(place.toLong()) },
+        backupCategories = categories.mapIndexed { place, category ->
+            category.toBackupCategory(
+                place = place.toLong(),
+                parentPlace = category.parentId?.let { parent -> categories.indexOfFirst { it.id == parent } }
+                    ?.takeIf { it >= 0 }
+                    ?.toLong(),
+            )
+        },
         backupSources = sources.map { id -> BackupSource(name = sourceName(id), sourceId = id) },
         backupPreferences = if (options.appSettings) {
             UpstreamPreferenceKeys.toUpstream(preferenceStore.getAll().toBackupPreferences(options.privateSettings))
@@ -196,7 +265,9 @@ class BackupExporter(
         if (page.isEmpty()) return emptyList()
         val ids = page.map { it.id }
         val excluded = reader.excludedScanlators(ids)
+        val priorities = reader.scanlatorPriorities(ids)
         val chapters = if (options.chapters) reader.chapters(ids) else emptyMap()
+        val notes = if (options.chapters) reader.pageNotes(ids) else emptyMap()
         // Places in the file's category order, never ids: the ids belong to this install.
         val categories = if (options.categories) reader.categoryIds(ids) else emptyMap()
         val tracks = if (options.tracking) reader.tracks(ids) else emptyMap()
@@ -205,8 +276,10 @@ class BackupExporter(
         val history = if (options.history) reader.history(ids) else emptyMap()
 
         return page.map { manga ->
-            val entry = manga.toBackupManga(excluded[manga.id].orEmpty())
-            chapters[manga.id]?.let { rows -> entry.chapters = rows.map { it.toBackupChapter() } }
+            val entry = manga.toBackupManga(excluded[manga.id].orEmpty(), priorities[manga.id].orEmpty())
+            chapters[manga.id]?.let { rows ->
+                entry.chapters = rows.map { it.toBackupChapter(notes[it.id].orEmpty()) }
+            }
             categories[manga.id]?.let { rows -> entry.categories = rows.mapNotNull(places::get) }
             tracks[manga.id]?.let { rows -> entry.tracking = rows.map { it.toBackupTracking() } }
             history[manga.id]?.let { rows -> entry.history = rows.map { (url, row) -> row.toBackupHistory(url) } }
@@ -285,6 +358,9 @@ class BackupExporter(
 
         /** Field 1 with wire type 2, length-delimited: the tag before each entry. */
         const val MANGA_TAG = BackupDecoder.MANGA_FIELD shl 3 or 2
+
+        /** Field 5001 with wire type 2: the tag before each custom cover, two bytes as a varint. */
+        const val COVER_TAG = BackupDecoder.COVERS_FIELD shl 3 or 2
 
         /** Under the cache directory; each [build] stages its own file there. */
         const val STAGING_DIR = "backup-export"

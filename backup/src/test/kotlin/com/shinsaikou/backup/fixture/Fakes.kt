@@ -2,6 +2,7 @@ package com.shinsaikou.backup.fixture
 
 import android.content.SharedPreferences
 import androidx.preference.PreferenceScreen
+import com.shinsaikou.backup.CustomCoverFiles
 import com.shinsaikou.domain.extension.SourceExtensionInstaller
 import com.shinsaikou.source.CatalogueSource
 import com.shinsaikou.source.ConfigurableSource
@@ -114,6 +115,19 @@ class FakeSourceExtensionInstaller : SourceExtensionInstaller {
         requests += sources
         this.storesBefore += storesBefore
         return answer(sources, onProgress)
+    }
+}
+
+/** The app's custom cover files, in memory, by entry id. */
+class FakeCustomCoverFiles : CustomCoverFiles {
+    val files = mutableMapOf<Long, ByteArray>()
+
+    override fun exists(mangaId: Long): Boolean = mangaId in files
+
+    override fun read(mangaId: Long): ByteArray? = files[mangaId]
+
+    override fun write(mangaId: Long, bytes: ByteArray) {
+        files[mangaId] = bytes
     }
 }
 

@@ -18,6 +18,7 @@ import com.shinsaikou.data.DatabaseHandler
 import com.shinsaikou.data.extension.ExtensionStoreRepositoryImpl
 import com.shinsaikou.data.merged.MergedGroupRepositoryImpl
 import com.shinsaikou.data.source.SourceAliasRepositoryImpl
+import com.shinsaikou.domain.category.interactor.SetCategoryParent
 import com.shinsaikou.domain.manga.interactor.UpdateManga
 import com.shinsaikou.domain.merged.interactor.CarryMergedTracks
 import com.shinsaikou.domain.merged.interactor.ReconcileMergedRead
@@ -171,6 +172,7 @@ class BackupTestEnvironment(
         PreferenceImportCheckpointStore(context, backupPreferences, json)
 
     val sourceExtensionInstaller = FakeSourceExtensionInstaller()
+    val customCovers = FakeCustomCoverFiles()
     val libraryUpdateScheduler = mockk<LibraryUpdateScheduler>(relaxed = true)
     val backupScheduler = mockk<BackupScheduler>(relaxed = true)
 
@@ -199,6 +201,8 @@ class BackupTestEnvironment(
         reconcileMergedRead = reconcileMergedRead,
         mergedGroupRepository = mergedGroupRepository,
         carryMergedTracks = CarryMergedTracks(trackRepository),
+        setCategoryParent = SetCategoryParent(categoryRepository),
+        customCovers = customCovers,
         json = json,
     )
 
@@ -212,6 +216,8 @@ class BackupTestEnvironment(
         preferenceStore = preferenceStore,
         context = context,
         decoder = decoder,
+        mergedGroupRepository = mergedGroupRepository,
+        customCovers = customCovers,
     )
 
     /** The [Backup] an export with [options] writes, staged and read back whole. */

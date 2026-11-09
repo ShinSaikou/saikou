@@ -158,6 +158,8 @@ internal fun SyncTestDevice.restore(bytes: ByteArray, filesDir: File): ImportRep
         reconcileMergedRead = mockk(relaxed = true),
         mergedGroupRepository = mockk(relaxed = true),
         carryMergedTracks = mockk(relaxed = true),
+        setCategoryParent = mockk(relaxed = true),
+        customCovers = mockk(relaxed = true),
         json = Json { ignoreUnknownKeys = true },
     )
     val options = RestoreOptions(

@@ -1,7 +1,11 @@
 package com.shinsaikou.backup.importer
 
+import com.shinsaikou.backup.CustomCoverFiles
 import com.shinsaikou.backup.export.BackupScheduler
 import com.shinsaikou.data.DatabaseHandler
+import com.shinsaikou.domain.category.interactor.SetCategoryParent
+import com.shinsaikou.domain.chapter.model.BookmarkNote
+import com.shinsaikou.domain.chapter.model.ScanlatorPriority
 import com.shinsaikou.domain.extension.ExtensionStoreDuplicates
 import com.shinsaikou.domain.extension.SourceExtensionInstaller
 import com.shinsaikou.domain.extension.repository.ExtensionStoreRepository
@@ -22,8 +26,11 @@ import eu.kanade.tachiyomi.data.backup.BackupDecodeException
 import eu.kanade.tachiyomi.data.backup.BackupDecoder
 import eu.kanade.tachiyomi.data.backup.BackupFileValidator
 import eu.kanade.tachiyomi.data.backup.models.Backup
+import eu.kanade.tachiyomi.data.backup.models.BackupCategory
 import eu.kanade.tachiyomi.data.backup.models.BackupManga
 import eu.kanade.tachiyomi.data.backup.models.BackupMergedEntry
+import eu.kanade.tachiyomi.data.backup.models.BackupMergedGroup
+import eu.kanade.tachiyomi.data.backup.models.BackupMergedMember
 import eu.kanade.tachiyomi.data.backup.restore.RestoreOptions
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -44,6 +51,7 @@ import tachiyomi.core.common.extensions.JsonObjectEmptyBytes
 import tachiyomi.domain.extension.model.ExtensionStore
 import okio.source
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.data.Database
 import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.category.repository.CategoryRepository
 import tachiyomi.domain.chapter.model.Chapter
@@ -67,6 +75,11 @@ import kotlin.time.Clock
  * Every merge rule is written so a re-import converges. Read state, bookmarks and page progress
  * never regress, history duration is a maximum rather than a sum, and the excluded scanlator set
  * is additive.
+ *
+ * Saikou's own data in the file (R165 item 3, `BackupSaikou.kt`) fills only what the device does not
+ * hold: a manual position, a chapter's volume, a page's note, an entry's scanlator priority, a
+ * custom cover, a created category's parent, as the title and description overrides do (R162 item
+ * 12). A file without it, from upstream, a fork or an older Saikou, restores as it always did.
  */
 @Inject
 class BackupImporter(
@@ -91,6 +104,8 @@ class BackupImporter(
     private val reconcileMergedRead: ReconcileMergedRead,
     private val mergedGroupRepository: MergedGroupRepository,
     private val carryMergedTracks: CarryMergedTracks,
+    private val setCategoryParent: SetCategoryParent,
+    private val customCovers: CustomCoverFiles,
     private val json: Json,
 ) {
 
@@ -176,7 +191,10 @@ class BackupImporter(
                 decoder.entries(file.source(), skip = run.startCursor, passOverUndecodable = true).use { entries ->
                     restoreMangaList(entries, run.mangaTotal, options, run, progress)
                 }
-                if (!run.cancelled) restoreMergedTitles(header.syMerged, file, options, run)
+                if (!run.cancelled) {
+                    restoreMergedTitles(header.syMerged, backup.mergedGroups, file, options, run)
+                    restoreCustomCovers(file, run)
+                }
                 reconcileMerged()
             }
 
@@ -215,9 +233,9 @@ class BackupImporter(
     }
 
     /**
-     * Saikou's own files carry no merges (R163 item 4), but any file writes `read` on the members of
-     * groups on the device, one copy at a time. A failure is logged: the library is restored, and an
-     * entry's next open heals it.
+     * Any file writes `read` on the members of groups on the device, one copy at a time, and the groups
+     * a file brings have members whose copies differ. A failure is logged: the library is restored,
+     * and an entry's next open heals it.
      */
     private suspend fun reconcileMerged() {
         try {
@@ -230,28 +248,46 @@ class BackupImporter(
     }
 
     /**
-     * A TachiyomiSY file's merged entries, once every entry is in. Each [entries] row in the library
-     * becomes a group of the members the file holds, as Merged entries would have merged them, written
-     * whatever the switch says, so they appear when it is turned on. A synthetic entry that is no
-     * favourite was removed from that library, so its members stay what the file says they are.
+     * A file's merged entries, once every entry is in: a TachiyomiSY file's synthetic [entries], and
+     * Saikou's own [groups] (R165 item 3). Each becomes a group of its members, as Merged entries
+     * would have merged them, written whatever the switch says, so they appear when it is turned on
+     * (R163 item 2 keeps the rows while it is off). A synthetic entry that is no favourite was removed
+     * from that library, so its members stay what the file says they are.
      *
-     * A file with none pays nothing. One with some walks its entries a third time, for what it holds:
-     * a member named by a merge can be anywhere, and a resumed run did not see the entries before its
-     * cursor. Nothing here is checkpointed: the groups that stand are left as they are, so a run that
-     * stops part way does the rest when it resumes.
+     * A file with none pays nothing. An SY file with some walks its entries a third time, for what it
+     * holds: a member named by a merge can be anywhere, and a resumed run did not see the entries
+     * before its cursor. Nothing here is checkpointed: the groups that stand are left as they are, so
+     * a run that stops part way does the rest when it resumes.
      */
-    private suspend fun restoreMergedTitles(entries: List<BackupManga>, file: File, options: RestoreOptions, run: Run) {
+    private suspend fun restoreMergedTitles(
+        entries: List<BackupManga>,
+        groups: List<BackupMergedGroup>,
+        file: File,
+        options: RestoreOptions,
+        run: Run,
+    ) {
         val merges = entries.filter { it.favorite }.map(SyMerge::of)
-        if (merges.isEmpty()) return
-        val held = entriesIn(file, merges.flatMapTo(HashSet()) { merge -> merge.members.map { it.key } })
+        if (merges.isEmpty() && groups.isEmpty()) return
         val titles = MergedTitlesTally()
-        merges.forEach { merge ->
+        if (merges.isNotEmpty()) {
+            val held = entriesIn(file, merges.flatMapTo(HashSet()) { merge -> merge.members.map { it.key } })
+            merges.forEach { merge ->
+                try {
+                    restoreMergedTitle(merge, held, options, run, titles)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    run.record(ImportError.Kind.MERGED_TITLE, merge.entry.title, null, e)
+                }
+            }
+        }
+        groups.forEach { group ->
             try {
-                restoreMergedTitle(merge, held, options, run, titles)
+                restoreMergedGroup(group, run, titles)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                run.record(ImportError.Kind.MERGED_TITLE, merge.entry.title, null, e)
+                run.record(ImportError.Kind.MERGED_TITLE, group.title, null, e)
             }
         }
         run.mergedTitles = ImportReport.MergedTitles(
@@ -278,11 +314,8 @@ class BackupImporter(
 
     /**
      * One merged title, in one transaction, so a title that fails leaves its entries as they were.
-     * A member the file does not hold, or whose entry did not restore, is left out and named. A
-     * group on the device is newer than any file, so it keeps every member it already holds, which
-     * is also what makes a second restore of the file write nothing. With fewer than two members
-     * left for a new group there is none, and those entries stay ordinary; the title still counts
-     * when a group here already holds two of its members.
+     * A member the file does not hold, or whose entry did not restore, is left out and named. The
+     * rest go by [settleTitle].
      */
     private suspend fun restoreMergedTitle(
         merge: SyMerge,
@@ -300,19 +333,84 @@ class BackupImporter(
             }
             row?.let { member to it }
         }
+        val (free, main) = settleTitle(title, found, merge.info, { it.key }, { it.mangaSourceId }, run, titles)
+            ?: return
+        handler.await(inTransaction = true) {
+            writeMergedTitle(merge, free, main, options, run)
+        }
+    }
+
+    /**
+     * One of Saikou's own groups (R165 item 3), in one transaction. Its members restore as library
+     * entries of the file, so a member counts when its entry is a live favourite now; one that is not
+     * is left out and named. The rest go by [settleTitle], and the group is written as the Merged
+     * sources sheet would write it: through the repository, logged, so sync carries it, with each
+     * member's Check for updates and the group's Show every copy.
+     */
+    private suspend fun restoreMergedGroup(group: BackupMergedGroup, run: Run, titles: MergedTitlesTally) {
+        val key = { member: BackupMergedMember -> EntryKey(member.source, member.url) }
+        val found = group.members.distinctBy(key).mapNotNull { member ->
+            val row = writer.findManga(member.url, sourceAliasRepository.resolve(member.source))
+                ?.takeIf { it.favorite && it.deletedAt == null }
+            if (row == null) {
+                titles.missing += ImportReport.MissingSource(group.title, run.labelOf(member.source), member.url)
+            }
+            row?.let { member to it }
+        }
+        val mainKey = EntryKey(group.mainSource, group.mainUrl)
+        val (free, main) = settleTitle(group.title, found, mainKey, key, { it.source }, run, titles) ?: return
+        handler.await(inTransaction = true) {
+            mergedGroupRepository.merge(main.id, free.map { (_, row) -> row.id })
+            free.forEach { (member, row) -> mergedGroupRepository.setCheckUpdates(row.id, member.checkUpdates) }
+            if (group.showAll) {
+                mergedGroupRepository.getLiveGroup(main.id)?.let { mergedGroupRepository.setShowAll(it.id, true) }
+            }
+        }
+    }
+
+    /**
+     * What becomes of a title whose [found] members are entries here, keyed by [key] as the file names
+     * them. A group on the device is newer than any file, so it keeps every member it already holds,
+     * which is also what makes a second restore of the file write nothing; such a member is reported,
+     * unless the group holding it is the title's own. With two or more members free, they make a new
+     * group, whose main entry is [mainKey]'s when that one is free, and the free members and that main
+     * entry are returned for the caller to write. With fewer, there is no new group and those entries
+     * stay ordinary; the title still counts as merged when a group here already holds two of its
+     * members, and is otherwise named as left separate.
+     */
+    private suspend fun <M> settleTitle(
+        title: String,
+        found: List<Pair<M, Manga>>,
+        mainKey: EntryKey?,
+        key: (M) -> EntryKey,
+        source: (M) -> Long,
+        run: Run,
+        titles: MergedTitlesTally,
+    ): Pair<List<Pair<M, Manga>>, Manga>? {
         val holders = found.associate { (_, row) -> row.id to mergedGroupRepository.getLiveGroup(row.id)?.id }
         val free = found.filter { (_, row) -> holders[row.id] == null }
-        if (free.size >= 2) {
-            val main = free.firstOrNull { (member, _) -> member.key == merge.info } ?: free.first()
-            handler.await(inTransaction = true) {
-                writeMergedTitle(merge, free, main.second, options, run)
-            }
-            titles.merged++
-        } else if (holders.values.filterNotNull().groupingBy { it }.eachCount().values.any { it >= 2 }) {
-            titles.merged++
+        val shared = holders.values.filterNotNull().groupingBy { it }.eachCount().filterValues { it >= 2 }.keys
+        val newGroup = if (free.size >= 2) {
+            val main = free.firstOrNull { (member, _) -> key(member) == mainKey } ?: free.first()
+            free to main.second
         } else {
-            titles.unmerged += title
+            null
         }
+        when {
+            newGroup != null || shared.isNotEmpty() -> titles.merged++
+            else -> titles.unmerged += title
+        }
+        found.forEach { (member, row) ->
+            val holder = holders[row.id] ?: return@forEach
+            if (newGroup == null && holder in shared) return@forEach
+            run.record(
+                kind = ImportError.Kind.MERGED_TITLE,
+                subject = title,
+                sourceLabel = run.labelOf(source(member)),
+                message = "${row.displayTitle} is already merged into another entry here, so it stays there",
+            )
+        }
+        return newGroup
     }
 
     /**
@@ -385,11 +483,16 @@ class BackupImporter(
      * Live categories are matched by name, never by id: the ids in a foreign file belong to that
      * install. A match is reused untouched, so a re-import never renames or reflags a category.
      *
-     * A category the restore creates holds no clock (phase 5 unit CT): the file carries no parent
-     * (decision F10), so the create's stamp would let its "no parent" beat, on the next sync, a
-     * parent another device set before it, and flatten that device's tree. With no clock, every
-     * value another device holds for the same category wins the merge, and the next local edit
-     * stamps it as usual. The create is still logged, so the category is pushed.
+     * A category the restore creates holds no clock (phase 5 unit CT): a file without parents
+     * (upstream's, or Saikou's before R165 item 3) would otherwise let its "no parent" beat, on the
+     * next sync, a parent another device set before it, and flatten that device's tree; and a file is
+     * older than whatever another device holds. With no clock, every value another device holds for
+     * the same category wins the merge, and the next local edit stamps it as usual. The create is
+     * still logged, so the category is pushed.
+     *
+     * A category the restore creates takes the parent the file gives it (R165 item 3), by the
+     * parent's order in the file and then its name, under [SetCategoryParent]'s rules: one level, no
+     * cycle. A matched category keeps its own parent, as it keeps everything else.
      *
      * An entry names its categories by order value, and a file an older build wrote can give two
      * categories one value (sync can leave a tie, and the export wrote the values as stored). The
@@ -405,6 +508,7 @@ class BackupImporter(
             val live = categoryRepository.getAll().filterNot { it.isSystemCategory }
             val byName = live.associateBy { it.name }.toMutableMap()
             var nextOrder = (live.maxOfOrNull { it.order } ?: -1L) + 1L
+            val created = mutableListOf<Pair<BackupCategory, Long>>()
 
             backup.backupCategories.sortedBy { it.order }.forEach { backupCategory ->
                 try {
@@ -425,11 +529,23 @@ class BackupImporter(
                             .first { it.name == backupCategory.name && !it.isSystemCategory }
                         categoriesQueries.restoreForgetModifiedAt(categoryId = inserted.id)
                         byName[backupCategory.name] = inserted
+                        created += backupCategory to inserted.id
                         run.categoriesCreated++
                         inserted
                     }
                     run.categoryIdsByBackupOrder.getOrPut(backupCategory.order) { mutableListOf() } += resolved.id
                     run.categoryIdByBackupId[backupCategory.id] = resolved.id
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    run.record(ImportError.Kind.CATEGORY, backupCategory.name, null, e)
+                }
+            }
+
+            created.forEach { (backupCategory, id) ->
+                val parentOrder = backupCategory.parentOrder ?: return@forEach
+                try {
+                    restoreCategoryParent(backup, backupCategory, id, parentOrder, byName, run)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -447,6 +563,31 @@ class BackupImporter(
             }
         }
         run.flushErrors()
+    }
+
+    /**
+     * Puts the category [id], which this restore created, under the category the file's [parentOrder]
+     * names. The write stamps the category's clock, which is forgotten again, as at its create.
+     */
+    private suspend fun Database.restoreCategoryParent(
+        backup: Backup,
+        backupCategory: BackupCategory,
+        id: Long,
+        parentOrder: Long,
+        byName: Map<String, Category>,
+        run: Run,
+    ) {
+        val parent = backup.backupCategories.firstOrNull { it.order == parentOrder }?.let { byName[it.name] } ?: return
+        val result = setCategoryParent.await(id, parent.id)
+        categoriesQueries.restoreForgetModifiedAt(categoryId = id)
+        if (result != SetCategoryParent.Result.Success) {
+            run.record(
+                kind = ImportError.Kind.CATEGORY,
+                subject = backupCategory.name,
+                sourceLabel = null,
+                message = "Could not be put under ${parent.name}, so it stays at the top level",
+            )
+        }
     }
 
     private fun recordSharedOrders(backup: Backup, run: Run) {
@@ -731,7 +872,7 @@ class BackupImporter(
         // Before any lookup: the id in the file may belong to a source this install renamed.
         val resolvedSource = sourceAliasRepository.resolve(entry.source)
         val decoded = decodeManga(entry, run)
-        val manga = decoded.copy(source = resolvedSource)
+        val manga = decoded.copy(source = resolvedSource, manualPosition = entry.manualPosition)
         val dbManga = writer.findManga(manga.url, resolvedSource)
 
         val mangaId: Long
@@ -764,8 +905,12 @@ class BackupImporter(
         step(run, ImportError.Kind.CATEGORIES_OF_MANGA, entry.title, label) {
             restoreCategoriesOfManga(entry, mangaId, context)
         }
+        var latched: Set<String> = emptySet()
         step(run, ImportError.Kind.CHAPTERS, entry.title, label) {
-            restoreChapters(entry, mangaId, run)
+            latched = restoreChapters(entry, mangaId, run)
+        }
+        step(run, ImportError.Kind.PAGE_NOTES, entry.title, label) {
+            restorePageNotes(entry, mangaId, latched)
         }
         step(run, ImportError.Kind.TRACKING, entry.title, label) {
             restoreTracking(entry, mangaId, run)
@@ -777,6 +922,9 @@ class BackupImporter(
             if (entry.excludedScanlators.isNotEmpty()) {
                 writer.addExcludedScanlators(mangaId, entry.excludedScanlators.toSet())
             }
+        }
+        step(run, ImportError.Kind.SCANLATOR_PRIORITY, entry.title, label) {
+            restoreScanlatorPriority(entry, mangaId)
         }
 
         // The merged row: a file has no interval, last update or next update, so its own zeros
@@ -794,9 +942,10 @@ class BackupImporter(
     }
 
     /**
-     * The edited title and description another reader's file carries (R162 item 8), by
-     * [mergeOverride]. The row's latch is up on both paths, so neither the edit's clock nor the
-     * version moves, as with the notes a restore writes.
+     * The edited title and description at fields 800 and 804, which TachiyomiSY and its kin write
+     * and, since R165 item 3, Saikou too, by [mergeOverride]: one path for every file. The row's
+     * latch is up on both paths, so neither the edit's clock nor the version moves, as with the
+     * notes a restore writes.
      */
     private suspend fun restoreDetailsOverride(entry: BackupManga, dbManga: Manga?, mangaId: Long) {
         val title = mergeOverride(dbManga?.titleOverride, entry.customTitle)
@@ -840,9 +989,12 @@ class BackupImporter(
      * (R120): the tombstone's version plus one, by the trigger alone, never the file's version,
      * since the source values written are the tombstone's own. A url with a live row uses the live
      * row and leaves any tombstone of it alone.
+     *
+     * A chapter's volume from the file (R165 item 3) fills only a row that has none ([mergeChapter]).
+     * Returns the urls of the chapters it inserted, which are still under their latch.
      */
-    private suspend fun restoreChapters(entry: BackupManga, mangaId: Long, run: Run) {
-        if (entry.chapters.isEmpty()) return
+    private suspend fun restoreChapters(entry: BackupManga, mangaId: Long, run: Run): Set<String> {
+        if (entry.chapters.isEmpty()) return emptySet()
         val existing = writer.chaptersByUrl(mangaId)
         // Only asked for when the file carries a url no live row has.
         val deleted = if (entry.chapters.all { it.url in existing }) {
@@ -862,7 +1014,7 @@ class BackupImporter(
             } catch (e: Exception) {
                 run.record(ImportError.Kind.CHAPTERS, backupChapter.url, run.labelOf(entry.source), e)
                 return@forEach
-            }.copy(mangaId = mangaId)
+            }.copy(mangaId = mangaId, volume = backupChapter.volume)
 
             val db = existing[chapter.url]
             val tombstone = if (db == null) deleted[chapter.url] else null
@@ -881,6 +1033,81 @@ class BackupImporter(
         }
         if (toRestore.isNotEmpty()) writer.updateChapters(toRestore, isSyncing = false, clearDeletedAt = true)
         run.chaptersWritten += toInsert.size + toUpdate.size + toRestore.size
+        return toInsert.mapTo(HashSet()) { it.url }
+    }
+
+    /**
+     * Page notes from the file fill only the pages of a chapter that hold none here (R165 item 3): a
+     * stored note is the owner's and is kept. A chapter this entry inserted is still under its latch
+     * ([latched]); any other is raised for the write and lowered after it, as a merged chapter is,
+     * so the notes' triggers neither log nor move the chapter's notes clock.
+     */
+    private suspend fun restorePageNotes(entry: BackupManga, mangaId: Long, latched: Set<String>) {
+        val noted = entry.chapters.filter { it.pageNotes.isNotEmpty() }.distinctBy { it.url }
+        if (noted.isEmpty()) return
+        val chapters = writer.chaptersByUrl(mangaId)
+        val stored = writer.notedPages(mangaId)
+        noted.forEach { backupChapter ->
+            val chapter = chapters[backupChapter.url] ?: return@forEach
+            val pages = stored[chapter.id].orEmpty()
+            val notes = backupChapter.pageNotes
+                .distinctBy { it.pageIndex }
+                .filter { it.pageIndex !in pages }
+                .map { BookmarkNote(0L, chapter.id, it.pageIndex, it.note, it.dateAdded) }
+            if (notes.isEmpty()) return@forEach
+            if (chapter.url in latched) {
+                writer.insertPageNotes(chapter.id, notes)
+            } else {
+                writer.markChapterSyncing(chapter.id)
+                // The step around this swallows a failed write, so the latch comes down either way.
+                try {
+                    writer.insertPageNotes(chapter.id, notes)
+                } finally {
+                    writer.resetChaptersIsSyncing(listOf(chapter.id))
+                }
+            }
+        }
+    }
+
+    /**
+     * The file's scanlator priority, only where the entry has none (R165 item 3): a ranking here is
+     * the owner's and is kept whole, since two rankings cannot be joined. Under the row's latch, as
+     * every write of [restoreManga] is.
+     */
+    private suspend fun restoreScanlatorPriority(entry: BackupManga, mangaId: Long) {
+        if (entry.scanlatorPriority.isEmpty()) return
+        if (writer.scanlatorPriorities(mangaId).isNotEmpty()) return
+        val ranks = entry.scanlatorPriority.distinctBy { it.scanlator }
+        writer.insertScanlatorPriorities(mangaId, ranks.map { ScanlatorPriority(mangaId, it.scanlator, it.priority) })
+    }
+
+    /**
+     * The file's custom covers, once every entry is in (R165 item 3), each written where the app keeps
+     * an entry's custom cover, and the entry's cover clock moved so every cover key changes, as setting
+     * one by hand does. A cover replaces nothing: an entry that has a custom cover here keeps it, which
+     * also makes a second restore of the file write none. Each is a whole image, so they are read one
+     * at a time. Nothing here is checkpointed; a resumed run does the rest.
+     */
+    private suspend fun restoreCustomCovers(file: File, run: Run) {
+        decoder.customCovers(file.source()).use { covers ->
+            covers.forEach { cover ->
+                currentCoroutineContext().ensureActive()
+                var subject = cover.url
+                try {
+                    val row = writer.findManga(cover.url, sourceAliasRepository.resolve(cover.source)) ?: return@forEach
+                    subject = row.title
+                    if (customCovers.exists(row.id)) return@forEach
+                    customCovers.write(row.id, cover.image)
+                    updateManga.awaitUpdateCoverLastModified(row.id)
+                    run.customCoversRestored++
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    run.record(ImportError.Kind.CUSTOM_COVER, subject, run.labelOf(cover.source), e)
+                }
+            }
+        }
+        run.flushErrors()
     }
 
     private suspend fun restoreTracking(entry: BackupManga, mangaId: Long, run: Run) {
@@ -1078,6 +1305,7 @@ class BackupImporter(
         var extensionStoresUpserted: Int = 0
         var extensionInstalls: ImportReport.ExtensionInstalls? = null
         var mergedTitles: ImportReport.MergedTitles? = null
+        var customCoversRestored: Int = 0
 
         var sourceLabels: Map<Long, String> = emptyMap()
         var unsupportedTrackers: List<Long> = emptyList()
@@ -1191,6 +1419,7 @@ class BackupImporter(
             missingSources = missingSources.distinct(),
             extensionInstalls = extensionInstalls,
             mergedTitles = mergedTitles,
+            customCoversRestored = customCoversRestored,
         )
     }
 
@@ -1219,7 +1448,8 @@ class BackupImporter(
         /**
          * Upstream's `restoreExistingManga` plus `Manga.copyFrom`. Metadata follows the higher
          * version and ties keep the database row, because the row is what the user is looking at.
-         * Every column the backup format has no field for keeps the database value.
+         * Every column the backup format has no field for keeps the database value. The manual
+         * position (R165 item 3) is filled only where the row has none, 0 being an entry not placed.
          */
         internal fun mergeManga(db: Manga, backup: Manga): Manga {
             val fromBackup = backup.version > db.version
@@ -1237,6 +1467,7 @@ class BackupImporter(
                 // column): upstream's files carry seconds, and this clock is milliseconds that the sync
                 // merge compares. A favourite the merge turns on is stamped by the row's trigger.
                 favoriteModifiedAt = db.favoriteModifiedAt,
+                manualPosition = if (db.manualPosition == 0L) backup.manualPosition else db.manualPosition,
                 // The undelete is a separate write that follows this one, so the merged row
                 // keeps whatever it read.
                 deletedAt = db.deletedAt,
@@ -1258,8 +1489,8 @@ class BackupImporter(
 
         /**
          * `copyFrom` takes name, url, dateUpload, chapterNumber, scanlator and volume from the
-         * database row, so a source rename survives a restore. Read state, bookmarks and page
-         * progress only ever move forward.
+         * database row, so a source rename survives a restore; a row with no volume takes the file's
+         * (R165 item 3). Read state, bookmarks and page progress only ever move forward.
          *
          * Each of those three moves forward on its own axis, which is the one place this departs
          * from contract 06 section 1.4.3 and from upstream's `restoreExistingManga`. Their two-branch
@@ -1276,6 +1507,7 @@ class BackupImporter(
                 bookmark = backup.bookmark || db.bookmark,
                 lastPageRead = max(backup.lastPageRead, db.lastPageRead),
                 version = max(backup.version, db.version),
+                volume = db.volume ?: backup.volume,
                 deletedAt = db.deletedAt,
             )
 

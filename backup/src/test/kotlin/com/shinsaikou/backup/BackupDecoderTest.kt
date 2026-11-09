@@ -199,6 +199,20 @@ class BackupDecoderTest {
     }
 
     @Test
+    fun `a custom cover frame of the wrong wire type is refused by the header`() {
+        // Field 5001 as a varint: the header refuses it before a restore writes anything, rather than
+        // the covers pass failing after the entries are in.
+        val cover = Buffer().also {
+            varint(it, (5001L shl 3) or 0L)
+            varint(it, 7L)
+        }.readByteArray()
+        listOf(raw(encode(backup), cover), gzip(raw(encode(backup), cover))).forEach { bytes ->
+            shouldThrow<BackupDecodeException> { decoder.header(Buffer().write(bytes)) }
+                .reason shouldBe BackupDecodeException.Reason.MALFORMED
+        }
+    }
+
+    @Test
     fun `random bytes and a JSON file are refused by the header and the entries by reason`() {
         val garbage = ByteArray(64) { (it * 31 + 7).toByte() }
         shouldThrow<BackupDecodeException> { decoder.header(Buffer().write(garbage)) }

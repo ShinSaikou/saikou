@@ -6,9 +6,9 @@ import kotlinx.serialization.protobuf.ProtoNumber
 
 /**
  * One source of a merged entry as TachiyomiSY writes it, at field 600 of [BackupManga] (R163 item 4).
- * Read on import only: the export never fills it, so a file Saikou writes stays upstream's (decision
- * F10). [isInfoManga] and [chapterSortMode] are what older files carry where [BackupMergeSettings] now
- * stands. Field 6, the merge's own url in those files, is not read.
+ * Read on import only: the export never fills it, since Saikou's own groups travel in
+ * `Backup.mergedGroups` (R165 item 3). [isInfoManga] and [chapterSortMode] are what older files carry
+ * where [BackupMergeSettings] now stands. Field 6, the merge's own url in those files, is not read.
  */
 @Serializable
 class BackupMergedEntry(

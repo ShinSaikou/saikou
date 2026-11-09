@@ -68,6 +68,10 @@
     <string name="import_report_merged_unmerged_detail">Fewer than two of their sources could be merged</string>
     <string name="import_report_merged_missing">Sources not in this backup</string>
     <string name="import_report_merged_missing_format">%1$s: %2$s, %3$s</string>
+    <plurals name="import_report_custom_covers_count">
+        <item quantity="one">%d custom cover restored</item>
+        <item quantity="other">%d custom covers restored</item>
+    </plurals>
     <string name="import_report_copy_downloads_detail">A backup holds no downloads. Copy them from another reader\'s downloads folder, or a Saikou export; the folder is only read</string>
     <string name="import_export_error_log_saved">Error log saved.</string>
     <string name="import_export_error_log_failed">The error log could not be saved. Try again, or choose another place.</string>
@@ -77,6 +81,9 @@
     <string name="import_error_kind_preference_type_mismatch">App settings of a different type</string>
     <string name="import_error_kind_unknown_tracker">Unknown trackers</string>
     <string name="import_error_kind_batch_fallback">Entries restored one at a time</string>
+    <string name="import_error_kind_page_notes">Page notes</string>
+    <string name="import_error_kind_scanlator_priority">Scanlator priority</string>
+    <string name="import_error_kind_custom_covers">Custom covers</string>
 
     <!-- Install extensions: the restore option, and what the report says it did -->
     <string name="backup_option_install_extensions">Install extensions</string>

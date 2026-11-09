@@ -2,6 +2,8 @@ package com.shinsaikou.backup.importer
 
 import app.cash.sqldelight.async.coroutines.awaitAsOne
 import com.shinsaikou.data.DatabaseHandler
+import com.shinsaikou.domain.chapter.model.BookmarkNote
+import com.shinsaikou.domain.chapter.model.ScanlatorPriority
 import dev.zacsweers.metro.Inject
 import tachiyomi.data.Database
 import tachiyomi.data.MemoColumnAdapter
@@ -20,8 +22,9 @@ import java.util.Date
  * transaction rather than opening its own, which is what makes a chunk atomic.
  *
  * The `update` queries are `coalesce`-based, so every column is bound with the merged value and
- * nothing is left to chance. `manual_position`, `deleted_at` and `volume` are bound to the row's
- * own value, so an import never touches a column the backup format has no field for.
+ * nothing is left to chance. `deleted_at` is bound to the row's own value, and `manual_position` and
+ * `volume` to the merged one (R165 item 3), so an import never touches a column the backup format has
+ * no field for.
  */
 @Inject
 class BackupDatabaseWriter(private val handler: DatabaseHandler) {
@@ -56,7 +59,7 @@ class BackupDatabaseWriter(private val handler: DatabaseHandler) {
             version = manga.version,
             notes = manga.notes,
             memo = manga.memo,
-            manualPosition = 0L,
+            manualPosition = manga.manualPosition,
             deletedAt = null,
         )
         mangasQueries.selectLastInsertedRowId().awaitAsOne()
@@ -283,6 +286,48 @@ class BackupDatabaseWriter(private val handler: DatabaseHandler) {
                 clearVolume = 0L, volume = null, clearDeletedAt = 0L, deletedAt = null, chapterId = id,
             )
         }
+    }
+
+    /** Only `is_syncing` is bound, raised, as [resetChaptersIsSyncing] lowers it. */
+    suspend fun markChapterSyncing(chapterId: Long) = handler.await {
+        chaptersQueries.update(
+            mangaId = null, url = null, name = null, scanlator = null, read = null,
+            bookmark = null, lastPageRead = null, chapterNumber = null, sourceOrder = null,
+            dateFetch = null, dateUpload = null, version = null, isSyncing = 1L, memo = null,
+            clearVolume = 0L, volume = null, clearDeletedAt = 0L, deletedAt = null, chapterId = chapterId,
+        )
+    }
+
+    /** The pages of each of the manga's chapters that hold a note, by chapter id. */
+    suspend fun notedPages(mangaId: Long): Map<Long, Set<Long>> = handler
+        .awaitList { bookmark_notesQueries.getByMangaId(mangaId) }
+        .groupBy({ it.chapter_id }, { it.page_index })
+        .mapValues { (_, pages) -> pages.toSet() }
+
+    /**
+     * Each note with the date it travelled with, as sync's apply writes one. Called under the
+     * chapter's latch, so the notes' triggers neither log nor move the chapter's clock.
+     */
+    suspend fun insertPageNotes(chapterId: Long, notes: List<BookmarkNote>) = handler.await {
+        notes.forEach { note ->
+            bookmark_notesQueries.syncUpsert(
+                chapterId = chapterId,
+                pageIndex = note.pageIndex,
+                note = note.note,
+                dateAdded = note.dateAdded,
+            )
+        }
+    }
+
+    suspend fun scanlatorPriorities(mangaId: Long): List<ScanlatorPriority> = handler.awaitList {
+        scanlator_priorityQueries.getByMangaId(mangaId) { _, manga, scanlator, priority ->
+            ScanlatorPriority(manga, scanlator, priority)
+        }
+    }
+
+    /** Called under the manga's latch, so the table's triggers neither log nor move the manga's clock. */
+    suspend fun insertScanlatorPriorities(mangaId: Long, priorities: List<ScanlatorPriority>) = handler.await {
+        priorities.forEach { scanlator_priorityQueries.insert(mangaId, it.scanlator, it.priority) }
     }
 
     suspend fun tracksByTrackerId(mangaId: Long): Map<Long, Track> = handler

@@ -35,7 +35,7 @@ import java.io.OutputStream
  * `CoverCache.setCustomCoverToCache` (a Local entry's goes into its folder through
  * [LocalCoverManager], as `AppPageImageActions.setAsCover` does), delete removes the custom file,
  * and both bump `coverLastModified` so every cover key changes and the new image shows. A custom
- * cover stays on this device: nothing here is synced or backed up.
+ * cover is not synced; a backup carries it (R165 item 3, `CoverCacheCustomCoverFiles`).
  *
  * Save and share write the cover as Coil decodes it, a JPEG at full quality, as upstream's
  * `Image.Cover` does, so the bytes are the same whichever of the custom file, the Local folder, the

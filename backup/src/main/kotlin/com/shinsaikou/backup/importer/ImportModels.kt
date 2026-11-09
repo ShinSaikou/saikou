@@ -58,6 +58,9 @@ data class ImportError(
         BATCH_FALLBACK,
         EXTENSION_INSTALL,
         MERGED_TITLE,
+        PAGE_NOTES,
+        SCANLATOR_PRIORITY,
+        CUSTOM_COVER,
     }
 }
 
@@ -108,10 +111,12 @@ data class ImportReport(
      */
     val extensionInstalls: ExtensionInstalls? = null,
     /**
-     * What became of a TachiyomiSY file's merged entries: null for a file with none, a run that did
-     * not restore the library, one stopped first, or an older build's report.
+     * What became of a file's merged entries, TachiyomiSY's or Saikou's own: null for a file with
+     * none, a run that did not restore the library, one stopped first, or an older build's report.
      */
     val mergedTitles: MergedTitles? = null,
+    /** Custom covers the file carried that this run wrote (R165 item 3); 0 in an older build's report. */
+    val customCoversRestored: Int = 0,
 ) {
     /**
      * [merged] titles are one group here, this run's or an earlier one's for the same members, which

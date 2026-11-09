@@ -1,4 +1,4 @@
-// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupDecoder.kt (modified: yes) streamed, can pass over an entry that does not decode, and lists a file's merged entries
+// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupDecoder.kt (modified: yes) streamed, can pass over an entry that does not decode, lists a file's merged entries, and streams Saikou's custom covers
 package eu.kanade.tachiyomi.data.backup
 
 import android.content.Context
@@ -6,7 +6,9 @@ import android.net.Uri
 import com.shinsaikou.source.SourceIds
 import dev.zacsweers.metro.Inject
 import eu.kanade.tachiyomi.data.backup.models.Backup
+import eu.kanade.tachiyomi.data.backup.models.BackupCustomCover
 import eu.kanade.tachiyomi.data.backup.models.BackupManga
+import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.protobuf.ProtoBuf
 import okio.Buffer
@@ -38,6 +40,9 @@ import java.io.IOException
  *
  * [header] keeps a TachiyomiSY file's synthetic merged entries, so a restore knows them whatever
  * their place in the file; there are few, and their chapter lists are dropped on the way.
+ *
+ * Saikou's custom covers (field 5001, R165 item 3) are images, so they are streamed as the entries are:
+ * [header] passes over them, and [customCovers] reads them one at a time.
  */
 @Inject
 class BackupDecoder(
@@ -73,7 +78,7 @@ class BackupDecoder(
      * is listed in [BackupHeader.undecodable]; a file none of whose entries decode is refused, since
      * it is no backup (or bytes that happen to frame). Fields the vendored model does not know are
      * kept for the parser, which ignores them as it does in [decode]. A synthetic merged entry is
-     * kept too, in [BackupHeader.syMerged].
+     * kept too, in [BackupHeader.syMerged]. The custom covers are passed over, for [customCovers].
      */
     fun header(source: Source): BackupHeader = open(source).use { stream ->
         malformedOnFailure {
@@ -93,6 +98,10 @@ class BackupDecoder(
                         if (entry.source == SourceIds.SY_MERGED) syMerged += entry.apply { chapters = emptyList() }
                     }
                     count++
+                } else if (frames.field == COVERS_FIELD) {
+                    // Checked here, as an entry is, so a cover frame of the wrong wire type is refused
+                    // before a restore writes anything rather than when [customCovers] reaches it.
+                    frames.skipLengthDelimited()
                 } else {
                     frames.copyTo(rest)
                 }
@@ -121,7 +130,7 @@ class BackupDecoder(
      */
     fun entries(source: Source, skip: Int = 0, passOverUndecodable: Boolean = false): BackupEntries {
         require(skip >= 0) { "skip is $skip" }
-        return BackupEntries(open(source)) { stream ->
+        return BackupFrames(open(source)) { stream ->
             iterator {
                 val frames = FrameReader(stream)
                 var index = 0
@@ -144,9 +153,30 @@ class BackupDecoder(
         }
     }
 
+    /**
+     * The file's custom covers (field 5001) in file order, each decoded when the sequence reaches it,
+     * as [entries] reads the entries; one that does not decode is left out. Read the sequence once,
+     * and close it, which closes [source].
+     */
+    fun customCovers(source: Source): BackupCustomCovers = BackupFrames(open(source)) { stream ->
+        iterator {
+            val frames = FrameReader(stream)
+            while (malformedOnFailure { frames.next() }) {
+                if (frames.field != COVERS_FIELD) {
+                    malformedOnFailure { frames.skip() }
+                } else {
+                    val bytes = malformedOnFailure { frames.readLengthDelimited() }
+                    decodeOrNull(BackupCustomCover.serializer(), bytes)?.let { yield(it) }
+                }
+            }
+        }
+    }
+
     /** One entry's bytes, or null when they do not decode, where [malformedOnFailure] would say malformed. */
-    private fun decodeEntryOrNull(bytes: ByteArray): BackupManga? = try {
-        parser.decodeFromByteArray(BackupManga.serializer(), bytes)
+    private fun decodeEntryOrNull(bytes: ByteArray): BackupManga? = decodeOrNull(BackupManga.serializer(), bytes)
+
+    private fun <T> decodeOrNull(deserializer: DeserializationStrategy<T>, bytes: ByteArray): T? = try {
+        parser.decodeFromByteArray(deserializer, bytes)
     } catch (_: SerializationException) {
         null
     } catch (_: IndexOutOfBoundsException) {
@@ -188,7 +218,8 @@ class BackupDecoder(
 
     /**
      * Reads one top-level frame at a time: [next] reads its tag, after which exactly one of
-     * [readEntry], [skipEntry], [skip] or [copyTo] consumes its value.
+     * [readEntry], [skipEntry], [readLengthDelimited], [skipLengthDelimited], [skip] or [copyTo]
+     * consumes its value.
      */
     private class FrameReader(private val stream: BufferedSource) {
         private var tag = 0L
@@ -207,6 +238,16 @@ class BackupDecoder(
         }
 
         fun readEntry(): ByteArray = stream.readByteArray(entryLength())
+
+        fun readLengthDelimited(): ByteArray {
+            if (wireType != WIRE_LENGTH_DELIMITED) malformed("wire type $wireType in field $field")
+            return stream.readByteArray(length())
+        }
+
+        fun skipLengthDelimited() {
+            if (wireType != WIRE_LENGTH_DELIMITED) malformed("wire type $wireType in field $field")
+            stream.skip(length())
+        }
 
         fun skipEntry() = stream.skip(entryLength())
 
@@ -276,6 +317,9 @@ class BackupDecoder(
         /** `Backup.backupManga`'s proto number. */
         const val MANGA_FIELD = 1
 
+        /** `Backup.customCovers`'s proto number, Saikou's own (R165 item 3). */
+        const val COVERS_FIELD = 5001
+
         private const val WIRE_VARINT = 0
         private const val WIRE_FIXED64 = 1
         private const val WIRE_LENGTH_DELIMITED = 2
@@ -300,18 +344,25 @@ class BackupHeader(
     val syMerged: List<BackupManga> = emptyList(),
 )
 
+/** [BackupDecoder.entries]'s library entries. */
+typealias BackupEntries = BackupFrames<BackupManga>
+
+/** [BackupDecoder.customCovers]'s custom covers. */
+typealias BackupCustomCovers = BackupFrames<BackupCustomCover>
+
 /**
- * [BackupDecoder.entries]'s library entries. A sequence that can be read once, over a stream that
- * [close] closes, so the caller decides when the file is let go whether or not it read to the end.
+ * Messages of one top-level field of a file, decoded as they are reached. A sequence that can be read
+ * once, over a stream that [close] closes, so the caller decides when the file is let go whether or
+ * not it read to the end.
  */
-class BackupEntries internal constructor(
+class BackupFrames<T> internal constructor(
     private val stream: BufferedSource,
-    private val read: (BufferedSource) -> Iterator<BackupManga>,
-) : Sequence<BackupManga>, Closeable {
+    private val read: (BufferedSource) -> Iterator<T>,
+) : Sequence<T>, Closeable {
 
     private var iterated = false
 
-    override fun iterator(): Iterator<BackupManga> {
+    override fun iterator(): Iterator<T> {
         check(!iterated) { "A file's entries are read once" }
         iterated = true
         return read(stream)

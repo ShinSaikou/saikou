@@ -16,7 +16,11 @@ import eu.kanade.tachiyomi.data.backup.models.BackupChapter
 import eu.kanade.tachiyomi.data.backup.models.BackupExtensionStore
 import eu.kanade.tachiyomi.data.backup.models.BackupHistory
 import eu.kanade.tachiyomi.data.backup.models.BackupManga
+import eu.kanade.tachiyomi.data.backup.models.BackupMergedGroup
+import eu.kanade.tachiyomi.data.backup.models.BackupMergedMember
+import eu.kanade.tachiyomi.data.backup.models.BackupPageNote
 import eu.kanade.tachiyomi.data.backup.models.BackupPreference
+import eu.kanade.tachiyomi.data.backup.models.BackupScanlatorPriority
 import eu.kanade.tachiyomi.data.backup.models.BackupSource
 import eu.kanade.tachiyomi.data.backup.models.BackupSourcePreferences
 import eu.kanade.tachiyomi.data.backup.models.BackupTracking
@@ -45,7 +49,9 @@ import java.io.File
 
 /**
  * Phase 3 unit R2, part 2: what Saikou exports is what upstream's creator would have written from the
- * same rows, field by field, so a restore into upstream keeps everything its own backup keeps.
+ * same rows, field by field, so a restore into upstream keeps everything its own backup keeps. Since
+ * R165 item 3 the file carries Saikou's own data too, in TachiyomiSY's 800 and 804 and in Saikou's own
+ * block (`BackupSaikou.kt`); those fields are compared with their rows here as well.
  *
  * A fixture library is written straight into the JVM database with SQL, setting every column the
  * file carries to a value other than the field's default (and every Saikou column too, so none of them
@@ -194,30 +200,57 @@ class UpstreamLosslessExportTest {
         historyFields.map { it.name }.toSet() shouldBe names(BackupHistory.serializer().descriptor)
         categoryFields.map { it.name }.toSet() shouldBe names(BackupCategory.serializer().descriptor)
         storeFields.map { it.name }.toSet() shouldBe names(BackupExtensionStore.serializer().descriptor)
-        // Backup's own six lists are each compared by a test above: the entries, categories and
-        // stores against their rows, sources by id, and both preference lists against the fixture.
+        // Backup's own lists are each compared by a test above: the entries, categories, stores and
+        // merged groups against their rows, sources by id, both preference lists against the
+        // fixture, and the covers against the files.
         names(Backup.serializer().descriptor) shouldBe setOf(
             "backupManga", "backupCategories", "backupSources", "backupPreferences",
-            "backupSourcePreferences", "backupExtensionStores",
+            "backupSourcePreferences", "backupExtensionStores", "mergedGroups", "customCovers",
         )
+        priorityFields.map { it.name }.toSet() shouldBe names(BackupScanlatorPriority.serializer().descriptor)
+        noteFields.map { it.name }.toSet() shouldBe names(BackupPageNote.serializer().descriptor)
+        groupFields.map { it.name }.toSet() shouldBe names(BackupMergedGroup.serializer().descriptor)
+        memberFields.map { it.name }.toSet() shouldBe names(BackupMergedMember.serializer().descriptor)
         names(BackupSource.serializer().descriptor) shouldBe setOf("name", "sourceId")
     }
 
     /**
-     * The edited title and description the import reads at fields 800 and 804 (R162 item 8) are never
-     * written: every fixture entry carries an edit, and the file still holds only upstream's fields.
+     * TachiyomiSY's merged entries, fields 600 and 604, are read on import only: Saikou's own groups
+     * travel in its own field, so a file Saikou writes never has one SY would read as a merge.
      */
     @Test
-    fun `the fields the import reads from other readers stay out of the file`() {
-        expectedManga().forEach { it.text("title_override") shouldNotBe null }
+    fun `the fields the import reads from TachiyomiSY's merges stay out of the file`() {
         for (entry in exported.backupManga) {
             withClue("manga ${entry.url}") {
-                entry.customTitle shouldBe null
-                entry.customDescription shouldBe null
                 entry.mergedEntries shouldBe emptyList()
                 entry.mergeSettings shouldBe null
             }
         }
+    }
+
+    /** The live merged groups, each as its rows say, and no group whose main entry is not live. */
+    @Test
+    fun `the merged groups match their rows`() {
+        val groups = rows.getValue("merged_groups").filter { group ->
+            val main = mainOf(group)
+            main.flag("favorite") && main["deleted_at"] == null && membersOf(group).size >= 2
+        }
+        groups.size shouldNotBe 0
+        exported.mergedGroups.map { render(groupFields, it) }
+            .shouldContainExactlyInAnyOrder(groups.map { expect(groupFields, it) })
+    }
+
+    /** Each custom cover file, byte for byte, under its entry's source and url. */
+    @Test
+    fun `the custom covers are the files, by entry`() {
+        val expected = expectedManga().filter { it.long("_id") in env.customCovers.files }
+        expected.size shouldNotBe 0
+        exported.customCovers.map { Triple(it.source, it.url, it.image.toList()) }
+            .shouldContainExactlyInAnyOrder(
+                expected.map {
+                    Triple(it.long("source"), it.text("url"), env.customCovers.files.getValue(it.long("_id")).toList())
+                },
+            )
     }
 
     /**
@@ -237,6 +270,11 @@ class UpstreamLosslessExportTest {
         assertMoved(trackFields.filterNot { it.name == "mediaIdInt" }, tracks, trackDefault)
         assertMoved(historyFields, history, BackupHistory(url = "", lastRead = 0))
         assertMoved(categoryFields, exported.backupCategories, BackupCategory(name = ""))
+        assertMoved(priorityFields, manga.flatMap { it.scanlatorPriority }, BackupScanlatorPriority(scanlator = ""))
+        assertMoved(noteFields, chapters.flatMap { it.pageNotes }, BackupPageNote(pageIndex = 0))
+        assertMoved(groupFields, exported.mergedGroups, BackupMergedGroup())
+        val members = exported.mergedGroups.flatMap { it.members }
+        assertMoved(memberFields, members, BackupMergedMember(source = 0, url = ""))
         assertMoved(
             storeFields,
             exported.backupExtensionStores,
@@ -328,6 +366,59 @@ class UpstreamLosslessExportTest {
             { manga -> exclusionsOf(manga).map { it.text("scanlator")!! }.sorted() },
             { it.excludedScanlators.sorted() },
         ),
+        // TachiyomiSY's custom info, which Saikou writes from the overrides (R165 item 3).
+        Field("customTitle", "mangas.title_override", { it.text("title_override") }, { it.customTitle }),
+        Field(
+            "customDescription",
+            "mangas.description_override",
+            { it.text("description_override") },
+            { it.customDescription },
+        ),
+        // Saikou's own block.
+        Field("manualPosition", "mangas.manual_position", { it.long("manual_position") }, { it.manualPosition }),
+        Field(
+            "scanlatorPriority",
+            "scanlator_priority.manga_id",
+            { manga -> prioritiesOf(manga).map { expect(priorityFields, it) } },
+            { entry -> entry.scanlatorPriority.map { render(priorityFields, it) } },
+        ),
+    )
+
+    private val priorityFields: List<Field<BackupScanlatorPriority>> = listOf(
+        Field("scanlator", "scanlator_priority.scanlator", { it.text("scanlator") }, { it.scanlator }),
+        Field("priority", "scanlator_priority.priority", { it.long("priority") }, { it.priority }),
+    )
+
+    private val noteFields: List<Field<BackupPageNote>> = listOf(
+        Field("pageIndex", "bookmark_notes.page_index", { it.long("page_index") }, { it.pageIndex }),
+        Field("note", "bookmark_notes.note", { it.text("note") }, { it.note }),
+        Field("dateAdded", "bookmark_notes.date_added", { it.long("date_added") }, { it.dateAdded }),
+    )
+
+    private val groupFields: List<Field<BackupMergedGroup>> = listOf(
+        // The main entry's title as the library shows it, for the restore report.
+        Field(
+            "title",
+            null,
+            { group -> mainOf(group).let { it.text("title_override") ?: it.text("title") } },
+            { it.title },
+        ),
+        Field("mainSource", "merged_groups.main_source", { it.long("main_source") }, { it.mainSource }),
+        Field("mainUrl", "merged_groups.main_url", { it.text("main_url") }, { it.mainUrl }),
+        Field("showAll", "merged_groups.show_all", { it.flag("show_all") }, { it.showAll }),
+        // In chapter order: the list's order is the members' positions.
+        Field(
+            "members",
+            "merged_members.position",
+            { group -> membersOf(group).map { expect(memberFields, it) } },
+            { group -> group.members.map { render(memberFields, it) } },
+        ),
+    )
+
+    private val memberFields: List<Field<BackupMergedMember>> = listOf(
+        Field("source", "merged_members.member_source", { it.long("member_source") }, { it.source }),
+        Field("url", "merged_members.member_url", { it.text("member_url") }, { it.url }),
+        Field("checkUpdates", "merged_members.check_updates", { it.flag("check_updates") }, { it.checkUpdates }),
     )
 
     private val chapterFields: List<Field<BackupChapter>> = listOf(
@@ -349,6 +440,14 @@ class UpstreamLosslessExportTest {
         Field("lastModifiedAt", "chapters.last_modified_at", { it.long("last_modified_at") }, { it.lastModifiedAt }),
         Field("version", "chapters.version", { it.long("version") }, { it.version }),
         Field("memo", "chapters.memo", { it.blob("memo") }, { it.memo.toList() }),
+        // Saikou's own block.
+        Field("volume", "chapters.volume", { it["volume"] as Double? }, { it.volume }),
+        Field(
+            "pageNotes",
+            "bookmark_notes.chapter_id",
+            { chapter -> notesOf(chapter).map { expect(noteFields, it) } },
+            { chapter -> chapter.pageNotes.map { render(noteFields, it) } },
+        ),
     )
 
     @Suppress("DEPRECATION")
@@ -392,6 +491,13 @@ class UpstreamLosslessExportTest {
         Field("order", "categories.sort", ::place, { it.order }),
         Field("id", "categories._id", { it.long("_id") }, { it.id }),
         Field("flags", "categories.flags", { it.long("flags") }, { it.flags }),
+        // Saikou's own: the parent named by its place, as an entry names its categories.
+        Field(
+            "parentOrder",
+            "categories.parent_id",
+            { row -> (row["parent_id"] as Long?)?.let { parent -> place(category(parent)) } },
+            { it.parentOrder },
+        ),
     )
 
     private val storeFields: List<Field<BackupExtensionStore>> = listOf(
@@ -421,7 +527,8 @@ class UpstreamLosslessExportTest {
     )
 
     private val allFields: List<Field<*>> =
-        mangaFields + chapterFields + trackFields + historyFields + categoryFields + storeFields
+        mangaFields + chapterFields + trackFields + historyFields + categoryFields + storeFields +
+            priorityFields + noteFields + groupFields + memberFields
 
     // The rows each creator reads, with Saikou's soft-deleted rows left out: a tombstone is a sync
     // entity, and upstream has no row for it to write.
@@ -469,6 +576,23 @@ class UpstreamLosslessExportTest {
 
     private fun chapter(id: Long): Row = rows.getValue("chapters").single { it.long("_id") == id }
 
+    private fun category(id: Long): Row = rows.getValue("categories").single { it.long("_id") == id }
+
+    private fun prioritiesOf(manga: Row) = rows.getValue("scanlator_priority")
+        .filter { it.long("manga_id") == manga.long("_id") }
+        .sortedWith(compareBy({ it.long("priority") }, { it.text("scanlator") }))
+
+    private fun notesOf(chapter: Row) = rows.getValue("bookmark_notes")
+        .filter { it.long("chapter_id") == chapter.long("_id") }
+        .sortedBy { it.long("page_index") }
+
+    private fun membersOf(group: Row) = rows.getValue("merged_members")
+        .filter { it.long("group_id") == group.long("_id") }
+        .sortedBy { it.long("position") }
+
+    private fun mainOf(group: Row): Row = rows.getValue("mangas")
+        .single { it.long("source") == group.long("main_source") && it.text("url") == group.text("main_url") }
+
     private fun <M> expect(fields: List<Field<M>>, row: Row): Map<String, Any?> =
         fields.associate { it.name to it.expected(row) }
 
@@ -503,21 +627,23 @@ class UpstreamLosslessExportTest {
         /** The two bytes upstream's decoder peeks for gzip. */
         const val GZIP_MAGIC = 0x1f8b
 
-        /** BackupManga's fields the import reads from other readers' files and the export never fills. */
-        val IMPORT_ONLY_MANGA_FIELDS = setOf("customTitle", "customDescription", "mergedEntries", "mergeSettings")
+        /** BackupManga's fields the import reads from TachiyomiSY's files and the export never fills. */
+        val IMPORT_ONLY_MANGA_FIELDS = setOf("mergedEntries", "mergeSettings")
 
         /** Upstream v0.20.4's `ReadingMode.MASK`. */
         const val UPSTREAM_READING_MODE_MASK = 0x00000007
 
         val EXPORTED_TABLES = listOf(
             "mangas", "chapters", "categories", "mangas_categories", "history", "manga_sync",
-            "excluded_scanlators", "extension_store",
+            "excluded_scanlators", "extension_store", "scanlator_priority", "bookmark_notes", "merged_groups",
+            "merged_members",
         )
 
         /** Columns that decide which rows travel, or where, rather than being written into a field. */
         val RELATION_COLUMNS = setOf(
             "chapters.manga_id", "mangas_categories.manga_id", "mangas_categories.category_id",
-            "manga_sync.manga_id", "excluded_scanlators.manga_id",
+            "manga_sync.manga_id", "excluded_scanlators.manga_id", "scanlator_priority.manga_id",
+            "bookmark_notes.chapter_id", "merged_members.group_id",
         )
 
         /**
@@ -532,7 +658,6 @@ class UpstreamLosslessExportTest {
             "mangas.cover_last_modified" to "Upstream's column, not written by upstream's creator either",
             "mangas.calculate_interval" to "Upstream's column, not written by upstream's creator either",
             "mangas.is_syncing" to "Upstream's column, not written by upstream's creator either",
-            "mangas.manual_position" to "Saikou only: the library's manual order, a sync entity (contract 06 F10)",
             "mangas.deleted_at" to "Saikou only: a soft-deleted entry is left out of the file",
             "mangas.display_modified_at" to "Saikou only: an owner clock of the sync merge (R82, R85)",
             "mangas.notes_modified_at" to "Saikou only: an owner clock of the sync merge (R82, R85)",
@@ -542,20 +667,14 @@ class UpstreamLosslessExportTest {
             "mangas.priority_modified_at" to "Saikou only: an owner clock of the sync merge (R82, R85)",
             "mangas.trackers_modified_at" to "Saikou only: an owner clock of the sync merge (R82, R85)",
             "mangas.restored_at" to "Saikou only: the restore clock of the sync merge (R82)",
-            "mangas.title_override" to
-                "Saikou only: the owner's title edit; the file writes the source's title (R138 item 2, F10, R19)",
-            "mangas.description_override" to
-                "Saikou only: the owner's description edit; the file writes the source's text (R138 item 2, F10, R19)",
             "mangas.details_modified_at" to "Saikou only: the owner clock of the two edits, a sync value (R138 item 2)",
             "chapters._id" to "this install's row id; a chapter travels by its url",
             "chapters.is_syncing" to "Upstream's column, not written by upstream's creator either",
-            "chapters.volume" to "Saikou only: the format has no volume field (contract 06 section 1.7)",
             "chapters.deleted_at" to "Saikou only: a soft-deleted chapter is left out of the file",
             "chapters.bookmark_notes_modified_at" to "Saikou only: an owner clock of the sync merge (R85)",
             "chapters.restored_at" to "Saikou only: the restore clock of the sync merge (R82)",
             "chapters.read_modified_at" to "Saikou only: an owner clock of the sync merge (R165)",
             "chapters.bookmark_modified_at" to "Saikou only: an owner clock of the sync merge (R165)",
-            "categories.parent_id" to "Saikou only: the format has no category parent (contract 06 section 1.7)",
             "categories.version" to "Saikou only: the category's sync version",
             "categories.is_syncing" to "Saikou only: the sync apply flag",
             "categories.deleted_at" to "Saikou only: a soft-deleted category is left out of the file",
@@ -565,6 +684,11 @@ class UpstreamLosslessExportTest {
             "mangas_categories._id" to "this install's row id; a membership travels as an order value",
             "history._id" to "this install's row id; history travels by its chapter's url",
             "manga_sync._id" to "this install's row id; a track travels by its tracker id",
+            "scanlator_priority._id" to "this install's row id; a rank travels by its scanlator",
+            "bookmark_notes._id" to "this install's row id; a note travels by its page",
+            "merged_groups._id" to "this install's row id; a group travels by its main entry",
+            "merged_groups.modified_at" to "Saikou only: the group's clock in the sync merge (R163)",
+            "merged_groups.is_syncing" to "Saikou only: the sync apply flag",
         )
 
         /** Tables the exporter never reads, as upstream's creator reads none of their counterparts. */
@@ -572,11 +696,6 @@ class UpstreamLosslessExportTest {
             "sources" to "stub source names, which upstream's creator does not write either; " +
                 "the file names sources from the registry",
             "source_alias" to "Saikou only: source migration aliases",
-            "scanlator_priority" to "Saikou only: the scanlator ranking, a sync entity",
-            "merged_groups" to "Saikou only: merged entries, a sync entity (F10, R163 item 4); a restore loses " +
-                "only the grouping, since every member is an ordinary favourite in the file",
-            "merged_members" to "Saikou only: the members of a merged entry, as merged_groups",
-            "bookmark_notes" to "Saikou only: page bookmark notes, a sync entity",
             "download_queue" to "Saikou only: this device's download queue",
             "downloads_manifest" to "Saikou only: this device's downloaded files",
             "sync_change_log" to "Saikou only: the sync engine's change log",
@@ -604,6 +723,7 @@ private object LosslessFixture {
 
     const val LIBRARY = 21L
     const val READ_ELSEWHERE = 22L
+    const val MERGED = 25L
     private const val T = 1_726_000_000_000L
 
     fun seed(env: BackupTestEnvironment) {
@@ -634,6 +754,7 @@ private object LosslessFixture {
         }
         manga(env, 23, SOURCE_A, "/fixture/lossless/deleted", favorite = true) { put("deleted_at", T + 23) }
         manga(env, 24, SOURCE_A, "/fixture/lossless/unread", favorite = false) {}
+        manga(env, MERGED, SOURCE_B, "/fixture/lossless/merged", favorite = true) {}
 
         chapter(env, 31, LIBRARY, "/fixture/lossless/1/c1", 12.3, read = true, bookmark = true, scanlator = "Group A")
         chapter(env, 32, LIBRARY, "/fixture/lossless/1/c2", 13.7, read = false, bookmark = false, scanlator = "Group B")
@@ -660,6 +781,68 @@ private object LosslessFixture {
             env, 52, READ_ELSEWHERE, syncId = 1, remoteId = 77L, libraryId = null,
             lastRead = 0.3, score = 3.3, private = false,
         )
+
+        env.insert(
+            "scanlator_priority",
+            mapOf("_id" to 81L, "manga_id" to LIBRARY, "scanlator" to "Group B", "priority" to 2L),
+        )
+        env.insert(
+            "scanlator_priority",
+            mapOf("_id" to 82L, "manga_id" to LIBRARY, "scanlator" to "Group A", "priority" to 1L),
+        )
+        env.insert(
+            "bookmark_notes",
+            mapOf(
+                "_id" to 91L, "chapter_id" to 31L, "page_index" to 4L, "note" to "A page note", "date_added" to T + 91,
+            ),
+        )
+        env.insert(
+            "bookmark_notes",
+            mapOf("_id" to 92L, "chapter_id" to 31L, "page_index" to 0L, "note" to "", "date_added" to T + 92),
+        )
+        // On the soft-deleted chapter: it does not travel, and neither does its note.
+        env.insert(
+            "bookmark_notes",
+            mapOf("_id" to 93L, "chapter_id" to 33L, "page_index" to 1L, "note" to "Gone", "date_added" to T + 93),
+        )
+        // The main entry is not first in chapter order, and the second source is not checked for updates.
+        env.insert(
+            "merged_groups",
+            mapOf(
+                "_id" to 71L, "main_source" to SOURCE_A, "main_url" to "/fixture/lossless/1", "show_all" to 1L,
+                "modified_at" to T + 71, "is_syncing" to 0L,
+            ),
+        )
+        env.insert(
+            "merged_members",
+            mapOf(
+                "member_source" to SOURCE_A, "member_url" to "/fixture/lossless/1", "group_id" to 71L,
+                "position" to 1L, "check_updates" to 1L,
+            ),
+        )
+        env.insert(
+            "merged_members",
+            mapOf(
+                "member_source" to SOURCE_B, "member_url" to "/fixture/lossless/merged", "group_id" to 71L,
+                "position" to 0L, "check_updates" to 0L,
+            ),
+        )
+        // A group whose main entry was deleted is no live group, and is not written.
+        env.insert(
+            "merged_groups",
+            mapOf(
+                "_id" to 72L, "main_source" to SOURCE_A, "main_url" to "/fixture/lossless/deleted", "show_all" to 0L,
+                "modified_at" to T + 72, "is_syncing" to 0L,
+            ),
+        )
+        env.insert(
+            "merged_members",
+            mapOf(
+                "member_source" to SOURCE_A, "member_url" to "/fixture/lossless/deleted", "group_id" to 72L,
+                "position" to 0L, "check_updates" to 1L,
+            ),
+        )
+        env.customCovers.files[LIBRARY] = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 1, 2, 3)
 
         env.insert("excluded_scanlators", mapOf("manga_id" to LIBRARY, "scanlator" to "Group B"))
         env.insert("excluded_scanlators", mapOf("manga_id" to LIBRARY, "scanlator" to "Group C"))

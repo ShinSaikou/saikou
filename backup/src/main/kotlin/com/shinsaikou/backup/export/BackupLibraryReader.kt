@@ -1,6 +1,8 @@
 package com.shinsaikou.backup.export
 
 import com.shinsaikou.data.DatabaseHandler
+import com.shinsaikou.domain.chapter.model.BookmarkNote
+import com.shinsaikou.domain.chapter.model.ScanlatorPriority
 import dev.zacsweers.metro.Inject
 import tachiyomi.data.chapter.ChapterMapper
 import tachiyomi.data.history.HistoryMapper
@@ -66,4 +68,19 @@ class BackupLibraryReader(private val handler: DatabaseHandler) {
             }
         }
         .groupBy({ it.first }, { it.second })
+
+    /** Each entry's scanlator priority, the lowest first and the scanlator breaking a tie (R165 item 3). */
+    suspend fun scanlatorPriorities(mangaIds: List<Long>): Map<Long, List<ScanlatorPriority>> = handler
+        .awaitList { scanlator_priorityQueries.backupGetByMangaIds(mangaIds, ::ScanlatorPriority) }
+        .groupBy { it.mangaId }
+        .mapValues { (_, ranks) -> ranks.sortedWith(compareBy({ it.priority }, { it.scanlator })) }
+
+    /** The page notes on each live chapter of the entries, by chapter id, by page (R165 item 3). */
+    suspend fun pageNotes(mangaIds: List<Long>): Map<Long, List<BookmarkNote>> = handler
+        .awaitList {
+            bookmark_notesQueries.backupGetByMangaIds(mangaIds) { chapterId, pageIndex, note, dateAdded ->
+                BookmarkNote(id = 0L, chapterId = chapterId, pageIndex = pageIndex, note = note, dateAdded = dateAdded)
+            }
+        }
+        .groupBy { it.chapterId }
 }

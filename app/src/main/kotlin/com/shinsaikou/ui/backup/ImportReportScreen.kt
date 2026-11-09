@@ -172,6 +172,15 @@ private fun ReportCounts(report: ImportReport) {
             stringResource(R.string.import_report_counts_format, report.mangaInserted, report.mangaMerged, report.mangaFailed),
             maxLines = 3,
         )
+        if (report.customCoversRestored > 0) {
+            ListRowDetail(
+                pluralStringResource(
+                    R.plurals.import_report_custom_covers_count,
+                    report.customCoversRestored,
+                    report.customCoversRestored,
+                ),
+            )
+        }
         if (report.cancelled) {
             ListRowDetail(stringResource(R.string.import_report_cancelled))
         }
@@ -310,8 +319,9 @@ private fun LazyListScope.trackerLines(report: ImportReport) {
 }
 
 /**
- * What came of a TachiyomiSY file's merged entries: how many stand as one, with how to see them while
- * Merged entries is off, the titles left as separate entries, and the sources not in the file.
+ * What came of a file's merged entries, TachiyomiSY's or Saikou's own: how many stand as one, with how
+ * to see them while Merged entries is off, the titles left as separate entries, and the sources not in
+ * the file.
  */
 private fun LazyListScope.mergedTitles(report: ImportReport) {
     val titles = report.mergedTitles ?: return
@@ -374,4 +384,7 @@ private fun ImportError.Kind.labelRes(): Int = when (this) {
     ImportError.Kind.BATCH_FALLBACK -> R.string.import_error_kind_batch_fallback
     ImportError.Kind.EXTENSION_INSTALL -> R.string.backup_option_install_extensions
     ImportError.Kind.MERGED_TITLE -> R.string.import_report_merged
+    ImportError.Kind.PAGE_NOTES -> R.string.import_error_kind_page_notes
+    ImportError.Kind.SCANLATOR_PRIORITY -> R.string.import_error_kind_scanlator_priority
+    ImportError.Kind.CUSTOM_COVER -> R.string.import_error_kind_custom_covers
 }

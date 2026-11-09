@@ -1,4 +1,4 @@
-// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/tachiyomi/data/backup/models/BackupChapter.kt (modified: yes)
+// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/tachiyomi/data/backup/models/BackupChapter.kt (modified: yes) adds Saikou's 5000 to 5001
 package eu.kanade.tachiyomi.data.backup.models
 
 import kotlinx.serialization.Serializable
@@ -7,7 +7,11 @@ import tachiyomi.core.common.extensions.JsonObjectEmptyBytes
 import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.domain.chapter.model.Chapter
 
-/** Modified: `backupChapterMapper` is deleted, it was bound to upstream's `chapters` column order. */
+/**
+ * Modified: `backupChapterMapper` is deleted, it was bound to upstream's `chapters` column order.
+ * [volume] and [pageNotes] are Saikou's own (R165 item 3), in the block listed in `BackupSaikou.kt`;
+ * `toChapterImpl` stays upstream's, and the import reads the two itself.
+ */
 @Serializable
 class BackupChapter(
     // in 1.x some of these values have different names
@@ -27,6 +31,9 @@ class BackupChapter(
     @ProtoNumber(11) var lastModifiedAt: Long = 0,
     @ProtoNumber(12) var version: Long = 0,
     @ProtoNumber(13) var memo: ByteArray = JsonObjectEmptyBytes,
+    // Saikou's own block starts here.
+    @ProtoNumber(5000) var volume: Double? = null,
+    @ProtoNumber(5001) var pageNotes: List<BackupPageNote> = emptyList(),
 ) {
     fun toChapterImpl(): Chapter {
         return Chapter.create().copy(
