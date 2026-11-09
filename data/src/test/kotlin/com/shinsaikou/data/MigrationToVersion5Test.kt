@@ -58,7 +58,7 @@ class MigrationToVersion5Test {
 
         scalar("PRAGMA user_version") shouldBe Database.Schema.version.toString()
         (Database.Schema.version >= 5L) shouldBe true
-        withoutVersion6(objects()).filterNot { MERGED in it[1].orEmpty() } shouldContainExactly objectsBefore
+        withoutVersion6(withoutVersion7(objects())).filterNot { MERGED in it[1].orEmpty() } shouldContainExactly objectsBefore
         TABLES.associateWith { dump(it, columnsBefore.getValue(it)) } shouldBe rowsBefore
         dump("sync_change_log") shouldContainExactly logBefore
         rows("SELECT _id, totalCount, readCount, bookmarkCount FROM libraryView ORDER BY _id", 4) shouldContainExactly

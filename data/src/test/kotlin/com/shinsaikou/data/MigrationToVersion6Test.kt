@@ -57,7 +57,7 @@ class MigrationToVersion6Test {
 
         scalar("PRAGMA user_version") shouldBe Database.Schema.version.toString()
         (Database.Schema.version >= 6L) shouldBe true
-        withoutVersion6(objects()) shouldContainExactly objectsBefore
+        withoutVersion6(withoutVersion7(objects())) shouldContainExactly objectsBefore
         TABLES.associateWith { dump(it, columnsBefore.getValue(it)) } shouldBe rowsBefore
         dump("sync_change_log", columnCount("sync_change_log")) shouldContainExactly logBefore
         rows("SELECT _id, totalCount, readCount, bookmarkCount FROM libraryView ORDER BY _id", 4) shouldContainExactly
@@ -74,7 +74,7 @@ class MigrationToVersion6Test {
 
         migrate()
 
-        objects().filterNot { it in before }.map { it[0] to it[1] } shouldContainExactlyInAnyOrder listOf(
+        withoutVersion7(objects()).filterNot { it in before }.map { it[0] to it[1] } shouldContainExactlyInAnyOrder listOf(
             "table" to "chapters",
             "trigger" to "update_chapter_read_modified_at",
             "trigger" to "update_chapter_bookmark_modified_at",

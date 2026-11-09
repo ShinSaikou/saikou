@@ -234,6 +234,8 @@
     <!-- An entry intent whose entry is gone (phase 4 unit missing-entry), worded as ext_detail_not_found. -->
     <string name="manga_not_found">That entry is no longer in the database.</string>
     <string name="manga_author_format">By %1$s</string>
+    <!-- The header's artist line, shown where the artist differs from the author (R165 item 4). -->
+    <string name="manga_artist_format">Art by %1$s</string>
     <string name="manga_source_format">Source: %1$s</string>
     <string name="merged_source_line_format">%1$s + %2$d more</string>
     <string name="manga_source_not_installed">Source not installed</string>
@@ -257,12 +259,22 @@
     <string name="manga_status_cancelled">Cancelled</string>
     <string name="manga_status_on_hiatus">On hiatus</string>
     <string name="manga_status_unknown">Unknown</string>
-    <!-- The owner's own title and description for an entry (phase 5 unit ED): the overflow item and
-         the dialog. Reset brings back the source's text. -->
+    <!-- The owner's own details for an entry (phase 5 unit ED, R165 item 4): the overflow item and
+         the dialog. From source clears the status edit; Reset all brings back every detail the source
+         gives, after the question below. -->
     <string name="manga_edit_details">Edit details</string>
     <string name="manga_edit_title">Title</string>
     <string name="manga_edit_description">Description</string>
-    <string name="manga_edit_reset">Reset</string>
+    <string name="manga_edit_author">Author</string>
+    <string name="manga_edit_artist">Artist</string>
+    <string name="manga_edit_status">Status</string>
+    <string name="manga_edit_status_from_source_format">From source (%1$s)</string>
+    <string name="manga_edit_genres">Genres</string>
+    <string name="manga_edit_genre_add">Add a genre</string>
+    <string name="manga_edit_genre_remove_format">Remove %1$s</string>
+    <string name="manga_edit_reset">Reset all</string>
+    <string name="manga_edit_reset_title">Reset all details?</string>
+    <string name="manga_edit_reset_message">The title, description, author, artist, status and genres go back to what the source gives.</string>
     <string name="manga_edit_title_empty">Enter a title</string>
     <string name="manga_edit_failed">The details could not be saved</string>
     <!-- The owner's notes on an entry: the overflow item and the dialog's title are action_notes;

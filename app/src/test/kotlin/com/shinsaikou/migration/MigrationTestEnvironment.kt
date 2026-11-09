@@ -17,6 +17,7 @@ import com.shinsaikou.domain.download.AutoDownload
 import com.shinsaikou.domain.manga.interactor.RefreshMangaFromSource
 import com.shinsaikou.domain.manga.interactor.SetMangaDetailsOverride
 import com.shinsaikou.domain.manga.interactor.UpdateManga
+import com.shinsaikou.domain.manga.model.MangaDetailsOverrides
 import com.shinsaikou.domain.merged.interactor.ReconcileMergedRead
 import com.shinsaikou.domain.preferences.LibraryPreferences
 import com.shinsaikou.domain.preferences.SourcePreferences
@@ -102,6 +103,7 @@ internal class MigrationTestEnvironment(val filesDir: File) : AutoCloseable {
                 genreAdapter = StringListColumnAdapter,
                 update_strategyAdapter = UpdateStrategyColumnAdapter,
                 memoAdapter = MemoColumnAdapter,
+                genre_overrideAdapter = StringListColumnAdapter,
             ),
         )
     }
@@ -359,9 +361,9 @@ internal class MigrationTestEnvironment(val filesDir: File) : AutoCloseable {
             real.undelete(mangaId)
         }
 
-        override suspend fun setDetailsOverride(mangaId: Long, titleOverride: String?, descriptionOverride: String?): Boolean {
+        override suspend fun setDetailsOverride(mangaId: Long, overrides: MangaDetailsOverrides): Boolean {
             record("details", "$mangaId")
-            return real.setDetailsOverride(mangaId, titleOverride, descriptionOverride)
+            return real.setDetailsOverride(mangaId, overrides)
         }
 
         override suspend fun updateAll(mangaUpdates: List<MangaUpdate>): Boolean {

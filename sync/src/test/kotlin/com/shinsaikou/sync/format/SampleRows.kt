@@ -65,6 +65,10 @@ internal object SampleRows {
             titleOverride = "Edited title",
             descriptionOverride = "Edited description",
             detailsModifiedAt = 1_600_000_000_006,
+            authorOverride = "Edited author",
+            artistOverride = "Edited artist",
+            statusOverride = 5,
+            genreOverride = listOf("Comedy", "Mystery"),
         ),
         MangaCategoriesRow(manga, setOf("c3f1", "9ab0"), categoriesModifiedAt = 1_600_000_000_006),
         ChapterRow(

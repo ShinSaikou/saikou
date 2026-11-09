@@ -1613,17 +1613,17 @@ class MangaDetailViewModel(
     fun showEditDetails() = showDialog(Dialog.EditDetails)
 
     /**
-     * The edit dialog's Save. [SetMangaDetailsOverride] stores an edit only where a text differs
-     * from the source's, so the source's own text clears that edit, and it refuses a blank title,
+     * The edit dialog's Save. [SetMangaDetailsOverride] stores an edit only where a value differs
+     * from the source's, so the source's own value clears that edit, and it refuses a blank title,
      * which the dialog has refused already. The screen shows the result through the entry's own
      * flow; only a write that did not happen is said, on this screen's snackbar.
      */
-    fun saveDetails(title: String, description: String) {
+    fun saveDetails(edit: SetMangaDetailsOverride.Edit) {
         val manga = (state.value as? State.Success)?.manga ?: return
-        if (title.isBlank()) return
+        if (edit.title.isBlank()) return
         dismissDialog()
         viewModelScope.launch {
-            val saved = withContext(dispatchers.io) { setMangaDetailsOverride.await(manga.id, title, description) }
+            val saved = withContext(dispatchers.io) { setMangaDetailsOverride.await(manga.id, edit) }
             if (!saved) eventChannel.send(Event.Snackbar(R.string.manga_edit_failed))
         }
     }
@@ -1701,7 +1701,10 @@ class MangaDetailViewModel(
         }
     }
 
-    /** The edit dialog's Reset: both edits cleared, so the source's title and description show again. */
+    /**
+     * The edit dialog's Reset all, once its question is answered: every edit cleared, so the source's
+     * details show again.
+     */
     fun resetDetails() {
         val manga = (state.value as? State.Success)?.manga ?: return
         dismissDialog()

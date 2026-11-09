@@ -301,6 +301,30 @@ class StatsViewModelTest {
         )
     }
 
+    /**
+     * The completed tile reads the status the entry screen shows, the owner's edit over the source's
+     * (R165 item 4): D, completed at the source with unread chapters, stays out; A, ongoing at the
+     * source and fully read, is in once edited to completed; E, completed and fully read, is out
+     * once edited to ongoing.
+     */
+    @Test
+    fun `the completed tile reads the owner's status edit`() = runTest(testDispatcher) {
+        seedFixture()
+        library = library.map {
+            when (it.id) {
+                A -> it.copy(manga = it.manga.copy(statusOverride = MangaStatus.COMPLETED.code.toLong()))
+                E -> it.copy(manga = it.manga.copy(statusOverride = MangaStatus.ONGOING.code.toLong()))
+                else -> it
+            }
+        }
+
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        viewModel.state.value.success().overview.completedMangaCount shouldBe 1
+        library.single { it.id == A }.manga.displayStatus shouldBe MangaStatus.COMPLETED.code.toLong()
+    }
+
     @Test
     fun `the update tile follows the update's own settings`() = runTest(testDispatcher) {
         seedFixture()

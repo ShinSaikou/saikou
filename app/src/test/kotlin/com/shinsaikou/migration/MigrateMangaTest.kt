@@ -1,6 +1,7 @@
 package com.shinsaikou.migration
 
 import app.cash.sqldelight.db.QueryResult
+import com.shinsaikou.domain.manga.model.MangaDetailsOverrides
 import com.shinsaikou.migration.MigrationTestEnvironment.Companion.chapter
 import com.shinsaikou.migration.MigrationTestEnvironment.Companion.info
 import com.shinsaikou.downloads.MigrationDownloads
@@ -328,7 +329,10 @@ class MigrateMangaTest {
     fun `the owner's edited title and description follow the entry onto the target, before the favourite write`() = runTest {
         val env = env()
         val seeded = env.seed()
-        env.mangaRepository.setDetailsOverride(seeded.current.id, "Edited title", "Edited description")
+        env.mangaRepository.setDetailsOverride(
+            seeded.current.id,
+            MangaDetailsOverrides(title = "Edited title", description = "Edited description"),
+        )
         env.calls.clear()
 
         env.migrateManga(seeded.current, seeded.target, replace = true, flags = emptySet())
@@ -347,7 +351,7 @@ class MigrateMangaTest {
     fun `Copy carries the edits too and leaves the old entry's own`() = runTest {
         val env = env()
         val seeded = env.seed()
-        env.mangaRepository.setDetailsOverride(seeded.current.id, "Edited title", null)
+        env.mangaRepository.setDetailsOverride(seeded.current.id, MangaDetailsOverrides(title = "Edited title"))
 
         env.migrateManga(seeded.current, seeded.target, replace = false, flags = emptySet())
 
@@ -360,8 +364,14 @@ class MigrateMangaTest {
         val env = env()
         val seeded = env.seed()
         // The old entry's title edit is the target source's own title, so it is no edit there.
-        env.mangaRepository.setDetailsOverride(seeded.current.id, "Same title", "Edited description")
-        env.mangaRepository.setDetailsOverride(seeded.target.id, null, "Target description")
+        env.mangaRepository.setDetailsOverride(
+            seeded.current.id,
+            MangaDetailsOverrides(title = "Same title", description = "Edited description"),
+        )
+        env.mangaRepository.setDetailsOverride(
+            seeded.target.id,
+            MangaDetailsOverrides(description = "Target description"),
+        )
 
         env.migrateManga(seeded.current, seeded.target, replace = true, flags = emptySet())
 
@@ -371,8 +381,11 @@ class MigrateMangaTest {
 
         val otherEnv = env()
         val other = otherEnv.seed()
-        otherEnv.mangaRepository.setDetailsOverride(other.current.id, null, "Old description")
-        otherEnv.mangaRepository.setDetailsOverride(other.target.id, "Target title", null)
+        otherEnv.mangaRepository.setDetailsOverride(
+            other.current.id,
+            MangaDetailsOverrides(description = "Old description"),
+        )
+        otherEnv.mangaRepository.setDetailsOverride(other.target.id, MangaDetailsOverrides(title = "Target title"))
 
         otherEnv.migrateManga(other.current, other.target, replace = true, flags = emptySet())
 
@@ -380,10 +393,34 @@ class MigrateMangaTest {
     }
 
     @Test
+    fun `the edited author, artist, status and genres follow the entry, a detail never edited keeping the target's`() =
+        runTest {
+            val env = env()
+            val seeded = env.seed()
+            env.mangaRepository.setDetailsOverride(
+                seeded.current.id,
+                MangaDetailsOverrides(author = "Edited author", status = 2L, genre = listOf("Comedy", "Mystery")),
+            )
+            env.mangaRepository.setDetailsOverride(seeded.target.id, MangaDetailsOverrides(artist = "Target artist"))
+
+            env.migrateManga(seeded.current, seeded.target, replace = true, flags = emptySet())
+
+            val new = env.mangaRepository.getMangaById(seeded.target.id)
+            assertSoftly {
+                new.authorOverride shouldBe "Edited author"
+                new.artistOverride shouldBe "Target artist"
+                new.statusOverride shouldBe 2L
+                new.genreOverride shouldBe listOf("Comedy", "Mystery")
+                new.displayAuthor shouldBe "Edited author"
+                new.titleOverride.shouldBeNull()
+            }
+        }
+
+    @Test
     fun `an entry with no edit writes no details and keeps the target's`() = runTest {
         val env = env()
         val seeded = env.seed()
-        env.mangaRepository.setDetailsOverride(seeded.target.id, "Target title", null)
+        env.mangaRepository.setDetailsOverride(seeded.target.id, MangaDetailsOverrides(title = "Target title"))
         env.calls.clear()
 
         env.migrateManga(seeded.current, seeded.target, replace = true, flags = emptySet())

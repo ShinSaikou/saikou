@@ -45,6 +45,7 @@ abstract class RepositoryTest {
                 genreAdapter = StringListColumnAdapter,
                 update_strategyAdapter = UpdateStrategyColumnAdapter,
                 memoAdapter = MemoColumnAdapter,
+                genre_overrideAdapter = StringListColumnAdapter,
             ),
         )
         handler = AndroidDatabaseHandler(database, Dispatchers.Unconfined)

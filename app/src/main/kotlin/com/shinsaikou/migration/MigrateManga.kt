@@ -57,7 +57,8 @@ import kotlin.time.Clock
  *    upstream does not carry ([historyCarries]); the categories; each old track copied in
  *    `AddTracks.bind`'s shape (a plain insert, or `rebind` when the target's pair names another
  *    remote id, since `rebind` moves the tracker-set clock even for the same id); the owner's edited
- *    title and description, which belong to the entry rather than to a source; a tombstoned target
+ *    details (title, description, author, artist, status and genres), which belong to the entry
+ *    rather than to a source; a tombstoned target
  *    undeleted; and last the favourite pair, as upstream writes it, so a target that enters the
  *    library logs every chapter it holds in one pass, with the copied read and bookmark flags and
  *    fetch dates (the library-add trigger the chapters with progress, `MangaRepository.updateAll`
@@ -220,7 +221,7 @@ class MigrateManga(
             }
         }
 
-        // The owner's edits of the title and description (phase 5 unit ED), through their one writer.
+        // The owner's edits of every detail (phase 5 unit ED, R165 item 4), through their one writer.
         check(setMangaDetailsOverride.awaitCarry(from = current, to = target)) {
             "Could not write the edited details of entry ${target.id}"
         }

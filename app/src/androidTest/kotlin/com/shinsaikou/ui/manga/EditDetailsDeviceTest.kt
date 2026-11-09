@@ -17,6 +17,7 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasProgressBarRangeInfo
@@ -29,6 +30,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -38,6 +40,7 @@ import com.shinsaikou.SaikouApp
 import com.shinsaikou.di.AppGraph
 import com.shinsaikou.domain.manga.interactor.SetMangaDetailsOverride
 import com.shinsaikou.i18n.R
+import com.shinsaikou.source.model.MangaStatus
 import com.shinsaikou.ui.main.MainActivity
 import com.shinsaikou.ui.main.MainDestination
 import com.shinsaikou.ui.main.MainIntents
@@ -61,10 +64,11 @@ import java.io.File
 import java.util.Date
 
 /**
- * The owner's title, description and cover edits on a device (phase 5 unit ED, R138 item 2): the
- * Edit details dialog's open, save, empty-title refusal and reset; the shown title on every screen
- * a device can read (the library grid, the entry screen, Updates and History); and the cover
- * viewer's set and delete of a custom cover.
+ * The owner's detail and cover edits on a device (phase 5 unit ED, R138 item 2; R165 item 4): the
+ * Edit details dialog's open, save, empty-title refusal and Reset all with its question; the author,
+ * artist, status and genre fields and the header that shows them; the shown title on every screen a
+ * device can read (the library grid, the entry screen, Updates and History); and the cover viewer's
+ * set and delete of a custom cover.
  *
  * Every entry is the test's own, a favourite on a source id no extension carries, `initialized`
  * so the entry screen starts no fetch, titled with the run's time so nothing the device already
@@ -112,6 +116,12 @@ class EditDetailsDeviceTest {
     private val editedTitle = "Owner named $mark"
     private val sourceDescription = "The source's summary of $mark"
     private val editedDescription = "The owner's summary of $mark"
+    private val sourceAuthor = "Source writer $mark"
+    private val editedAuthor = "Owner writer $mark"
+    private val sourceArtist = "Source painter $mark"
+    private val editedArtist = "Owner painter $mark"
+    private val sourceGenre = "Sourcegenre$mark"
+    private val editedGenres = listOf("Ownergenre$mark", "Othergenre$mark")
 
     private var mangaId = -1L
 
@@ -145,7 +155,8 @@ class EditDetailsDeviceTest {
     /**
      * The overflow's Edit details opens the dialog prefilled with what the screen shows; Save writes
      * the edit and the screen shows it; an emptied title is refused (the message, Save disabled,
-     * nothing written); Reset clears both and the screen shows the source's text again.
+     * nothing written); Reset all asks, and once answered clears both and the screen shows the
+     * source's text again.
      */
     @Test
     fun theDialogSavesAnEditRefusesAnEmptyTitleAndResets() {
@@ -154,15 +165,15 @@ class EditDetailsDeviceTest {
         awaitText(sourceDescription)
 
         openDialog()
-        // Prefilled with what the screen shows; Reset is off while there is no edit.
-        dialogField(TITLE_FIELD).assertTextContains(sourceTitle)
-        dialogField(DESCRIPTION_FIELD).assertTextContains(sourceDescription)
+        // Prefilled with what the screen shows; Reset all is off while there is no edit.
+        dialogField(EDIT_DETAILS_TITLE_TAG).assertTextContains(sourceTitle)
+        dialogField(EDIT_DETAILS_DESCRIPTION_TAG).assertTextContains(sourceDescription)
         dialogButton(R.string.manga_edit_reset).assertIsNotEnabled()
         capture("edit-dialog")
-        dialogField(TITLE_FIELD).performTextClearance()
-        dialogField(TITLE_FIELD).performTextInput(editedTitle)
-        dialogField(DESCRIPTION_FIELD).performTextClearance()
-        dialogField(DESCRIPTION_FIELD).performTextInput(editedDescription)
+        dialogField(EDIT_DETAILS_TITLE_TAG).performTextClearance()
+        dialogField(EDIT_DETAILS_TITLE_TAG).performTextInput(editedTitle)
+        dialogField(EDIT_DETAILS_DESCRIPTION_TAG).performTextClearance()
+        dialogField(EDIT_DETAILS_DESCRIPTION_TAG).performTextInput(editedDescription)
         dialogButton(R.string.action_save).performClick()
 
         awaitDialogGone()
@@ -176,8 +187,8 @@ class EditDetailsDeviceTest {
         capture("entry-edited")
 
         openDialog()
-        dialogField(TITLE_FIELD).assertTextContains(editedTitle)
-        dialogField(TITLE_FIELD).performTextClearance()
+        dialogField(EDIT_DETAILS_TITLE_TAG).assertTextContains(editedTitle)
+        dialogField(EDIT_DETAILS_TITLE_TAG).performTextClearance()
         awaitText(string(R.string.manga_edit_title_empty))
         dialogButton(R.string.action_save).assertIsNotEnabled()
         capture("edit-dialog-empty-title")
@@ -187,13 +198,98 @@ class EditDetailsDeviceTest {
 
         openDialog()
         dialogButton(R.string.manga_edit_reset).assertIsEnabled()
-        dialogButton(R.string.manga_edit_reset).performClick()
+        resetAll()
         awaitDialogGone()
         awaitText(sourceTitle)
         awaitText(sourceDescription)
         assertNull("the reset title edit", manga().titleOverride)
         assertNull("the reset description edit", manga().descriptionOverride)
         composeRule.onAllNodesWithText(editedTitle).assertCountEquals(0)
+    }
+
+    /**
+     * The author, artist, status and genres (R165 item 4): each field starts from the source's value;
+     * Save stores the edits and the header shows the edited author, the artist line, the status and
+     * the genre chips; Reset all asks, its Cancel keeps every edit, and once answered every detail is
+     * the source's again.
+     */
+    @Test
+    fun theDialogEditsTheAuthorArtistStatusAndGenresAndResetsAll() {
+        seedEntry(withDetails = true)
+        openEntry()
+        awaitText(string(R.string.manga_author_format, sourceAuthor))
+        awaitText(string(R.string.manga_artist_format, sourceArtist))
+        awaitText(string(R.string.manga_status_ongoing))
+
+        openDialog()
+        dialogField(EDIT_DETAILS_AUTHOR_TAG).assertTextContains(sourceAuthor)
+        dialogField(EDIT_DETAILS_ARTIST_TAG).assertTextContains(sourceArtist)
+        dialogField(EDIT_DETAILS_STATUS_TAG).assertTextContains(string(R.string.manga_status_ongoing))
+        dialogField(EDIT_DETAILS_AUTHOR_TAG).performTextClearance()
+        dialogField(EDIT_DETAILS_AUTHOR_TAG).performTextInput(editedAuthor)
+        dialogField(EDIT_DETAILS_ARTIST_TAG).performTextClearance()
+        dialogField(EDIT_DETAILS_ARTIST_TAG).performTextInput(editedArtist)
+        dialogField(EDIT_DETAILS_STATUS_TAG).performClick()
+        awaitNode(hasText(string(R.string.manga_status_completed)) and hasClickAction())
+        composeRule.onNode(hasText(string(R.string.manga_status_completed)) and hasClickAction()).performClick()
+        dialogField(EDIT_DETAILS_STATUS_TAG).assertTextContains(string(R.string.manga_status_completed))
+        // A tap on the source's genre removes it; the field adds two, split at the comma.
+        dialogChip(sourceGenre).performScrollTo().performClick()
+        dialogField(EDIT_DETAILS_GENRE_TAG).performTextInput(editedGenres.joinToString(", "))
+        composeRule.onNode(
+            hasContentDescription(string(R.string.action_add)) and hasClickAction() and hasAnyAncestor(isDialog()),
+        ).performClick()
+        editedGenres.forEach { dialogChip(it).assertExists() }
+        composeRule.onAllNodes(hasText(sourceGenre) and hasAnyAncestor(isDialog())).assertCountEquals(0)
+        capture("edit-dialog-details")
+        dialogButton(R.string.action_save).performClick()
+
+        awaitDialogGone()
+        awaitText(string(R.string.manga_author_format, editedAuthor))
+        awaitText(string(R.string.manga_artist_format, editedArtist))
+        awaitText(string(R.string.manga_status_completed))
+        editedGenres.forEach { awaitText(it) }
+        composeRule.onAllNodesWithText(sourceGenre).assertCountEquals(0)
+        val edited = manga()
+        assertEquals("the stored author edit", editedAuthor, edited.authorOverride)
+        assertEquals("the stored artist edit", editedArtist, edited.artistOverride)
+        assertEquals("the stored status edit", MangaStatus.COMPLETED.code.toLong(), edited.statusOverride)
+        assertEquals("the stored genre edit", editedGenres, edited.genreOverride)
+        assertEquals("the source's author under the edit", sourceAuthor, edited.author)
+        assertNull("the title saved as the source's is no edit", edited.titleOverride)
+        capture("entry-details-edited")
+
+        // Reset all asks first; Cancel keeps every edit.
+        openDialog()
+        dialogButton(R.string.manga_edit_reset).performClick()
+        awaitText(string(R.string.manga_edit_reset_title))
+        capture("edit-dialog-reset-question")
+        composeRule.onNode(
+            hasText(string(R.string.action_cancel)) and hasClickAction() and hasAnyAncestor(resetQuestion()),
+        ).performClick()
+        composeRule.waitUntil(timeoutMillis = SCREEN_TIMEOUT_MILLIS) {
+            composeRule.onAllNodesWithText(string(R.string.manga_edit_reset_title)).fetchSemanticsNodes().isEmpty()
+        }
+        assertEquals("a cancelled reset wrote nothing", editedAuthor, manga().authorOverride)
+        composeRule.onAllNodes(isDialog()).assertCountEquals(1)
+        composeRule.onNode(
+            hasText(string(R.string.manga_edit_reset)) and hasClickAction() and hasAnyAncestor(isDialog()),
+        ).performClick()
+        composeRule.onNode(
+            hasText(string(R.string.manga_edit_reset)) and hasClickAction() and hasAnyAncestor(resetQuestion()),
+        ).performClick()
+
+        awaitDialogGone()
+        awaitText(string(R.string.manga_author_format, sourceAuthor))
+        awaitText(string(R.string.manga_artist_format, sourceArtist))
+        awaitText(string(R.string.manga_status_ongoing))
+        awaitText(sourceGenre)
+        val reset = manga()
+        assertNull("the reset author edit", reset.authorOverride)
+        assertNull("the reset artist edit", reset.artistOverride)
+        assertNull("the reset status edit", reset.statusOverride)
+        assertNull("the reset genre edit", reset.genreOverride)
+        capture("entry-details-reset")
     }
 
     /** The library grid draws the edit, and its search finds the entry by the edit's own words. */
@@ -313,27 +409,41 @@ class EditDetailsDeviceTest {
 
     // region Fixture
 
-    private fun seedEntry(dateAdded: Long = System.currentTimeMillis()) {
-        mangaId = runBlocking {
-            graph.mangaRepository.insertNetworkManga(
-                listOf(
-                    Manga.create().copy(
-                        source = SOURCE_ID,
-                        url = "/fixture/$mark",
-                        title = sourceTitle,
-                        description = sourceDescription,
-                        favorite = true,
-                        initialized = true,
-                        dateAdded = dateAdded,
-                    ),
-                ),
-            ).single().id
+    /** The entry; [withDetails] gives it a source author, artist, status and genre. */
+    private fun seedEntry(dateAdded: Long = System.currentTimeMillis(), withDetails: Boolean = false) {
+        val manga = Manga.create().copy(
+            source = SOURCE_ID,
+            url = "/fixture/$mark",
+            title = sourceTitle,
+            description = sourceDescription,
+            favorite = true,
+            initialized = true,
+            dateAdded = dateAdded,
+        )
+        val seeded = if (withDetails) {
+            manga.copy(
+                author = sourceAuthor,
+                artist = sourceArtist,
+                status = MangaStatus.ONGOING.code.toLong(),
+                genre = listOf(sourceGenre),
+            )
+        } else {
+            manga
         }
+        mangaId = runBlocking { graph.mangaRepository.insertNetworkManga(listOf(seeded)).single().id }
     }
 
-    /** The edit as the dialog's Save writes it. */
+    /** The title and description edit as the dialog's Save writes it, the entry having no other detail. */
     private fun edit() = runBlocking {
-        assertTrue(SetMangaDetailsOverride(graph.mangaRepository).await(mangaId, editedTitle, editedDescription))
+        val edit = SetMangaDetailsOverride.Edit(
+            title = editedTitle,
+            description = editedDescription,
+            author = "",
+            artist = "",
+            status = null,
+            genres = emptyList(),
+        )
+        assertTrue(SetMangaDetailsOverride(graph.mangaRepository).await(mangaId, edit))
     }
 
     private fun manga(): Manga = runBlocking { graph.mangaRepository.getMangaById(mangaId) }
@@ -365,9 +475,25 @@ class EditDetailsDeviceTest {
         awaitNode(isDialog())
     }
 
-    /** The dialog's two fields, in order: the title, then the description. */
-    private fun dialogField(index: Int) =
-        composeRule.onAllNodes(hasSetTextAction() and hasAnyAncestor(isDialog()))[index]
+    /** A field of the dialog by its tag, scrolled into view. */
+    private fun dialogField(tag: String) = composeRule.onNodeWithTag(tag).performScrollTo()
+
+    /** A genre chip of the dialog, by its genre. */
+    private fun dialogChip(genre: String) =
+        composeRule.onNode(hasText(genre) and hasClickAction() and hasAnyAncestor(isDialog()))
+
+    /** The question Reset all asks, a dialog of its own over the edit dialog. */
+    private fun resetQuestion(): SemanticsMatcher =
+        isDialog() and hasAnyDescendant(hasText(string(R.string.manga_edit_reset_title)))
+
+    /** Reset all, then its question's answer. */
+    private fun resetAll() {
+        dialogButton(R.string.manga_edit_reset).performClick()
+        awaitNode(resetQuestion())
+        composeRule.onNode(
+            hasText(string(R.string.manga_edit_reset)) and hasClickAction() and hasAnyAncestor(resetQuestion()),
+        ).performClick()
+    }
 
     private fun dialogButton(label: Int) =
         composeRule.onNode(hasText(string(label)) and hasClickAction() and hasAnyAncestor(isDialog()))
@@ -413,6 +539,8 @@ class EditDetailsDeviceTest {
 
     private fun string(resourceId: Int): String = context.getString(resourceId)
 
+    private fun string(resourceId: Int, vararg args: Any): String = context.getString(resourceId, *args)
+
     // endregion
 
     private companion object {
@@ -420,9 +548,6 @@ class EditDetailsDeviceTest {
 
         /** A source id no extension carries, after `ChapterRowDeviceTest`'s. */
         const val SOURCE_ID = 7_310_000_000_000_031L
-
-        const val TITLE_FIELD = 0
-        const val DESCRIPTION_FIELD = 1
 
         /** An hour, so the chapter fetched now counts as an update of the entry. */
         const val UPDATE_AGE_MILLIS = 3_600_000L

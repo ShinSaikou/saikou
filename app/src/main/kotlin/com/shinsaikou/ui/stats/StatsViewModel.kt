@@ -105,7 +105,7 @@ class StatsViewModel(
             val overviewStatData = StatsData.Overview(
                 libraryMangaCount = distinctLibraryManga.size,
                 completedMangaCount = distinctLibraryManga.count {
-                    it.manga.status == MangaStatus.COMPLETED.code.toLong() && it.unreadCount == 0L
+                    it.manga.displayStatus == MangaStatus.COMPLETED.code.toLong() && it.unreadCount == 0L
                 },
                 totalReadDuration = totalReadDuration.await(),
             )

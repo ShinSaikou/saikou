@@ -4,6 +4,7 @@ package tachiyomi.data.manga
 import app.cash.sqldelight.async.coroutines.awaitAsOne
 import app.cash.sqldelight.async.coroutines.awaitAsOneOrNull
 import com.shinsaikou.data.DatabaseHandler
+import com.shinsaikou.domain.manga.model.MangaDetailsOverrides
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
@@ -27,7 +28,7 @@ import tachiyomi.domain.manga.repository.MangaRepository
  * source-rewrite functions of 04-domain's interface are added, with `getMangaByIdOrNullAsFlow`
  * (phase 4 unit missing-entry), `partialUpdate` logs a library add's chapters without progress
  * (phase 4 unit NB), `rebuildLibrarySummary` is the library counts' repair (phase 5 unit SC4),
- * `setDetailsOverride` is the owner's title and description edit (phase 5 unit ED), and
+ * `setDetailsOverride` is the owner's edit of every detail (phase 5 unit ED, R165 item 4), and
  * `rewriteSourceId` rewrites the merged tables too (R163).
  */
 @Inject
@@ -222,12 +223,16 @@ class MangaRepositoryImpl(
         }
     }
 
-    override suspend fun setDetailsOverride(mangaId: Long, titleOverride: String?, descriptionOverride: String?): Boolean {
+    override suspend fun setDetailsOverride(mangaId: Long, overrides: MangaDetailsOverrides): Boolean {
         return try {
             handler.await {
-                mangasQueries.setDetailsOverride(
-                    titleOverride = titleOverride,
-                    descriptionOverride = descriptionOverride,
+                mangasQueries.setEditedDetails(
+                    titleOverride = overrides.title,
+                    descriptionOverride = overrides.description,
+                    authorOverride = overrides.author,
+                    artistOverride = overrides.artist,
+                    statusOverride = overrides.status,
+                    genreOverride = overrides.genre,
                     mangaId = mangaId,
                 )
             }

@@ -86,6 +86,10 @@ fun manga(
     deletedAt = null,
     titleOverride = null,
     descriptionOverride = null,
+    authorOverride = null,
+    artistOverride = null,
+    statusOverride = null,
+    genreOverride = null,
 )
 
 /** A chapter already in [ReaderChapter.State.Loaded] with [pageCount] queued pages. */

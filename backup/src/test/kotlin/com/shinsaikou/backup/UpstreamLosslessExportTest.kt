@@ -667,7 +667,11 @@ class UpstreamLosslessExportTest {
             "mangas.priority_modified_at" to "Saikou only: an owner clock of the sync merge (R82, R85)",
             "mangas.trackers_modified_at" to "Saikou only: an owner clock of the sync merge (R82, R85)",
             "mangas.restored_at" to "Saikou only: the restore clock of the sync merge (R82)",
-            "mangas.details_modified_at" to "Saikou only: the owner clock of the two edits, a sync value (R138 item 2)",
+            "mangas.details_modified_at" to "Saikou only: the owner clock of the edits, a sync value (R138 item 2)",
+            "mangas.author_override" to "Saikou only: the owner's author edit; the file writes the source's (R165 item 4)",
+            "mangas.artist_override" to "Saikou only: the owner's artist edit; the file writes the source's (R165 item 4)",
+            "mangas.status_override" to "Saikou only: the owner's status edit; the file writes the source's (R165 item 4)",
+            "mangas.genre_override" to "Saikou only: the owner's genre edit; the file writes the source's (R165 item 4)",
             "chapters._id" to "this install's row id; a chapter travels by its url",
             "chapters.is_syncing" to "Upstream's column, not written by upstream's creator either",
             "chapters.deleted_at" to "Saikou only: a soft-deleted chapter is left out of the file",
@@ -956,7 +960,8 @@ private object LosslessFixture {
             "trackers_modified_at" to T + 12, "restored_at" to T + 14,
             // Every entry carries an edit, so a file that wrote it in place of the source's text fails.
             "title_override" to "Edited $id", "description_override" to "Edited description $id",
-            "details_modified_at" to T + 15,
+            "details_modified_at" to T + 15, "author_override" to "Edited author $id",
+            "artist_override" to "Edited artist $id", "status_override" to 2L, "genre_override" to "Edited genre $id",
         ).apply(values),
     )
 

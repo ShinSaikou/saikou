@@ -41,6 +41,7 @@ import com.shinsaikou.source.SourceManager
 import com.shinsaikou.source.StubSource
 import com.shinsaikou.source.model.ChapterInfo
 import com.shinsaikou.source.model.MangaInfo
+import com.shinsaikou.source.model.MangaStatus
 import com.shinsaikou.source.model.MangaUpdate
 import com.shinsaikou.source.model.UpdateStrategy
 import com.shinsaikou.sync.MapPreferenceStore
@@ -1803,13 +1804,16 @@ class MangaDetailViewModelTest {
         (viewModel.state.value as MangaDetailViewModel.State.Success).dialog shouldBe null
     }
 
-    /** Phase 5 unit ED: the edit dialog's Save writes through the interactor and closes the dialog. */
+    /**
+     * Phase 5 unit ED and R165 item 4: the edit dialog's Save hands every value it holds to the
+     * interactor, which decides what is an edit, and closes the dialog.
+     */
     @Test
-    fun `saving the edit dialog writes both texts through SetMangaDetailsOverride and closes it`() =
+    fun `saving the edit dialog writes what it holds through SetMangaDetailsOverride and closes it`() =
         runTest(testDispatcher) {
             val manga = fixtureManga()
             stubSettledScreen(manga, listOf(fixtureChapter()))
-            coEvery { setMangaDetailsOverride.await(manga.id, any(), any()) } returns true
+            coEvery { setMangaDetailsOverride.await(manga.id, any()) } returns true
             val viewModel = viewModel(manga.id, fromSource = false)
             advanceUntilIdle()
 
@@ -1817,12 +1821,12 @@ class MangaDetailViewModelTest {
             (viewModel.state.value as MangaDetailViewModel.State.Success).dialog shouldBe
                 MangaDetailViewModel.Dialog.EditDetails
             viewModel.events.test {
-                viewModel.saveDetails("My title", "My text")
+                viewModel.saveDetails(EDIT)
                 advanceUntilIdle()
                 expectNoEvents()
             }
 
-            coVerify(exactly = 1) { setMangaDetailsOverride.await(manga.id, "My title", "My text") }
+            coVerify(exactly = 1) { setMangaDetailsOverride.await(manga.id, EDIT) }
             (viewModel.state.value as MangaDetailViewModel.State.Success).dialog shouldBe null
         }
 
@@ -1834,32 +1838,50 @@ class MangaDetailViewModelTest {
         advanceUntilIdle()
 
         viewModel.showEditDetails()
-        viewModel.saveDetails("  ", "My text")
+        viewModel.saveDetails(EDIT.copy(title = "  "))
         advanceUntilIdle()
 
-        coVerify(exactly = 0) { setMangaDetailsOverride.await(any(), any(), any()) }
+        coVerify(exactly = 0) { setMangaDetailsOverride.await(any(), any()) }
         (viewModel.state.value as MangaDetailViewModel.State.Success).dialog shouldBe
             MangaDetailViewModel.Dialog.EditDetails
     }
 
     @Test
-    fun `reset clears both edits through the interactor, and a write that failed is said`() = runTest(testDispatcher) {
+    fun `a save that failed is said on the snackbar`() = runTest(testDispatcher) {
         val manga = fixtureManga()
         stubSettledScreen(manga, listOf(fixtureChapter()))
-        coEvery { setMangaDetailsOverride.awaitReset(manga.id) } returns false
+        coEvery { setMangaDetailsOverride.await(manga.id, any()) } returns false
         val viewModel = viewModel(manga.id, fromSource = false)
         advanceUntilIdle()
 
         viewModel.showEditDetails()
         viewModel.events.test {
-            viewModel.resetDetails()
+            viewModel.saveDetails(EDIT)
             advanceUntilIdle()
             (awaitItem() as MangaDetailViewModel.Event.Snackbar).messageRes shouldBe R.string.manga_edit_failed
         }
-
-        coVerify(exactly = 1) { setMangaDetailsOverride.awaitReset(manga.id) }
-        (viewModel.state.value as MangaDetailViewModel.State.Success).dialog shouldBe null
     }
+
+    /** Reset all, once the dialog's question is answered: every edit cleared through the interactor. */
+    @Test
+    fun `reset all clears every edit through the interactor, and a write that failed is said`() =
+        runTest(testDispatcher) {
+            val manga = fixtureManga()
+            stubSettledScreen(manga, listOf(fixtureChapter()))
+            coEvery { setMangaDetailsOverride.awaitReset(manga.id) } returns false
+            val viewModel = viewModel(manga.id, fromSource = false)
+            advanceUntilIdle()
+
+            viewModel.showEditDetails()
+            viewModel.events.test {
+                viewModel.resetDetails()
+                advanceUntilIdle()
+                (awaitItem() as MangaDetailViewModel.Event.Snackbar).messageRes shouldBe R.string.manga_edit_failed
+            }
+
+            coVerify(exactly = 1) { setMangaDetailsOverride.awaitReset(manga.id) }
+            (viewModel.state.value as MangaDetailViewModel.State.Success).dialog shouldBe null
+        }
 
     @Test
     fun `showUpdateInterval opens the update interval dialog`() = runTest(testDispatcher) {
@@ -3297,6 +3319,7 @@ private class EntryDatabase(dispatcher: CoroutineDispatcher) : AutoCloseable {
                 genreAdapter = StringListColumnAdapter,
                 update_strategyAdapter = UpdateStrategyColumnAdapter,
                 memoAdapter = MemoColumnAdapter,
+                genre_overrideAdapter = StringListColumnAdapter,
             ),
         )
     }
@@ -3319,3 +3342,13 @@ private class EntryDatabase(dispatcher: CoroutineDispatcher) : AutoCloseable {
 
     override fun close() = driver.close()
 }
+
+/** What the edit dialog holds on Save: every detail edited (R165 item 4). */
+private val EDIT = SetMangaDetailsOverride.Edit(
+    title = "My title",
+    description = "My text",
+    author = "My author",
+    artist = "My artist",
+    status = MangaStatus.COMPLETED.code.toLong(),
+    genres = listOf("Comedy"),
+)

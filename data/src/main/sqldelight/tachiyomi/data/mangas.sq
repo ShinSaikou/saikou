@@ -7,7 +7,10 @@
 -- backupGetLibraryPage is phase 5 unit SC2's, for the export's pages. Schema version 3 (phase 5 unit
 -- SC4) adds unit ED's title and description overrides and their clock; setDetailsOverride is ED's
 -- one local write of them, and the sync apply's two statements carry them. getDuplicateLibraryManga
--- takes upstream's later guard against a blank title (triage E105).
+-- takes upstream's later guard against a blank title (triage E105). Schema version 7 (R165 item 4)
+-- adds the author, artist, status and genre overrides under the same clock; setEditedDetails is the
+-- owner's one local write of all six, and setDetailsOverride stays the restore's write of the two
+-- another reader's backup can carry.
 
 import com.shinsaikou.source.model.UpdateStrategy;
 import kotlin.Boolean;
@@ -54,7 +57,11 @@ CREATE TABLE mangas(
     restored_at INTEGER,
     title_override TEXT,
     description_override TEXT,
-    details_modified_at INTEGER
+    details_modified_at INTEGER,
+    author_override TEXT,
+    artist_override TEXT,
+    status_override INTEGER,
+    genre_override TEXT AS List<String>
 );
 
 CREATE INDEX idx_mangas_favorite ON mangas(favorite);
@@ -88,7 +95,9 @@ WHEN new.is_syncing = 0 AND (
     new.chapter_flags != old.chapter_flags OR new.update_strategy != old.update_strategy OR
     new.notes != old.notes OR new.memo IS NOT old.memo OR
     new.manual_position != old.manual_position OR new.deleted_at IS NOT old.deleted_at OR
-    new.title_override IS NOT old.title_override OR new.description_override IS NOT old.description_override
+    new.title_override IS NOT old.title_override OR new.description_override IS NOT old.description_override OR
+    new.author_override IS NOT old.author_override OR new.artist_override IS NOT old.artist_override OR
+    new.status_override IS NOT old.status_override OR new.genre_override IS NOT old.genre_override
 )
 BEGIN
     UPDATE mangas SET version = version + 1 WHERE _id = new._id;
@@ -132,11 +141,14 @@ BEGIN
     WHERE _id = new._id;
 END;
 
--- The edited title and description's clock (schema version 3, R138 item 2): one clock for both
--- overrides, in the notes clock's shape.
-CREATE TRIGGER update_manga_details_modified_at AFTER UPDATE OF title_override, description_override ON mangas
+-- The edited details' clock (schema version 3, R138 item 2): one clock for every override, in the
+-- notes clock's shape. Schema version 7 (R165 item 4) adds the author, artist, status and genres.
+CREATE TRIGGER update_manga_details_modified_at AFTER UPDATE OF title_override, description_override,
+    author_override, artist_override, status_override, genre_override ON mangas
 WHEN new.is_syncing = 0 AND (
-    new.title_override IS NOT old.title_override OR new.description_override IS NOT old.description_override
+    new.title_override IS NOT old.title_override OR new.description_override IS NOT old.description_override OR
+    new.author_override IS NOT old.author_override OR new.artist_override IS NOT old.artist_override OR
+    new.status_override IS NOT old.status_override OR new.genre_override IS NOT old.genre_override
 )
 BEGIN
     UPDATE mangas
@@ -384,8 +396,18 @@ UPDATE mangas
 SET manual_position = :position
 WHERE _id = :mangaId;
 
--- The owner's edit of the title and description (phase 5 unit ED, R138 item 2), both written whole:
--- NULL is unedited. update_manga_details_modified_at stamps the clock and update_manga_version logs it.
+-- The owner's edit of every detail (phase 5 unit ED, R138 item 2, R165 item 4), all six written
+-- whole: NULL is unedited. update_manga_details_modified_at stamps the clock and update_manga_version
+-- logs it.
+setEditedDetails:
+UPDATE mangas
+SET title_override = :titleOverride, description_override = :descriptionOverride,
+    author_override = :authorOverride, artist_override = :artistOverride,
+    status_override = :statusOverride, genre_override = :genreOverride
+WHERE _id = :mangaId;
+
+-- A restore's write of the title and description another reader's backup carries (R162 item 12),
+-- both written whole under the row's latch; the other overrides stay as they are.
 setDetailsOverride:
 UPDATE mangas
 SET title_override = :titleOverride, description_override = :descriptionOverride
@@ -424,14 +446,14 @@ INSERT INTO mangas(source, url, artist, author, description, genre, title, statu
     manual_position, deleted_at, favorite_modified_at, restored_at, display_modified_at,
     notes_modified_at, position_modified_at, categories_modified_at, exclusions_modified_at,
     priority_modified_at, trackers_modified_at, title_override, description_override,
-    details_modified_at)
+    details_modified_at, author_override, artist_override, status_override, genre_override)
 VALUES (:source, :url, :artist, :author, :description, :genre, :title, :status, :thumbnailUrl,
     :favorite, 0, 0, :initialized, :viewer, :chapterFlags, 0,
     :dateAdded, :updateStrategy, 0, :version, 1, :notes, :memo,
     :manualPosition, :deletedAt, :favoriteModifiedAt, :restoredAt, :displayModifiedAt,
     :notesModifiedAt, :positionModifiedAt, :categoriesModifiedAt, :exclusionsModifiedAt,
     :priorityModifiedAt, :trackersModifiedAt, :titleOverride, :descriptionOverride,
-    :detailsModifiedAt);
+    :detailsModifiedAt, :authorOverride, :artistOverride, :statusOverride, :genreOverride);
 
 syncUpdate:
 UPDATE mangas SET
@@ -442,6 +464,8 @@ UPDATE mangas SET
     display_modified_at = :displayModifiedAt, notes = :notes, notes_modified_at = :notesModifiedAt,
     manual_position = :manualPosition, position_modified_at = :positionModifiedAt,
     title_override = :titleOverride, description_override = :descriptionOverride,
+    author_override = :authorOverride, artist_override = :artistOverride,
+    status_override = :statusOverride, genre_override = :genreOverride,
     details_modified_at = :detailsModifiedAt,
     categories_modified_at = :categoriesModifiedAt, exclusions_modified_at = :exclusionsModifiedAt,
     priority_modified_at = :priorityModifiedAt, trackers_modified_at = :trackersModifiedAt

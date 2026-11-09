@@ -13,18 +13,19 @@ import kotlin.io.path.extension
 import kotlin.io.path.readText
 
 /**
- * Who writes unit ED's columns (R138 item 2). Schema version 3 shipped `title_override`,
- * `description_override` and `details_modified_at` inert (phase 5 unit SC4's `OverrideColumnsInertTest`);
- * ED made them live, and this test is that one inverted: the owner's edit reaches them through one
- * named statement, `setDetailsOverride`, which only the repository runs and only
- * `SetMangaDetailsOverride` calls, so no screen writes them another way; the sync apply's two
- * statements write what a merge returned, under the row's latch, and `SyncStoreImpl` reads them for
- * the wire. A restore is the one other caller of `setDetailsOverride` (R162 item 12): it fills an
- * override the entry lacks from another reader's backup fields 800 and 804, through
- * `BackupDatabaseWriter` under the row's latch, so no clock or version moves. SQL reaches the
- * database only through the `.sq` files' named statements or a raw string in Kotlin, so the
- * statements and the Kotlin main sources that name the columns are listed, as are the schema's own
- * objects.
+ * Who writes unit ED's columns (R138 item 2) and the four schema version 7 adds beside them (R165
+ * item 4). Schema version 3 shipped `title_override`, `description_override` and
+ * `details_modified_at` inert (phase 5 unit SC4's `OverrideColumnsInertTest`); ED made them live, and
+ * this test is that one inverted: the owner's edit reaches them through one named statement,
+ * `setEditedDetails`, which only the repository runs, through `MangaRepository.setDetailsOverride`,
+ * which only `SetMangaDetailsOverride` calls, so no screen writes them another way; the sync apply's
+ * two statements write what a merge returned, under the row's latch, and `SyncStoreImpl` reads them
+ * for the wire. A restore runs the one other statement, `setDetailsOverride`, which writes the title
+ * and description alone (R162 item 12): it fills an override the entry lacks from another reader's
+ * backup fields 800 and 804, through `BackupDatabaseWriter` under the row's latch, so no clock or
+ * version moves. SQL reaches the database only through the `.sq` files' named statements or a raw
+ * string in Kotlin, so the statements and the Kotlin main sources that name the columns are listed,
+ * as are the schema's own objects.
  */
 class OverrideColumnsWritersTest {
 
@@ -34,6 +35,7 @@ class OverrideColumnsWritersTest {
             .filter { it.name != null && COLUMNS.containsMatchIn(it.sql) }
             .map { "${it.file}:${it.name}" }
             .shouldContainExactlyInAnyOrder(
+                "mangas.sq:setEditedDetails",
                 "mangas.sq:setDetailsOverride",
                 "mangas.sq:syncInsert",
                 "mangas.sq:syncUpdate",
@@ -64,10 +66,11 @@ class OverrideColumnsWritersTest {
     }
 
     @Test
-    fun `the edit's statement runs in the repository and the restore's writer, each called once`() {
+    fun `the edit's statement runs in the repository alone, which only the edit's interactor calls`() {
+        mainSources().filter { EDIT_CALL.containsMatchIn(it.readText()) }.map { it.fileName.toString() }
+            .shouldContainExactlyInAnyOrder("MangaRepositoryImpl.kt")
         mainSources().filter { CALL.containsMatchIn(it.readText()) }.map { it.fileName.toString() }
             .shouldContainExactlyInAnyOrder(
-                "MangaRepositoryImpl.kt",
                 "SetMangaDetailsOverride.kt",
                 "BackupDatabaseWriter.kt",
                 "BackupImporter.kt",
@@ -110,10 +113,19 @@ class OverrideColumnsWritersTest {
     }
 
     private companion object {
-        val COLUMNS = Regex("""\b(title_override|description_override|details_modified_at)\b""")
+        val COLUMNS = Regex(
+            """\b(title_override|description_override|author_override|artist_override|status_override|""" +
+                """genre_override|details_modified_at)\b""",
+        )
         val OBJECT = Regex("""^CREATE (TABLE|TRIGGER|VIEW) \w+""")
 
-        /** A call, never a declaration: `mangasQueries.setDetailsOverride(` or `repository.setDetailsOverride(`. */
+        /**
+         * A call, never a declaration: the repository's `mangaRepository.setDetailsOverride(`, and the
+         * restore's `mangasQueries.setDetailsOverride(` and `writer.setDetailsOverride(`.
+         */
         val CALL = Regex("""\.setDetailsOverride\(""")
+
+        /** The edit's statement, `mangasQueries.setEditedDetails(`. */
+        val EDIT_CALL = Regex("""\.setEditedDetails\(""")
     }
 }

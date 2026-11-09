@@ -29,10 +29,11 @@ import java.util.Properties
 import com.shinsaikou.source.model.UpdateStrategy
 
 /**
- * The current schema, version 6, created fresh on the JVM driver: the DDL the `.sq` files create,
+ * The current schema, version 7, created fresh on the JVM driver: the DDL the `.sq` files create,
  * the seeds, the foreign keys, the triggers, the views, the query plans and the column adapters
  * (05-data section 6.2). The migrations are [MigrationTest]'s, [MigrationToVersion3Test]'s,
- * [MigrationToVersion4Test]'s, [MigrationToVersion5Test]'s and [MigrationToVersion6Test]'s.
+ * [MigrationToVersion4Test]'s, [MigrationToVersion5Test]'s, [MigrationToVersion6Test]'s and
+ * [MigrationToVersion7Test]'s.
  */
 class SchemaTest {
 
@@ -52,6 +53,7 @@ class SchemaTest {
                 genreAdapter = StringListColumnAdapter,
                 update_strategyAdapter = UpdateStrategyColumnAdapter,
                 memoAdapter = MemoColumnAdapter,
+                genre_overrideAdapter = StringListColumnAdapter,
             ),
         )
     }
@@ -64,8 +66,8 @@ class SchemaTest {
     // 1. Creates -------------------------------------------------------------------------------
 
     @Test
-    fun `the schema creates at version 6 with every declared object`() {
-        scalar("PRAGMA user_version") shouldBe "6"
+    fun `the schema creates at version 7 with every declared object`() {
+        scalar("PRAGMA user_version") shouldBe "7"
 
         names("table") shouldContainExactly EXPECTED_TABLES.sorted()
         names("view") shouldContainExactly listOf("historyView", "libraryView", "updatesView")
@@ -630,6 +632,10 @@ class SchemaTest {
                 title_override|TEXT|0||0
                 description_override|TEXT|0||0
                 details_modified_at|INTEGER|0||0
+                author_override|TEXT|0||0
+                artist_override|TEXT|0||0
+                status_override|INTEGER|0||0
+                genre_override|TEXT|0||0
             """,
             "library_summary" to """
                 manga_id|INTEGER|1||1

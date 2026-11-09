@@ -52,6 +52,15 @@ data class Manga(
     val titleOverride: String?,
     /** The owner's edit of [description], null while unedited; as [titleOverride]. */
     val descriptionOverride: String?,
+    /**
+     * The owner's edits of [author], [artist], [status] and [genre], each null while unedited (schema
+     * version 7, R165 item 4), as [titleOverride]: the source's values stay under them, which a
+     * refresh keeps writing and the sources, downloads and the backup use.
+     */
+    val authorOverride: String?,
+    val artistOverride: String?,
+    val statusOverride: Long?,
+    val genreOverride: List<String>?,
 ) : JavaSerializable {
 
     /** The title every screen and notification shows: the owner's edit over the source's. */
@@ -62,9 +71,28 @@ data class Manga(
     val displayDescription: String?
         get() = descriptionOverride ?: description
 
+    /** The author the entry screen shows and the library searches: the owner's edit over the source's. */
+    val displayAuthor: String?
+        get() = authorOverride ?: author
+
+    /** The artist, as [displayAuthor]. */
+    val displayArtist: String?
+        get() = artistOverride ?: artist
+
+    /**
+     * The status every screen shows and every rule reads (the Completed filter, the library update's
+     * skip of completed entries, Upcoming): the owner's edit over the source's.
+     */
+    val displayStatus: Long
+        get() = statusOverride ?: status
+
+    /** The genres, as [displayAuthor]. */
+    val displayGenre: List<String>?
+        get() = genreOverride ?: genre
+
     val expectedNextUpdate: Instant?
         get() = nextUpdate
-            .takeIf { status != MangaStatus.COMPLETED.code.toLong() }
+            .takeIf { displayStatus != MangaStatus.COMPLETED.code.toLong() }
             ?.let { Instant.fromEpochMilliseconds(it) }
 
     val sorting: Long
@@ -190,6 +218,10 @@ data class Manga(
             deletedAt = null,
             titleOverride = null,
             descriptionOverride = null,
+            authorOverride = null,
+            artistOverride = null,
+            statusOverride = null,
+            genreOverride = null,
         )
     }
 

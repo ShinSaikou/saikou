@@ -54,6 +54,10 @@ class MergeColumnCoverageTest {
                 "trackers_modified_at" to "MangaRecord.trackersModifiedAt",
                 "title_override" to "MangaRecord.titleOverride",
                 "description_override" to "MangaRecord.descriptionOverride",
+                "author_override" to "MangaRecord.authorOverride",
+                "artist_override" to "MangaRecord.artistOverride",
+                "status_override" to "MangaRecord.statusOverride",
+                "genre_override" to "MangaRecord.genreOverride",
                 "details_modified_at" to "MangaRecord.detailsModifiedAt",
             ),
             excluded = mapOf(

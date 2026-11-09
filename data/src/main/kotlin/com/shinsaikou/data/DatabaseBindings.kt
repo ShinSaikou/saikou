@@ -95,5 +95,6 @@ internal fun appDatabase(driver: SqlDriver): Database = Database(
         genreAdapter = StringListColumnAdapter,
         update_strategyAdapter = UpdateStrategyColumnAdapter,
         memoAdapter = MemoColumnAdapter,
+        genre_overrideAdapter = StringListColumnAdapter,
     ),
 )

@@ -16,11 +16,11 @@ import tachiyomi.domain.manga.model.MangaUpdate
 import java.io.File
 
 /**
- * The owner's title and description edit across two devices (phase 5 unit ED, R138 item 2), over
- * two real databases. An edit goes through `SetMangaDetailsOverride` and a source refresh through
- * the repository's `update`, the write `UpdateManga.awaitUpdateFromSource` makes, so every trigger
- * fires as in the app. The overrides merge under their own clock, as the notes do; the source's
- * values under them keep following the version.
+ * The owner's edit of an entry's details across two devices (phase 5 unit ED, R138 item 2; R165
+ * item 4), over two real databases. An edit goes through `SetMangaDetailsOverride` and a source
+ * refresh through the repository's `update`, the write `UpdateManga.awaitUpdateFromSource` makes, so
+ * every trigger fires as in the app. The six overrides merge together under their one clock, as the
+ * notes do; the source's values under them keep following the version.
  */
 class SyncEditDetailsTest {
 
@@ -166,6 +166,59 @@ class SyncEditDetailsTest {
         converged()
     }
 
+    @Test
+    fun `an edit of the author, artist, status and genres on A travels and survives B's source refresh`() {
+        a.edit(
+            "Source title", "Source text",
+            author = "A's author", artist = "A's artist", status = 2, genres = listOf("Comedy"),
+        )
+        b.refreshDetails(author = "Source author", artist = "Source artist", status = 1, genre = "Action, Drama")
+        b.refreshDetails(author = "New author", artist = "New artist", status = 6, genre = "Mystery")
+
+        syncBothWays()
+
+        for (device in listOf(a, b)) {
+            device.details() shouldBe Details("A's author", "A's artist", "2", "Comedy")
+            device.sourceDetails() shouldBe Details("New author", "New artist", "6", "Mystery")
+            device.string("SELECT title_override FROM mangas WHERE _id = 1") shouldBe null
+        }
+        converged()
+    }
+
+    @Test
+    fun `edits on both devices take the later clock's six overrides whole`() {
+        a.edit("A's title", "A's text", author = "A's author", artist = "", status = 2, genres = listOf("Comedy"))
+        b.edit("Source title", "Source text", author = "", artist = "B's artist", status = null, genres = emptyList())
+        b.advanceDetailsClock(60_000)
+
+        syncBothWays()
+
+        for (device in listOf(a, b)) {
+            device.shown() shouldBe Shown("Source title", "Source text", "Source title")
+            device.details() shouldBe Details(null, "B's artist", null, null)
+        }
+        converged()
+    }
+
+    @Test
+    fun `reset all on A clears every edit on both`() {
+        a.edit(
+            "A's title", "A's text",
+            author = "A's author", artist = "A's artist", status = 5, genres = listOf("Comedy"),
+        )
+        syncBothWays()
+        b.details() shouldBe Details("A's author", "A's artist", "5", "Comedy")
+
+        a.reset()
+        syncBothWays()
+
+        for (device in listOf(a, b)) {
+            device.shown() shouldBe Shown("Source title", "Source text", "Source title")
+            device.details() shouldBe Details(null, null, null, null)
+        }
+        converged()
+    }
+
     private fun otherReadersFile() = Backup(
         backupManga = listOf(
             BackupManga(
@@ -187,9 +240,43 @@ class SyncEditDetailsTest {
         3,
     ).single().let { (title, description, source) -> Shown(title, description, source) }
 
-    private fun SyncTestDevice.edit(title: String, description: String) = runBlocking {
-        SetMangaDetailsOverride(MangaRepositoryImpl(handler)).await(1, title, description) shouldBe true
+    /** The four overrides schema version 7 adds, as stored: author, artist, status and genres. */
+    private data class Details(val author: String?, val artist: String?, val status: String?, val genre: String?)
+
+    private fun SyncTestDevice.details(): Details = rows(
+        "SELECT author_override, artist_override, status_override, genre_override FROM mangas WHERE _id = 1",
+        4,
+    ).single().let { (author, artist, status, genre) -> Details(author, artist, status, genre) }
+
+    /** The source's own author, artist, status and genres under the overrides. */
+    private fun SyncTestDevice.sourceDetails(): Details = rows(
+        "SELECT author, artist, status, genre FROM mangas WHERE _id = 1",
+        4,
+    ).single().let { (author, artist, status, genre) -> Details(author, artist, status, genre) }
+
+    /**
+     * The dialog's Save. The seed has no author, artist or genres and status 0, so the defaults are
+     * what the dialog shows for it, From source for the status.
+     */
+    private fun SyncTestDevice.edit(
+        title: String,
+        description: String,
+        author: String = "",
+        artist: String = "",
+        status: Long? = null,
+        genres: List<String> = emptyList(),
+    ) = runBlocking {
+        val edit = SetMangaDetailsOverride.Edit(title, description, author, artist, status, genres)
+        SetMangaDetailsOverride(MangaRepositoryImpl(handler)).await(1, edit) shouldBe true
     }
+
+    /** A refresh that brings new source details, as the repository's `update` writes them. */
+    private fun SyncTestDevice.refreshDetails(author: String, artist: String, status: Long, genre: String) =
+        runBlocking {
+            val update =
+                MangaUpdate(id = 1, author = author, artist = artist, status = status, genre = genre.split(", "))
+            MangaRepositoryImpl(handler).update(update) shouldBe true
+        }
 
     private fun SyncTestDevice.reset() = runBlocking {
         SetMangaDetailsOverride(MangaRepositoryImpl(handler)).awaitReset(1) shouldBe true

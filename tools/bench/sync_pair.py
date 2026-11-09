@@ -88,14 +88,14 @@ syncs both hold every chapter of both, read wherever either read it, on the high
 bookmarks, and a further sync on each writes nothing. A restore's chapters have no change-log row
 (phase 5 unit SC2), so only B's full export can carry them to A.
 
-edit_details_race (phase 5 unit ED, R138 item 2) writes the row sync_edit_details_race. A edits the
-pair library's scenario entry's title and description as the Edit details dialog saves them; B,
-offline, refreshes the same entry from a fixture source whose title has changed (twice, the title
-first and then a new description, so B's version passes A's one edit). After A, B and A sync, both
-show A's edit with B's new source title and description under it; then A resets the edit, and after
-A and B sync both show the source's new title and description and no edit. Each details step
-reports the shown and stored texts with spaces as `_` (EDIT_* and SOURCE_* below are
-SyncPairEditDetails' texts).
+edit_details_race (phase 5 unit ED, R138 item 2; R165 item 4) writes the row sync_edit_details_race.
+A edits the pair library's scenario entry's title, description, author, artist, status and genres
+as the Edit details dialog saves them; B, offline, refreshes the same entry from a fixture source
+whose title has changed (twice, the title first and then a new description, so B's version passes
+A's one edit). After A, B and A sync, both show A's edit with B's new source title and description
+under it; then A resets the edit, and after A and B sync both show the source's details and no
+edit. Each details step reports the shown and
+stored texts with spaces as `_` (EDITED_* and the other texts below are SyncPairEditDetails').
 
 Adding a scenario: write its steps in SyncPairTest (a `when` branch each), add a Scenario to
 SCENARIOS below with its row, and add the row to rows.json. Each scenario starts from JOIN: both
@@ -266,20 +266,30 @@ def details_word(text: str | None) -> str:
 
 EDITED_TITLE, EDITED_DESCRIPTION = "Pair title edited on A", "Pair description edited on A"
 RENAMED_TITLE, NEW_DESCRIPTION = "Pair title renamed by the source", "Pair description from the source"
+EDITED_AUTHOR, EDITED_ARTIST = "Pair author edited on A", "Pair artist edited on A"
+# MangaStatus.COMPLETED's code, and the genres, which a step reports joined by commas.
+EDITED_STATUS, EDITED_GENRES = 2, ("Pair genre one", "Pair genre two")
 # The seed's title for the scenario entry (SyncPairLibrary.seed, entry 0) and its description, none.
+# It has no author, artist or genres and status 0, and the fixture source keeps them so.
 SEED_TITLE = "Saikou sync pair entry 0"
 
 
 def details(shown_title: str, shown_description: str | None, source_title: str, source_description: str | None,
-            edited: bool) -> dict[str, str]:
+            edited: bool, author: str | None = None, artist: str | None = None, status: int = 0,
+            genres: tuple[str, ...] | None = None) -> dict[str, str]:
     return {"shownTitle": details_word(shown_title), "shownDescription": details_word(shown_description),
             "sourceTitle": details_word(source_title), "sourceDescription": details_word(source_description),
+            "shownAuthor": details_word(author), "shownArtist": details_word(artist), "shownStatus": str(status),
+            "shownGenres": details_word(None if genres is None else ",".join(genres)),
             "edited": "true" if edited else "false"}
 
 
-DETAILS_EDITED_ON_A = details(EDITED_TITLE, EDITED_DESCRIPTION, SEED_TITLE, None, edited=True)
+# A's edit of the four details the title and description share a clock with (R165 item 4).
+EDITED_REST = {"author": EDITED_AUTHOR, "artist": EDITED_ARTIST, "status": EDITED_STATUS, "genres": EDITED_GENRES}
+DETAILS_EDITED_ON_A = details(EDITED_TITLE, EDITED_DESCRIPTION, SEED_TITLE, None, edited=True, **EDITED_REST)
 DETAILS_REFRESHED_ON_B = details(RENAMED_TITLE, NEW_DESCRIPTION, RENAMED_TITLE, NEW_DESCRIPTION, edited=False)
-DETAILS_AFTER_RACE = details(EDITED_TITLE, EDITED_DESCRIPTION, RENAMED_TITLE, NEW_DESCRIPTION, edited=True)
+DETAILS_AFTER_RACE = details(EDITED_TITLE, EDITED_DESCRIPTION, RENAMED_TITLE, NEW_DESCRIPTION, edited=True,
+                             **EDITED_REST)
 DETAILS_AFTER_RESET = DETAILS_REFRESHED_ON_B
 
 

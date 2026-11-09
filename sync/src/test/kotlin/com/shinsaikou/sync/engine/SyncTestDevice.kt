@@ -76,6 +76,7 @@ internal class SyncTestDevice(
             genreAdapter = StringListColumnAdapter,
             update_strategyAdapter = UpdateStrategyColumnAdapter,
             memoAdapter = MemoColumnAdapter,
+            genre_overrideAdapter = StringListColumnAdapter,
         ),
     )
 

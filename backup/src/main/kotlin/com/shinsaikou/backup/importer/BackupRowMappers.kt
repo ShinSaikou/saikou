@@ -58,6 +58,12 @@ internal fun mapManga(
     titleOverride: String?,
     descriptionOverride: String?,
     @Suppress("UNUSED_PARAMETER") detailsModifiedAt: Long?,
+    // Schema version 7's author, artist, status and genre overrides (R165 item 4): read so the merged
+    // row is the stored one. No file carries them yet, and a restore leaves them as they are.
+    authorOverride: String?,
+    artistOverride: String?,
+    statusOverride: Long?,
+    genreOverride: List<String>?,
 ): Manga = Manga(
     id = id,
     source = source,
@@ -88,6 +94,10 @@ internal fun mapManga(
     deletedAt = deletedAt,
     titleOverride = titleOverride,
     descriptionOverride = descriptionOverride,
+    authorOverride = authorOverride,
+    artistOverride = artistOverride,
+    statusOverride = statusOverride,
+    genreOverride = genreOverride,
 )
 
 @Suppress("LongParameterList")

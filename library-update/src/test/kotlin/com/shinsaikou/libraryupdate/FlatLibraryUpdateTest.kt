@@ -170,6 +170,20 @@ class FlatLibraryUpdateTest {
         source(1L).calls shouldBe 0
     }
 
+    /** The rule reads the status the entry screen shows, the owner's edit over the source's (R165 item 4). */
+    @Test
+    fun `the completed restriction reads the owner's status edit over the source's`() = runTest {
+        restrict(LibraryUpdateRestrictions.MANGA_NON_COMPLETED)
+        val completedByOwner = item(1L).let { it.copy(manga = it.manga.copy(statusOverride = COMPLETED)) }
+        val ongoingByOwner = item(2L, status = COMPLETED).let { it.copy(manga = it.manga.copy(statusOverride = ONGOING)) }
+        seed(completedByOwner, ongoingByOwner)
+
+        run(automatic = true)
+
+        source(1L).calls shouldBe 0
+        source(2L).calls shouldBe 1
+    }
+
     @Test
     fun `an entry with unread chapters is skipped when the unread restriction is on`() = runTest {
         restrict(LibraryUpdateRestrictions.MANGA_HAS_UNREAD)
@@ -949,6 +963,8 @@ class FlatLibraryUpdateTest {
 
     private companion object {
         val WINDOW = 0L to 1_000L
+        val COMPLETED = MangaStatus.COMPLETED.code.toLong()
+        val ONGOING = MangaStatus.ONGOING.code.toLong()
     }
 
     // endregion

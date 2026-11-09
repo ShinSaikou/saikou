@@ -6,7 +6,8 @@ import kotlinx.serialization.json.JsonObject
 
 /*
  * The rows of format 4 (Q4; format 1 plus the manga line's edit of phase 5 unit ED, the merged
- * group line of R163 and the chapter line's read and bookmark clocks of R165). Local ids never leave
+ * group line of R163, and R165's chapter read and bookmark clocks and manga author, artist, status and
+ * genre edits). Local ids never leave
  * the device (Q5): every row names what it is about by natural key, and a child collection travels
  * whole, keyed by its parent and decided by its own clock (Q6). Clocks are epoch milliseconds; a
  * null clock is a value the owner never set.
@@ -77,7 +78,9 @@ sealed class SyncRow {
  * A manga, live or soft-deleted. `version` decides the source values (title to memo); each owner
  * value is decided by the clock beside it, and the tombstone by `deletedAt` against `restoredAt`.
  * Format 2 adds the owner's title and description edit and its clock (phase 5 unit ED, R138 item
- * 2); a format 1 line has none of the three and reads as an entry never edited.
+ * 2); a format 1 line has none of the three and reads as an entry never edited. Format 4 adds the
+ * author, artist, status and genre edits under the same clock (R165 item 4); a line without them
+ * reads as those four never edited.
  */
 @Serializable
 @SerialName("manga")
@@ -109,6 +112,10 @@ data class MangaRow(
     val titleOverride: String? = null,
     val descriptionOverride: String? = null,
     val detailsModifiedAt: Long? = null,
+    val authorOverride: String? = null,
+    val artistOverride: String? = null,
+    val statusOverride: Long? = null,
+    val genreOverride: List<String>? = null,
 ) : SyncRow() {
     override val kind: RowKind get() = RowKind.MANGA
     override val parentManga: MangaKey get() = key

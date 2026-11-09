@@ -26,10 +26,11 @@ sealed interface UpcomingUiModel {
 private val UPCOMING_STATUSES = setOf(MangaStatus.ONGOING.code.toLong(), MangaStatus.PUBLISHING_FINISHED.code.toLong())
 
 /**
- * The entries with a release predicted from [startOfToday] on, soonest first: upstream's statuses,
- * less what no update would ever check, an entry only fetched once and one the update's category
- * settings leave out, and then upstream's own Filter by category ([filter]), where an entry in no
- * category counts as in the default one, as upstream's query has it. An entry never fetched has a
+ * The entries with a release predicted from [startOfToday] on, soonest first: upstream's statuses
+ * (the owner's edit over the source's, R165 item 4), less what no update would ever check, an entry
+ * only fetched once and one the update's category settings leave out, and then upstream's own Filter
+ * by category ([filter]), where an entry in no category counts as in the default one, as upstream's
+ * query has it. An entry never fetched has a
  * next update of 0 and so is not here.
  *
  * A merged title of [groups] is one entry: its main entry at the earliest date of its members that
@@ -47,7 +48,7 @@ fun upcomingEntries(
     val upcoming = library.filter { item ->
         val manga = item.manga
         manga.nextUpdate >= startOfToday &&
-            manga.status in UPCOMING_STATUSES &&
+            manga.displayStatus in UPCOMING_STATUSES &&
             manga.updateStrategy != UpdateStrategy.ONLY_FETCH_ONCE &&
             item.categories.none { it in excluded } &&
             (included.isEmpty() || item.categories.any { it in included }) &&

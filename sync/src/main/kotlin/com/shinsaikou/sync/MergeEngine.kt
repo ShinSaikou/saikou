@@ -72,13 +72,13 @@ class MergeEngine {
         val manualPosition = byClock(
             local.positionModifiedAt, remote.positionModifiedAt, local.manualPosition, remote.manualPosition,
         ) { a, b -> higherEncoding(a, b) { long(it) } }
-        // The owner's title and description edit, as the notes are (R138 item 2): one clock for the
-        // pair, so a reset of both travels as one value. A source refresh never moves this clock, so
-        // the edit beats any refresh, and the source values under it still follow the version.
+        // The owner's edit of the details, as the notes are (R138 item 2, R165 item 4): one clock for
+        // all six overrides, so a reset of every one travels as one value. A source refresh never
+        // moves this clock, so the edit beats any refresh, and the source values under it still
+        // follow the version.
         val details = byClock(
-            local.detailsModifiedAt, remote.detailsModifiedAt,
-            local.titleOverride to local.descriptionOverride, remote.titleOverride to remote.descriptionOverride,
-        ) { a, b -> higherEncoding(a, b) { nullableString(it.first).nullableString(it.second) } }
+            local.detailsModifiedAt, remote.detailsModifiedAt, local.detailsOverrides(), remote.detailsOverrides(),
+        ) { a, b -> higherEncoding(a, b) { it.encode(this) } }
 
         val merged = MangaRecord(
             key = local.key,
@@ -104,8 +104,12 @@ class MergeEngine {
             notesModifiedAt = maxClock(local.notesModifiedAt, remote.notesModifiedAt),
             manualPosition = manualPosition,
             positionModifiedAt = maxClock(local.positionModifiedAt, remote.positionModifiedAt),
-            titleOverride = details.first,
-            descriptionOverride = details.second,
+            titleOverride = details.title,
+            descriptionOverride = details.description,
+            authorOverride = details.author,
+            artistOverride = details.artist,
+            statusOverride = details.status,
+            genreOverride = details.genre,
             detailsModifiedAt = maxClock(local.detailsModifiedAt, remote.detailsModifiedAt),
             categories = mergeMangaCategories(
                 local.categories, remote.categories, local.categoriesModifiedAt, remote.categoriesModifiedAt,
@@ -366,6 +370,10 @@ class MergeEngine {
             Field("manualPosition") { it.manualPosition },
             Field("titleOverride") { it.titleOverride },
             Field("descriptionOverride") { it.descriptionOverride },
+            Field("authorOverride") { it.authorOverride },
+            Field("artistOverride") { it.artistOverride },
+            Field("statusOverride") { it.statusOverride },
+            Field("genreOverride") { it.genreOverride },
             Field("categories") { it.categories },
             Field("excludedScanlators") { it.excludedScanlators },
             Field("scanlatorPriority") { it.scanlatorPriority },
@@ -498,6 +506,25 @@ private data class MangaSourceValues(
 
 private fun MangaRecord.sourceValues() = MangaSourceValues(
     title, author, artist, description, genre, status, thumbnailUrl, updateStrategy, memo,
+)
+
+/** The six overrides, which one clock decides together; a tie keeps one side's six whole. */
+private data class MangaDetailsValues(
+    val title: String?,
+    val description: String?,
+    val author: String?,
+    val artist: String?,
+    val status: Long?,
+    val genre: List<String>?,
+) {
+    fun encode(writer: CanonicalWriter) {
+        writer.nullableString(title).nullableString(description).nullableString(author).nullableString(artist)
+            .nullableLong(status).stringList(genre)
+    }
+}
+
+private fun MangaRecord.detailsOverrides() = MangaDetailsValues(
+    titleOverride, descriptionOverride, authorOverride, artistOverride, statusOverride, genreOverride,
 )
 
 private data class ChapterSourceValues(

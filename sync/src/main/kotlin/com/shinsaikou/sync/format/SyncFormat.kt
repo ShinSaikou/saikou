@@ -24,7 +24,9 @@ object SyncFormat {
      * `readModifiedAt` and `bookmarkModifiedAt`, so an unread and a removed bookmark travel. A line
      * of format 1 to 3 has neither and reads them as 0, which merges as before: equal clocks take the
      * OR. A build older than format 4 stops at the header of a format 4 file in the same way, so it
-     * never writes a snapshot that drops these clocks.
+     * never writes a snapshot that drops these clocks. Format 4 also adds the manga line's
+     * `authorOverride`, `artistOverride`, `statusOverride` and `genreOverride` (R165 item 4), under
+     * `detailsModifiedAt`; a line without them reads as those details never edited.
      */
     const val CURRENT: Int = 4
 

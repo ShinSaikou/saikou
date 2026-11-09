@@ -22,7 +22,8 @@ private val mangaColumns = listOf(
     "update_strategy", "CAST(memo AS TEXT)", "viewer", "chapter_flags", "display_modified_at", "notes",
     "notes_modified_at", "manual_position", "position_modified_at", "categories_modified_at",
     "exclusions_modified_at", "priority_modified_at", "trackers_modified_at", "title_override",
-    "description_override", "details_modified_at",
+    "description_override", "author_override", "artist_override", "status_override", "genre_override",
+    "details_modified_at",
 )
 
 private val chapterColumns = listOf(
@@ -110,7 +111,14 @@ internal fun SyncTestDevice.buildLibrary() {
     exec("INSERT INTO history(chapter_id, last_read, time_read) VALUES (10, 7000, 60)")
     exec("INSERT INTO bookmark_notes(chapter_id, page_index, note, date_added) VALUES (10, 3, 'note', 8000)")
     exec("UPDATE mangas SET notes = 'owner notes', viewer = 2, manual_position = 4 WHERE _id = 1")
-    exec("UPDATE mangas SET title_override = 'Edited title', description_override = 'Edited text' WHERE _id = 1")
+    exec(
+        """
+        UPDATE mangas SET title_override = 'Edited title', description_override = 'Edited text',
+            author_override = 'Edited author', artist_override = 'Edited artist', status_override = 2,
+            genre_override = 'Comedy, Mystery'
+        WHERE _id = 1
+        """,
+    )
     exec("INSERT INTO merged_groups(main_source, main_url, modified_at) VALUES (${SyncTestDevice.SOURCE}, '/series/1', 9000)")
     exec(
         """

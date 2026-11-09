@@ -43,7 +43,7 @@ internal fun updateCadenceOf(
     chapterRead: Int,
     zone: TimeZone = TimeZone.currentSystemDefault(),
 ): UpdateCadence {
-    val completed = manga.status == MangaStatus.COMPLETED.code.toLong()
+    val completed = manga.displayStatus == MangaStatus.COMPLETED.code.toLong()
     val predicted = manga.fetchInterval != 0 && manga.nextUpdate != 0L
     val days = manga.fetchInterval.absoluteValue
     val next = manga.nextUpdate.toLocalDate(zone)

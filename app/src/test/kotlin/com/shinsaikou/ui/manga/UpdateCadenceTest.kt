@@ -120,6 +120,17 @@ class UpdateCadenceTest {
     }
 
     @Test
+    fun `the owner's status edit is the one the non completed rule reads (R165 item 4)`() {
+        val completed = MangaStatus.COMPLETED.code.toLong()
+        val ongoing = MangaStatus.ONGOING.code.toLong()
+        val rule = setOf(LibraryUpdateRestrictions.MANGA_NON_COMPLETED)
+
+        cadence(manga().copy(statusOverride = completed), restrictions = rule) shouldBe UpdateCadence.CompletedSkipped
+        cadence(manga(status = MangaStatus.COMPLETED).copy(statusOverride = ongoing), restrictions = rule) shouldBe
+            UpdateCadence.EveryUpdate
+    }
+
+    @Test
     fun `unread chapters are UnreadSkipped when the has unread rule is on`() {
         cadence(restrictions = setOf(LibraryUpdateRestrictions.MANGA_HAS_UNREAD), total = 10, read = 9) shouldBe
             UpdateCadence.UnreadSkipped

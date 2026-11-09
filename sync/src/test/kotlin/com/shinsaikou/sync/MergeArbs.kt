@@ -43,6 +43,7 @@ internal object MergeArbs {
     val text: Arb<String> = Arb.element("", "a", "b", "ab")
     val optionalText: Arb<String?> = Arb.element(null, "", "a", "b")
     val small: Arb<Long> = Arb.element(0L, 1L, 2L)
+    val optionalSmall: Arb<Long?> = Arb.element(null, 0L, 1L, 2L)
     val number: Arb<Double> = Arb.element(-0.0, 0.0, 1.0, 1.5, 2.0)
     val optionalNumber: Arb<Double?> = Arb.element(null, 0.0, 1.0)
 
@@ -121,6 +122,10 @@ internal object MergeArbs {
             positionModifiedAt = clock.bind(),
             titleOverride = optionalText.bind(),
             descriptionOverride = optionalText.bind(),
+            authorOverride = optionalText.bind(),
+            artistOverride = optionalText.bind(),
+            statusOverride = optionalSmall.bind(),
+            genreOverride = genre.bind(),
             detailsModifiedAt = clock.bind(),
             categories = keys.bind(),
             categoriesModifiedAt = clock.bind(),

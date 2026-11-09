@@ -11,7 +11,8 @@ import tachiyomi.domain.manga.model.MangaWithChapterCount
  * Modified: the column tuples gain `manualPosition` and `deletedAt` at the end, then schema version
  * 2's seven owner clocks and the restore clock, which the domain model does not carry (phase 3
  * unit C, R82), then schema version 3's title and description overrides, which the domain model
- * carries, and their clock, which it does not (phase 5 units SC4 and ED), and [mapLibraryManga]'s read and
+ * carries, and their clock, which it does not (phase 5 units SC4 and ED), then schema version 7's
+ * author, artist, status and genre overrides, which it carries (R165 item 4), and [mapLibraryManga]'s read and
  * bookmark counts are the summary table's integers where the view's `sum` gave a real, and
  * [mapMangaWithChapterCount] takes the simplified `M.*` plus `chapterCount` tuple of the
  * title-only duplicate query (05-data 3.3, decision E10).
@@ -58,6 +59,10 @@ object MangaMapper {
         titleOverride: String?,
         descriptionOverride: String?,
         detailsModifiedAt: Long?,
+        authorOverride: String?,
+        artistOverride: String?,
+        statusOverride: Long?,
+        genreOverride: List<String>?,
     ): Manga = Manga(
         id = id,
         source = source,
@@ -88,6 +93,10 @@ object MangaMapper {
         deletedAt = deletedAt,
         titleOverride = titleOverride,
         descriptionOverride = descriptionOverride,
+        authorOverride = authorOverride,
+        artistOverride = artistOverride,
+        statusOverride = statusOverride,
+        genreOverride = genreOverride,
     )
 
     fun mapLibraryManga(
@@ -130,6 +139,10 @@ object MangaMapper {
         titleOverride: String?,
         descriptionOverride: String?,
         detailsModifiedAt: Long?,
+        authorOverride: String?,
+        artistOverride: String?,
+        statusOverride: Long?,
+        genreOverride: List<String>?,
         totalCount: Long,
         readCount: Long,
         latestUpload: Long,
@@ -178,6 +191,10 @@ object MangaMapper {
             titleOverride,
             descriptionOverride,
             detailsModifiedAt,
+            authorOverride,
+            artistOverride,
+            statusOverride,
+            genreOverride,
         ),
         categories = categories.split(",").map { it.toLong() },
         totalChapters = totalCount,
@@ -228,6 +245,10 @@ object MangaMapper {
         titleOverride: String?,
         descriptionOverride: String?,
         detailsModifiedAt: Long?,
+        authorOverride: String?,
+        artistOverride: String?,
+        statusOverride: Long?,
+        genreOverride: List<String>?,
         chapterCount: Long,
     ): MangaWithChapterCount = MangaWithChapterCount(
         manga = mapManga(
@@ -270,6 +291,10 @@ object MangaMapper {
             titleOverride,
             descriptionOverride,
             detailsModifiedAt,
+            authorOverride,
+            artistOverride,
+            statusOverride,
+            genreOverride,
         ),
         chapterCount = chapterCount,
     )

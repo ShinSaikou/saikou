@@ -1,5 +1,6 @@
 package com.shinsaikou.data.repository
 
+import com.shinsaikou.domain.manga.model.MangaDetailsOverrides
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -35,7 +36,7 @@ class DisplayTitleRowsTest : RepositoryTest() {
 
     @Test
     fun `an edited entry's rows show the edit and keep the source's title beside it`() = runTest {
-        mangaRepository.setDetailsOverride(1, titleOverride = "My name for it", descriptionOverride = null)
+        mangaRepository.setDetailsOverride(1, MangaDetailsOverrides(title = "My name for it"))
 
         val history = historyRepository.getHistory("").first().single()
         history.displayTitle shouldBe "My name for it"
@@ -49,7 +50,7 @@ class DisplayTitleRowsTest : RepositoryTest() {
 
     @Test
     fun `history's search finds an edited entry by the shown title or the source's`() = runTest {
-        mangaRepository.setDetailsOverride(1, titleOverride = "My name for it", descriptionOverride = null)
+        mangaRepository.setDetailsOverride(1, MangaDetailsOverrides(title = "My name for it"))
 
         historyRepository.getHistory("name for").first().map { it.mangaId } shouldBe listOf(1L)
         historyRepository.getHistory("title 1").first().map { it.mangaId } shouldBe listOf(1L)

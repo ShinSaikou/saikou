@@ -1,0 +1,50 @@
+-- Fresh: schema version 6 to 7, the author, artist, status and genre overrides (R165 item 4), so the
+-- owner can edit every detail of an entry and the edits sync as the title and description do.
+-- Version 6 is the committed schemas/6.db; verifyMigrations applies this file to it and diffs the
+-- result against the .sq files, so every statement here mirrors one in mangas.sq, where the reasons
+-- are. Every existing row reads NULL in the four columns, no edit, so no value moves and the change
+-- log gains nothing. The two triggers that name the overrides are replaced, their new bodies naming
+-- the four columns as well: one details clock for all six, and a change of any one logs the entry.
+
+ALTER TABLE mangas ADD COLUMN author_override TEXT;
+ALTER TABLE mangas ADD COLUMN artist_override TEXT;
+ALTER TABLE mangas ADD COLUMN status_override INTEGER;
+ALTER TABLE mangas ADD COLUMN genre_override TEXT;
+
+DROP TRIGGER update_manga_version;
+DROP TRIGGER update_manga_details_modified_at;
+
+CREATE TRIGGER update_manga_version AFTER UPDATE ON mangas
+WHEN new.is_syncing = 0 AND (
+    new.url != old.url OR new.title != old.title OR
+    new.artist IS NOT old.artist OR new.author IS NOT old.author OR
+    new.description IS NOT old.description OR new.genre IS NOT old.genre OR
+    new.status != old.status OR new.thumbnail_url IS NOT old.thumbnail_url OR
+    new.favorite != old.favorite OR new.viewer != old.viewer OR
+    new.chapter_flags != old.chapter_flags OR new.update_strategy != old.update_strategy OR
+    new.notes != old.notes OR new.memo IS NOT old.memo OR
+    new.manual_position != old.manual_position OR new.deleted_at IS NOT old.deleted_at OR
+    new.title_override IS NOT old.title_override OR new.description_override IS NOT old.description_override OR
+    new.author_override IS NOT old.author_override OR new.artist_override IS NOT old.artist_override OR
+    new.status_override IS NOT old.status_override OR new.genre_override IS NOT old.genre_override
+)
+BEGIN
+    UPDATE mangas SET version = version + 1 WHERE _id = new._id;
+    INSERT INTO sync_change_log(entity_type, entity_id, change_type, changed_at)
+    SELECT 'manga', new._id, CASE WHEN new.deleted_at IS NULL THEN 'upsert' ELSE 'delete' END,
+           strftime('%s', 'now') * 1000
+    WHERE new.favorite = 1 OR old.favorite = 1;
+END;
+
+CREATE TRIGGER update_manga_details_modified_at AFTER UPDATE OF title_override, description_override,
+    author_override, artist_override, status_override, genre_override ON mangas
+WHEN new.is_syncing = 0 AND (
+    new.title_override IS NOT old.title_override OR new.description_override IS NOT old.description_override OR
+    new.author_override IS NOT old.author_override OR new.artist_override IS NOT old.artist_override OR
+    new.status_override IS NOT old.status_override OR new.genre_override IS NOT old.genre_override
+)
+BEGIN
+    UPDATE mangas
+    SET details_modified_at = max(strftime('%s', 'now') * 1000, coalesce(details_modified_at, 0) + 1)
+    WHERE _id = new._id;
+END;

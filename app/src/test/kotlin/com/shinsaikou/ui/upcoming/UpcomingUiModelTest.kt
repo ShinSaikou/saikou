@@ -75,6 +75,16 @@ class UpcomingUiModelTest {
     }
 
     @Test
+    fun `the owner's status edit decides, over the source's (R165 item 4)`() {
+        val completedByOwner = item(1L)
+            .let { it.copy(manga = it.manga.copy(statusOverride = MangaStatus.COMPLETED.code.toLong())) }
+        val ongoingByOwner = item(2L, status = MangaStatus.COMPLETED)
+            .let { it.copy(manga = it.manga.copy(statusOverride = MangaStatus.ONGOING.code.toLong())) }
+
+        entries(completedByOwner, ongoingByOwner) shouldContainExactly listOf(2L)
+    }
+
+    @Test
     fun `an entry due exactly at the start of today is listed`() {
         entries(item(1L, nextUpdate = startOfToday)) shouldContainExactly listOf(1L)
     }

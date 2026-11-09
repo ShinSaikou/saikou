@@ -190,5 +190,9 @@ class PageLoaderResolverTest {
         deletedAt = null,
         titleOverride = null,
         descriptionOverride = null,
+        authorOverride = null,
+        artistOverride = null,
+        statusOverride = null,
+        genreOverride = null,
     )
 }

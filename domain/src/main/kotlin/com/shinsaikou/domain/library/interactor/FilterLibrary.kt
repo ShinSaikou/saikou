@@ -54,7 +54,9 @@ class FilterLibrary(
         if (!applyFilter(filters.unread) { item.unreadCount > 0 }) return false
         if (!applyFilter(filters.started) { item.libraryManga.hasStarted }) return false
         if (!applyFilter(filters.bookmarked) { item.libraryManga.hasBookmarks }) return false
-        if (!applyFilter(filters.completed) { item.manga.status == MangaStatus.COMPLETED.code.toLong() }) return false
+        // The status the entry screen shows: the owner's edit over the source's (R165 item 4).
+        val completed = item.manga.displayStatus == MangaStatus.COMPLETED.code.toLong()
+        if (!applyFilter(filters.completed) { completed }) return false
         return applyFilter(filters.intervalCustom) { item.manga.fetchInterval < 0 }
     }
 }

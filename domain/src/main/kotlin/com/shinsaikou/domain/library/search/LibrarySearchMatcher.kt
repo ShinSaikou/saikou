@@ -20,8 +20,10 @@ import tachiyomi.domain.source.model.Source
 /**
  * Evaluates a parsed library query against one library row. Upstream parses the query but never
  * evaluates it in its domain module, so these rules are Saikou's own and are fixed by test. An
- * edited title or description (phase 5 unit ED) matches as well as the source's text under it: the
- * owner types what they see, and a search for the source's title still finds the entry.
+ * edited title, description, author or artist (phase 5 unit ED, R165 item 4) matches as well as the
+ * source's text under it: the owner types what they see, and a search for the source's title still
+ * finds the entry. Edited genres replace the source's list, as the entry screen shows them, so a
+ * genre the owner removed no longer matches.
  */
 @Inject
 class LibrarySearchMatcher {
@@ -47,10 +49,12 @@ class LibrarySearchMatcher {
             yield(manga.title)
             manga.titleOverride?.let { yield(it) }
             manga.author?.let { yield(it) }
+            manga.authorOverride?.let { yield(it) }
             manga.artist?.let { yield(it) }
+            manga.artistOverride?.let { yield(it) }
             manga.description?.let { yield(it) }
             manga.descriptionOverride?.let { yield(it) }
-            manga.genre?.forEach { yield(it) }
+            manga.displayGenre?.forEach { yield(it) }
             source?.name?.let { yield(it) }
             yield(manga.notes)
         }
@@ -63,12 +67,14 @@ class LibrarySearchMatcher {
         return when (node.field) {
             MangaField.TITLE -> manga.title.containsIgnoringCase(value) ||
                 manga.titleOverride?.containsIgnoringCase(value) == true
-            MangaField.AUTHOR -> manga.author?.containsIgnoringCase(value) == true
-            MangaField.ARTIST -> manga.artist?.containsIgnoringCase(value) == true
+            MangaField.AUTHOR -> manga.author?.containsIgnoringCase(value) == true ||
+                manga.authorOverride?.containsIgnoringCase(value) == true
+            MangaField.ARTIST -> manga.artist?.containsIgnoringCase(value) == true ||
+                manga.artistOverride?.containsIgnoringCase(value) == true
             MangaField.DESCRIPTION -> manga.description?.containsIgnoringCase(value) == true ||
                 manga.descriptionOverride?.containsIgnoringCase(value) == true
             MangaField.NOTES -> manga.notes.containsIgnoringCase(value)
-            MangaField.GENRE -> matchesGenre(manga.genre, value)
+            MangaField.GENRE -> matchesGenre(manga.displayGenre, value)
             MangaField.SOURCE -> source?.name?.containsIgnoringCase(value)
                 ?: manga.source.toString().containsIgnoringCase(value)
             MangaField.LANGUAGE -> source?.lang?.equals(value, ignoreCase = true)

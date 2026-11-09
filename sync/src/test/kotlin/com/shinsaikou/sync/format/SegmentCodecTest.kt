@@ -11,12 +11,14 @@ import io.kotest.matchers.comparables.shouldBeGreaterThan
 import io.kotest.matchers.comparables.shouldBeLessThan
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.types.shouldBeInstanceOf
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
 import org.junit.jupiter.api.Test
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -76,8 +78,8 @@ class SegmentCodecTest {
      * The fixture is format 4 as a text editor shows it once gunzipped. Encoding the sample rows must
      * give it byte for byte, so a renamed property or row is a failing test rather than a new wire,
      * and a build still writing an older format fails here: format 4 carries the chapter line's read
-     * and bookmark clocks (R165), which an older reader must refuse (R81 item 10) rather than read and
-     * drop.
+     * and bookmark clocks and the manga line's author, artist, status and genre edits (R165), which an
+     * older reader must refuse (R81 item 10) rather than read and drop.
      */
     @Test
     fun `format 4 encodes exactly as its fixture and the fixture decodes to the sample rows`() {
@@ -88,6 +90,9 @@ class SegmentCodecTest {
         fixture.lineSequence().first() shouldContain "\"format\":4,"
         fixture.lines().single { "\"entity\":\"chapter\"" in it } shouldContain
             "\"readModifiedAt\":1600000000019,\"bookmarkModifiedAt\":1600000000020}"
+        fixture.lines().single { "\"entity\":\"manga\"" in it } shouldContain
+            "\"authorOverride\":\"Edited author\",\"artistOverride\":\"Edited artist\",\"statusOverride\":5," +
+            "\"genreOverride\":[\"Comedy\",\"Mystery\"]}"
 
         val (readHeader, rows) = decode(gzip(fixture))
         readHeader shouldBe header
@@ -95,15 +100,38 @@ class SegmentCodecTest {
     }
 
     /**
+     * A format 4 manga line without the author, artist, status and genre edits (R165 item 4), as the
+     * format 4 build before them wrote it, reads those four as never edited; its title and
+     * description edits and their clock stay as written.
+     */
+    @Test
+    fun `a format 4 manga line without the four new edits reads them as none`() {
+        val fixture = fixtureText().lines().joinToString("\n") { line ->
+            if ("\"entity\":\"manga\"" !in line) return@joinToString line
+            val element = SyncFormat.json.parseToJsonElement(line).jsonObject
+            JsonObject(element - detailEditKeys).toString()
+        }
+        fixture shouldNotContain "authorOverride"
+
+        val (_, rows) = decode(gzip(fixture))
+
+        rows shouldContainExactly SampleRows.full.map(::withoutDetailEdits)
+        val read = rows.filterIsInstance<MangaRow>().single()
+        read.titleOverride shouldBe "Edited title"
+        read.detailsModifiedAt shouldBe 1_600_000_000_006
+    }
+
+    /**
      * Format 3's fixture, kept as it was written (Q4): its chapter line has no read or bookmark clock
-     * and reads both as 0, a clock never stamped, which merges as before.
+     * and reads both as 0, a clock never stamped, which merges as before; its manga line has none of
+     * format 4's author, artist, status and genre edits and reads them as never edited.
      */
     @Test
     fun `format 3's fixture still decodes, its chapter line with both clocks 0`() {
         val (readHeader, rows) = decode(gzip(fixtureText("format3.jsonl")))
 
         readHeader shouldBe segmentHeader(SampleRows.full).copy(format = 3)
-        rows shouldContainExactly SampleRows.full.map(::withoutChapterClocks)
+        rows shouldContainExactly SampleRows.full.map(::withoutChapterClocks).map(::withoutDetailEdits)
         rows.filterIsInstance<ChapterRow>().single().readModifiedAt shouldBe 0L
         rows.filterIsInstance<ChapterRow>().single().bookmarkModifiedAt shouldBe 0L
     }
@@ -283,8 +311,23 @@ class SegmentCodecTest {
 
     // endregion
 
-    /** The sample rows a format before 3 can carry, as such a file reads: no chapter clocks. */
+    /**
+     * The sample rows a format before 3 can carry, as such a file reads: no chapter clocks and no
+     * author, artist, status or genre edits.
+     */
     private val olderRows = SampleRows.full.filterNot { it is MergedGroupRow }.map(::withoutChapterClocks)
+        .map(::withoutDetailEdits)
+
+    /** The manga line's keys for the author, artist, status and genre edits (R165 item 4). */
+    private val detailEditKeys = setOf("authorOverride", "artistOverride", "statusOverride", "genreOverride")
+
+    /** [row] as a manga line without format 4's author, artist, status and genre edits reads. */
+    private fun withoutDetailEdits(row: SyncRow): SyncRow =
+        if (row is MangaRow) {
+            row.copy(authorOverride = null, artistOverride = null, statusOverride = null, genreOverride = null)
+        } else {
+            row
+        }
 
     /** [row] as a line of a format before 4 reads: a chapter's read and bookmark clocks at 0. */
     private fun withoutChapterClocks(row: SyncRow): SyncRow =

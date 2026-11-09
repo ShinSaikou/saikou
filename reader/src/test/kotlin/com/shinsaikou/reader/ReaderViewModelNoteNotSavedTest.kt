@@ -71,6 +71,7 @@ class ReaderViewModelNoteNotSavedTest {
                 genreAdapter = StringListColumnAdapter,
                 update_strategyAdapter = UpdateStrategyColumnAdapter,
                 memoAdapter = MemoColumnAdapter,
+                genre_overrideAdapter = StringListColumnAdapter,
             ),
         )
         notes = BookmarkNoteRepositoryImpl(AndroidDatabaseHandler(database, testDispatcher))

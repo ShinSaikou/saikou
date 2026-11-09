@@ -85,6 +85,32 @@ class LibrarySearchMatcherTest {
     }
 
     @Test
+    fun `an edited author or artist matches as well as the source's name under it`() {
+        val edited = manga.copy(authorOverride = "Yuki Ohara-Sensei", artistOverride = "Studio Kaze")
+
+        matches("sensei", manga = edited) shouldBe true
+        matches("author:sensei", manga = edited) shouldBe true
+        matches("author:ohara", manga = edited) shouldBe true
+        matches("kaze", manga = edited) shouldBe true
+        matches("artist:kaze", manga = edited) shouldBe true
+        matches("artist:nakano", manga = edited) shouldBe true
+        matches("author:kaze", manga = edited) shouldBe false
+        matches("kaze") shouldBe false
+    }
+
+    @Test
+    fun `edited genres replace the source's, so a removed genre no longer matches and an added one does`() {
+        val edited = manga.copy(genreOverride = listOf("Drama", "Mystery"))
+
+        matches("genre:mystery", manga = edited) shouldBe true
+        matches("mystery", manga = edited) shouldBe true
+        matches("genre:drama", manga = edited) shouldBe true
+        matches("genre:\"slice of life\"", manga = edited) shouldBe false
+        matches("slice of life", manga = edited) shouldBe false
+        matches("genre:mystery") shouldBe false
+    }
+
+    @Test
     fun `a null field never matches`() {
         matches("author:ohara", manga = manga.copy(author = null)) shouldBe false
     }

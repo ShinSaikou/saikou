@@ -1386,9 +1386,15 @@ class EditDetailsRaceTest(unittest.TestCase):
     def test_the_texts_are_the_pair_classes(self):
         details = (PAIR_TEST_SOURCE.parent / "SyncPairEditDetails.kt").read_text()
         for constant, text in (("EDITED_TITLE", sync_pair.EDITED_TITLE), ("EDITED_DESCRIPTION", sync_pair.EDITED_DESCRIPTION),
-                               ("RENAMED_TITLE", sync_pair.RENAMED_TITLE), ("NEW_DESCRIPTION", sync_pair.NEW_DESCRIPTION)):
+                               ("RENAMED_TITLE", sync_pair.RENAMED_TITLE), ("NEW_DESCRIPTION", sync_pair.NEW_DESCRIPTION),
+                               ("EDITED_AUTHOR", sync_pair.EDITED_AUTHOR), ("EDITED_ARTIST", sync_pair.EDITED_ARTIST)):
             with self.subTest(constant=constant):
                 self.assertIn(f'const val {constant} = "{text}"', details)
+        self.assertIn("val EDITED_STATUS = MangaStatus.COMPLETED.code.toLong()", details)
+        self.assertEqual(sync_pair.EDITED_STATUS, 2)
+        genres = ", ".join(f'"{genre}"' for genre in sync_pair.EDITED_GENRES)
+        self.assertIn(f"val EDITED_GENRES = listOf({genres})", details)
+        self.assertIn('"shownGenres" to word(manga.displayGenre?.joinToString(","))', details)
         self.assertIn('private fun word(text: String?): String = text?.replace(" ", "_") ?: "none"', details)
         library = (PAIR_TEST_SOURCE.parent / "SyncPairLibrary.kt").read_text()
         self.assertIn('title = "Saikou sync pair entry $index",', library)

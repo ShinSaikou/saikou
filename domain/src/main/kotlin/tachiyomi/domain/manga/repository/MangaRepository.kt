@@ -1,6 +1,7 @@
 // Vendored from upstream v0.20.4: domain/src/main/java/tachiyomi/domain/manga/repository/MangaRepository.kt (modified: yes)
 package tachiyomi.domain.manga.repository
 
+import com.shinsaikou.domain.manga.model.MangaDetailsOverrides
 import kotlinx.coroutines.flow.Flow
 import tachiyomi.domain.library.model.LibraryManga
 import tachiyomi.domain.manga.model.Manga
@@ -79,10 +80,10 @@ interface MangaRepository {
     suspend fun setManualPositions(orderedIds: List<Long>)
 
     /**
-     * Writes the owner's edit of the title and description whole, null for unedited (phase 5 unit
-     * ED); returns false on failure. Only `SetMangaDetailsOverride` calls it.
+     * Writes the owner's edits of every detail whole, null for unedited (phase 5 unit ED, R165 item
+     * 4); returns false on failure. Only `SetMangaDetailsOverride` calls it.
      */
-    suspend fun setDetailsOverride(mangaId: Long, titleOverride: String?, descriptionOverride: String?): Boolean
+    suspend fun setDetailsOverride(mangaId: Long, overrides: MangaDetailsOverrides): Boolean
 
     /** Soft delete: deleted_at = now, favorite = 0. Never a SQL DELETE for a manga that was ever favourite. */
     suspend fun softDelete(mangaId: Long, now: Long)

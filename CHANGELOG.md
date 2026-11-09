@@ -86,6 +86,11 @@ release may change behaviour.
   every syncing device needs this version before it can sync again. One exception remains with
   Merged entries on: if another device has a source in a merged title that this device lacks, and
   holds that source's copy of the chapter as read, the chapter can come back as read after a sync.
+- **Edit details** on an entry now edits its author, artist, status and genres as well as its title
+  and description, and the edits sync to your other devices. The entry screen, library search and
+  filters, Upcoming, the library update and the library list export show your edits; a value set
+  back to the source's, **From source** or an empty field shows the source's again. **Reset all**
+  asks first, then brings back every detail the source gives.
 
 ## 0.1.3 - 2026-11-07
 

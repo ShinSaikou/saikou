@@ -84,6 +84,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.shinsaikou.domain.library.search.genreSearchQuery
+import com.shinsaikou.domain.manga.interactor.SetMangaDetailsOverride
 import com.shinsaikou.domain.manga.model.ReaderOrientation
 import com.shinsaikou.domain.manga.model.ReadingMode
 import com.shinsaikou.i18n.R
@@ -612,7 +613,7 @@ private fun MangaDialogs(
     onConfirmDelete: () -> Unit,
     onOpenTrackingSettings: () -> Unit,
     onOpenInBrowser: (String) -> Unit,
-    onSaveDetails: (title: String, description: String) -> Unit,
+    onSaveDetails: (SetMangaDetailsOverride.Edit) -> Unit,
     onResetDetails: () -> Unit,
     onSaveNotes: (String) -> Unit,
     onSetUpdateInterval: (Int) -> Unit,
@@ -728,9 +729,7 @@ private fun MangaDialogs(
             onOpenInBrowser = onOpenInBrowser,
         )
         MangaDetailViewModel.Dialog.EditDetails -> EditDetailsDialog(
-            title = state.manga.displayTitle,
-            description = state.manga.displayDescription.orEmpty(),
-            edited = state.manga.titleOverride != null || state.manga.descriptionOverride != null,
+            manga = state.manga,
             onDismissRequest = onDismissRequest,
             onSave = onSaveDetails,
             onReset = onResetDetails,
@@ -1044,7 +1043,7 @@ private fun MangaHeader(
             onToggle = onToggleDescription,
         )
         manga.notes.takeIf { it.isNotBlank() }?.let { notes -> MangaNotesSnippet(notes, onNotesClick) }
-        val genres = manga.genre.orEmpty().map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        val genres = shownGenres(manga)
         if (genres.isNotEmpty()) {
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1106,9 +1105,10 @@ private fun MangaHeaderTop(
 }
 
 /**
- * The title, the author, the status and the source, aligned as [MangaHeaderTop] lays them out. A
- * merged title's source line names the main entry's source and how many more, and opens the Merged
- * sources sheet.
+ * The title, the author, the artist where it differs from the author, the status and the source,
+ * aligned as [MangaHeaderTop] lays them out; each detail the owner edited shows the edit (R165 item
+ * 4). A merged title's source line names the main entry's source and how many more, and opens the
+ * Merged sources sheet.
  */
 @Composable
 private fun MangaHeaderLines(
@@ -1135,7 +1135,8 @@ private fun MangaHeaderLines(
             style = MaterialTheme.typography.titleLarge,
             textAlign = textAlign,
         )
-        manga.author?.takeIf { it.isNotBlank() }?.let { author ->
+        val author = manga.displayAuthor?.takeIf { it.isNotBlank() }
+        author?.let {
             Text(
                 stringResource(R.string.manga_author_format, author),
                 modifier = Modifier.searchOrCopy(
@@ -1148,7 +1149,20 @@ private fun MangaHeaderLines(
                 textAlign = textAlign,
             )
         }
-        Text(statusLabel(manga), style = MaterialTheme.typography.bodySmall, textAlign = textAlign)
+        manga.displayArtist?.takeIf { it.isNotBlank() && it != author }?.let { artist ->
+            Text(
+                stringResource(R.string.manga_artist_format, artist),
+                modifier = Modifier.searchOrCopy(
+                    searchLabel = searchLabel,
+                    onSearch = { onGlobalSearch(artist) },
+                    copyLabel = copyLabel,
+                    onCopy = { context.copyToClipboard(artist, copied) },
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = textAlign,
+            )
+        }
+        Text(statusLabel(manga.displayStatus), style = MaterialTheme.typography.bodySmall, textAlign = textAlign)
         val merged = state.merged
         if (merged != null) {
             Text(
@@ -1305,9 +1319,17 @@ private fun TrackingButton(count: Int, onClick: () -> Unit) {
     }
 }
 
+/**
+ * The genres the header lists and the edit dialog starts from: the owner's edit over the source's,
+ * trimmed, without blanks and repeats.
+ */
+internal fun shownGenres(manga: Manga): List<String> =
+    manga.displayGenre.orEmpty().map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+
+/** The name of the `MangaStatus` code [status], as the header and the edit dialog show it. */
 @Composable
-private fun statusLabel(manga: Manga): String = stringResource(
-    when (MangaStatus.fromCode(manga.status.toInt())) {
+internal fun statusLabel(status: Long): String = stringResource(
+    when (MangaStatus.fromCode(status.toInt())) {
         MangaStatus.ONGOING -> R.string.manga_status_ongoing
         MangaStatus.COMPLETED -> R.string.manga_status_completed
         MangaStatus.LICENSED -> R.string.manga_status_licensed

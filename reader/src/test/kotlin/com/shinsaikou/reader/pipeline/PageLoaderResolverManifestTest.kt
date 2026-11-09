@@ -107,6 +107,7 @@ class PageLoaderResolverManifestTest {
                 genreAdapter = StringListColumnAdapter,
                 update_strategyAdapter = UpdateStrategyColumnAdapter,
                 memoAdapter = MemoColumnAdapter,
+                genre_overrideAdapter = StringListColumnAdapter,
             ),
         )
         val handler = AndroidDatabaseHandler(database, CoroutineDispatchers.Unconfined)

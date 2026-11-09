@@ -22,6 +22,18 @@ class LibraryCsvTest {
     }
 
     @Test
+    fun `an edited author or artist is the one written, the source's where there is no edit`() {
+        val entries = listOf(
+            entry("Old Harbor", author = "Source author", artist = "Source artist")
+                .copy(authorOverride = "Edited author"),
+            entry("Quiet Pier", author = "Pier author", artist = "Pier artist").copy(artistOverride = "Edited artist"),
+        )
+
+        libraryCsv(entries, LibraryCsvColumns()) shouldBe
+            "Old Harbor,Edited author,Source artist\r\nQuiet Pier,Pier author,Edited artist"
+    }
+
+    @Test
     fun `a field with a comma, a quote or a line break is quoted with its quotes doubled`() {
         val entries = listOf(entry("Lanterns, at \"Dusk\"", author = "Line\nbreak", artist = "Plain"))
 

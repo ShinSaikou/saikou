@@ -48,9 +48,16 @@ data class MangaRecord(
     val notesModifiedAt: Long?,
     val manualPosition: Long,
     val positionModifiedAt: Long?,
-    /** The owner's edit of the title and description, null while unedited, under one clock (R138 item 2). */
+    /**
+     * The owner's edits of the title, description, author, artist, status and genres, each null while
+     * unedited, under one clock (R138 item 2, R165 item 4).
+     */
     val titleOverride: String?,
     val descriptionOverride: String?,
+    val authorOverride: String?,
+    val artistOverride: String?,
+    val statusOverride: Long?,
+    val genreOverride: List<String>?,
     val detailsModifiedAt: Long?,
 
     /** The sync keys of the categories the manga is in; the system category never travels. */

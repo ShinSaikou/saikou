@@ -641,7 +641,8 @@ class FlatLibraryUpdate(
      * Why [item] is not refreshed, or null when it is. Only the fetch-once rule applies to a
      * manual run; [restrictions] is empty there. An entry whose details were never fetched is
      * always refreshed: the status and update strategy the rules read come with those details, and
-     * a rule that skipped it would also keep it from ever getting them. The entry screen's
+     * a rule that skipped it would also keep it from ever getting them. The status is the one the
+     * entry screen shows, the owner's edit over the source's (R165 item 4). The entry screen's
      * `updateCadenceOf` reads the same rules in the same order, to say why an entry waits.
      */
     private fun skipReason(
@@ -654,7 +655,8 @@ class FlatLibraryUpdate(
             !manga.initialized -> null
             manga.updateStrategy == UpdateStrategy.ONLY_FETCH_ONCE && item.totalChapters > 0 -> FETCH_ONCE
             LibraryUpdateRestrictions.MANGA_NON_COMPLETED in restrictions &&
-                manga.status == MangaStatus.COMPLETED.code.toLong() -> LibraryUpdateRestrictions.MANGA_NON_COMPLETED
+                manga.displayStatus == MangaStatus.COMPLETED.code.toLong() ->
+                LibraryUpdateRestrictions.MANGA_NON_COMPLETED
             LibraryUpdateRestrictions.MANGA_HAS_UNREAD in restrictions &&
                 item.unreadCount != 0L -> LibraryUpdateRestrictions.MANGA_HAS_UNREAD
             LibraryUpdateRestrictions.MANGA_NON_READ in restrictions &&

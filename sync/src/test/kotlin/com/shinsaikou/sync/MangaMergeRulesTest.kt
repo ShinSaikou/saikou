@@ -259,6 +259,60 @@ class MangaMergeRulesTest {
         (merged.titleOverride to merged.descriptionOverride) shouldBeIn listOf("a" to null, null to "b")
     }
 
+    // Row (R165 item 4): the author, artist, status and genre edits | details_modified_at | the same
+    // clock as the title and description, all six overrides together; tie: encoding order.
+
+    @Test
+    fun `an edit of the four new details beats a source refresh, whose values still take the version`() {
+        val edited = manga.copy(
+            authorOverride = "Edited author", artistOverride = "Edited artist", statusOverride = 2L,
+            genreOverride = listOf("Comedy"), detailsModifiedAt = 300L,
+        )
+        val refreshed = manga.copy(author = "New author", status = 6L, genre = listOf("Mystery"), version = 9L)
+
+        val merged = both(edited, refreshed)
+
+        merged.value.authorOverride shouldBe "Edited author"
+        merged.value.artistOverride shouldBe "Edited artist"
+        merged.value.statusOverride shouldBe 2L
+        merged.value.genreOverride shouldBe listOf("Comedy")
+        merged.value.author shouldBe "New author"
+        merged.value.status shouldBe 6L
+        merged.value.genre shouldBe listOf("Mystery")
+        merged.fieldsFromRemote shouldBe setOf("author", "status", "genre")
+    }
+
+    @Test
+    fun `the newer details clock takes all six overrides, a revert of the four included`() {
+        val older = manga.copy(
+            titleOverride = "Older", authorOverride = "Older author", artistOverride = "Older artist",
+            statusOverride = 5L, genreOverride = listOf("Older"), detailsModifiedAt = 100L,
+        )
+        val newer = manga.copy(titleOverride = "Newer", detailsModifiedAt = 200L)
+
+        val merged = both(older, newer)
+
+        merged.value.titleOverride shouldBe "Newer"
+        merged.value.authorOverride shouldBe null
+        merged.value.artistOverride shouldBe null
+        merged.value.statusOverride shouldBe null
+        merged.value.genreOverride shouldBe null
+        merged.value.detailsModifiedAt shouldBe 200L
+        merged.fieldsFromRemote shouldBe setOf(
+            "titleOverride", "authorOverride", "artistOverride", "statusOverride", "genreOverride",
+        )
+    }
+
+    @Test
+    fun `equal details clocks keep one side's six overrides whole whichever side is local`() {
+        val a = manga.copy(titleOverride = "a", authorOverride = "a's author", detailsModifiedAt = 10L)
+        val b = manga.copy(statusOverride = 3L, genreOverride = listOf("b"), detailsModifiedAt = 10L)
+
+        val merged = both(a, b).value
+        listOf(merged.titleOverride, merged.authorOverride, merged.statusOverride, merged.genreOverride) shouldBeIn
+            listOf(listOf("a", "a's author", null, null), listOf(null, null, 3L, listOf("b")))
+    }
+
     // Row: Manga categories | categories_modified_at | the whole set of Q7 keys from the newer clock;
     // tie: union.
 
