@@ -20,9 +20,11 @@ import tachiyomi.domain.track.model.Track
 /**
  * Domain rows to wire models. Every field upstream knows is written as upstream's creator writes it.
  * What the owner made in Saikou travels too (R165 item 3, amending contract 06 decision F10): the
- * title and description overrides in TachiyomiSY's `customTitle` and `customDescription`, and the
- * manual position, the scanlator priority, a chapter's volume and page notes and a category's parent
- * in Saikou's own fields (`BackupSaikou.kt`). Sync's bookkeeping stays out: `deleted_at`, versions,
+ * edited details in TachiyomiSY's custom info (`customTitle`, `customAuthor`, `customArtist`,
+ * `customDescription`, `customGenre` and `customStatus`), and the manual position, the scanlator
+ * priority, the status edit, a chapter's volume and page notes and a category's parent in Saikou's
+ * own fields (`BackupSaikou.kt`). Only the edits go in those fields; `title`, `author`, `artist`,
+ * `genre` and `status` stay the source's. Sync's bookkeeping stays out: `deleted_at`, versions,
  * latches and clocks.
  */
 internal fun Manga.toBackupManga(
@@ -52,10 +54,17 @@ internal fun Manga.toBackupManga(
     notes = notes,
     initialized = initialized,
     memo = MemoColumnAdapter.encode(memo),
+    // An edit to Unknown is 0, which TachiyomiSY reads as no edit; statusOverride carries it.
+    customStatus = statusOverride?.toInt() ?: 0,
     customTitle = titleOverride,
+    customArtist = artistOverride,
+    customAuthor = authorOverride,
     customDescription = descriptionOverride,
+    // Split from the column as genre is, by its column adapter.
+    customGenre = genreOverride,
     manualPosition = manualPosition,
     scanlatorPriority = scanlatorPriority.map { BackupScanlatorPriority(it.scanlator, it.priority) },
+    statusOverride = statusOverride?.toInt(),
 )
 
 internal fun Chapter.toBackupChapter(pageNotes: List<BookmarkNote> = emptyList()) = BackupChapter(

@@ -65,11 +65,12 @@ release may change behaviour.
   keep their pairing, and in a chapter that opens on such a page the run after it moves instead.
   Until a page has loaded its size is a guess, so a pair can change when a wide page turns up; the
   page on screen stays in view.
-- Backups now keep what you made in Saikou: merged entries, custom covers, edited titles and
-  descriptions, sub-categories, the library's manual order, page notes, each entry's scanlator
-  priority and chapter volumes. It all travels inside the same `.tachibk` file, which Mihon and
-  other readers still restore as before. A restore fills only what the device does not have yet, so
-  your own edits, covers and notes stay. Backups made before this version restore as they always did.
+- Backups now keep what you made in Saikou: merged entries, custom covers, edited details (title,
+  description, author, artist, status and genres), sub-categories, the library's manual order, page
+  notes, each entry's scanlator priority and chapter volumes. It all travels inside the same
+  `.tachibk` file, which Mihon and other readers still restore as before. A restore fills only what
+  the device does not have yet, so your own edits, covers and notes stay. Backups made before this
+  version restore as they always did.
 
 ### Changed
 

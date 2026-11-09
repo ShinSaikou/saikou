@@ -49,8 +49,8 @@ import java.io.File
  * `PreferenceValue`), which is why serial names are compared too.
  *
  * The one allowed difference is [EXTRA]: fields upstream does not have. Some are other readers' of
- * the format, which Saikou reads on import (R162 item 8, R163 item 4) and, for 800 and 804, writes
- * too; the rest are Saikou's own block (R165 item 3). They are left out of the comparison, and of the
+ * the format, which Saikou reads on import (R162 item 8, R163 item 4) and, for 602 and 800 to 805,
+ * writes too; the rest are Saikou's own block (R165 item 3). They are left out of the comparison, and of the
  * walk, so the messages only they reach are not expected in the file, and held by tests of their own
  * to numbers upstream does not use.
  *
@@ -171,9 +171,13 @@ class UpstreamBackupFieldsTest {
     fun `Saikou's own fields are in the block 5000 to 5099, and the other readers' are theirs`() {
         val theirs = mapOf(
             600 to "mergedEntries",
+            602 to "customStatus",
             604 to "mergeSettings",
             800 to "customTitle",
+            801 to "customArtist",
+            802 to "customAuthor",
             804 to "customDescription",
+            805 to "customGenre",
         )
         for ((message, fields) in EXTRA) {
             for ((number, name) in fields) {
@@ -373,7 +377,8 @@ class UpstreamBackupFieldsTest {
 
         /**
          * By message, the number and name of each field upstream does not have: TachiyomiSY's 600 and
-         * 604, read on import only, its 800 and 804, read and written, and Saikou's own block.
+         * 604, read on import only, its custom info (602 and 800 to 805), read and written, and
+         * Saikou's own block.
          */
         val EXTRA = mapOf(
             "Backup" to mapOf(
@@ -382,11 +387,16 @@ class UpstreamBackupFieldsTest {
             ),
             "BackupManga" to mapOf(
                 600 to "mergedEntries",
+                602 to "customStatus",
                 604 to "mergeSettings",
                 800 to "customTitle",
+                801 to "customArtist",
+                802 to "customAuthor",
                 804 to "customDescription",
+                805 to "customGenre",
                 5000 to "manualPosition",
                 5001 to "scanlatorPriority",
+                5002 to "statusOverride",
             ),
             "BackupChapter" to mapOf(
                 5000 to "volume",
@@ -401,6 +411,6 @@ class UpstreamBackupFieldsTest {
         val EXTRA_LISTS = setOf("mergedEntries", "mergedGroups", "customCovers", "scanlatorPriority", "pageNotes")
 
         /** The ones of [EXTRA] that default to 0; the rest default to null. */
-        val EXTRA_ZEROS = setOf("manualPosition")
+        val EXTRA_ZEROS = setOf("manualPosition", "customStatus")
     }
 }

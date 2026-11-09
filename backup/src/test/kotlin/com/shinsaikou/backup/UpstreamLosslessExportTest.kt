@@ -50,8 +50,8 @@ import java.io.File
 /**
  * Phase 3 unit R2, part 2: what Saikou exports is what upstream's creator would have written from the
  * same rows, field by field, so a restore into upstream keeps everything its own backup keeps. Since
- * R165 item 3 the file carries Saikou's own data too, in TachiyomiSY's 800 and 804 and in Saikou's own
- * block (`BackupSaikou.kt`); those fields are compared with their rows here as well.
+ * R165 item 3 the file carries Saikou's own data too, in TachiyomiSY's custom info (602 and 800 to 805)
+ * and in Saikou's own block (`BackupSaikou.kt`); those fields are compared with their rows here as well.
  *
  * A fixture library is written straight into the JVM database with SQL, setting every column the
  * file carries to a value other than the field's default (and every Saikou column too, so none of them
@@ -366,13 +366,29 @@ class UpstreamLosslessExportTest {
             { manga -> exclusionsOf(manga).map { it.text("scanlator")!! }.sorted() },
             { it.excludedScanlators.sorted() },
         ),
-        // TachiyomiSY's custom info, which Saikou writes from the overrides (R165 item 3).
+        // TachiyomiSY's custom info, which Saikou writes from the overrides (R165 item 3). Its status
+        // is 0 for no edit, so an edit to Unknown (0) reads as none there; 5002 below carries it.
+        Field(
+            "customStatus",
+            "mangas.status_override",
+            { (it["status_override"] as Long?)?.toInt() ?: 0 },
+            { it.customStatus },
+        ),
         Field("customTitle", "mangas.title_override", { it.text("title_override") }, { it.customTitle }),
+        Field("customArtist", "mangas.artist_override", { it.text("artist_override") }, { it.customArtist }),
+        Field("customAuthor", "mangas.author_override", { it.text("author_override") }, { it.customAuthor }),
         Field(
             "customDescription",
             "mangas.description_override",
             { it.text("description_override") },
             { it.customDescription },
+        ),
+        // Split as genre is; an empty list is no bytes, which reads back as no edit.
+        Field(
+            "customGenre",
+            "mangas.genre_override",
+            { row -> row.text("genre_override")?.takeIf { it.isNotEmpty() }?.split(", ") },
+            { it.customGenre },
         ),
         // Saikou's own block.
         Field("manualPosition", "mangas.manual_position", { it.long("manual_position") }, { it.manualPosition }),
@@ -381,6 +397,12 @@ class UpstreamLosslessExportTest {
             "scanlator_priority.manga_id",
             { manga -> prioritiesOf(manga).map { expect(priorityFields, it) } },
             { entry -> entry.scanlatorPriority.map { render(priorityFields, it) } },
+        ),
+        Field(
+            "statusOverride",
+            "mangas.status_override",
+            { (it["status_override"] as Long?)?.toInt() },
+            { it.statusOverride },
         ),
     )
 
@@ -668,10 +690,6 @@ class UpstreamLosslessExportTest {
             "mangas.trackers_modified_at" to "Saikou only: an owner clock of the sync merge (R82, R85)",
             "mangas.restored_at" to "Saikou only: the restore clock of the sync merge (R82)",
             "mangas.details_modified_at" to "Saikou only: the owner clock of the edits, a sync value (R138 item 2)",
-            "mangas.author_override" to "Saikou only: the owner's author edit; the file writes the source's (R165 item 4)",
-            "mangas.artist_override" to "Saikou only: the owner's artist edit; the file writes the source's (R165 item 4)",
-            "mangas.status_override" to "Saikou only: the owner's status edit; the file writes the source's (R165 item 4)",
-            "mangas.genre_override" to "Saikou only: the owner's genre edit; the file writes the source's (R165 item 4)",
             "chapters._id" to "this install's row id; a chapter travels by its url",
             "chapters.is_syncing" to "Upstream's column, not written by upstream's creator either",
             "chapters.deleted_at" to "Saikou only: a soft-deleted chapter is left out of the file",
@@ -752,6 +770,8 @@ private object LosslessFixture {
         }
         manga(env, READ_ELSEWHERE, SOURCE_B, "/fixture/lossless/2", favorite = false) {
             put("status", 1L)
+            // An edit to Unknown: 0 at 602, as no edit is, and 0 at 5002.
+            put("status_override", 0L)
             put("viewer", 0x11L)
             put("chapter_flags", 0x1L)
             put("memo", """{"m":true}""".encodeToByteArray())
@@ -961,7 +981,8 @@ private object LosslessFixture {
             // Every entry carries an edit, so a file that wrote it in place of the source's text fails.
             "title_override" to "Edited $id", "description_override" to "Edited description $id",
             "details_modified_at" to T + 15, "author_override" to "Edited author $id",
-            "artist_override" to "Edited artist $id", "status_override" to 2L, "genre_override" to "Edited genre $id",
+            "artist_override" to "Edited artist $id", "status_override" to 2L,
+            "genre_override" to "Edited genre $id, Second genre",
         ).apply(values),
     )
 

@@ -4,6 +4,7 @@ import app.cash.sqldelight.async.coroutines.awaitAsOne
 import com.shinsaikou.data.DatabaseHandler
 import com.shinsaikou.domain.chapter.model.BookmarkNote
 import com.shinsaikou.domain.chapter.model.ScanlatorPriority
+import com.shinsaikou.domain.manga.model.MangaDetailsOverrides
 import dev.zacsweers.metro.Inject
 import tachiyomi.data.Database
 import tachiyomi.data.MemoColumnAdapter
@@ -102,17 +103,20 @@ class BackupDatabaseWriter(private val handler: DatabaseHandler) {
     }
 
     /**
-     * Writes both overrides whole. Called under the row's latch, so neither the edit's clock nor the
+     * Writes all six overrides whole. Called under the row's latch, so neither the edit's clock nor the
      * version moves, as with every other value a restore writes.
      */
-    suspend fun setDetailsOverride(mangaId: Long, titleOverride: String?, descriptionOverride: String?) =
-        handler.await {
-            mangasQueries.setDetailsOverride(
-                titleOverride = titleOverride,
-                descriptionOverride = descriptionOverride,
-                mangaId = mangaId,
-            )
-        }
+    suspend fun setDetailsOverride(mangaId: Long, overrides: MangaDetailsOverrides) = handler.await {
+        mangasQueries.setDetailsOverride(
+            titleOverride = overrides.title,
+            descriptionOverride = overrides.description,
+            authorOverride = overrides.author,
+            artistOverride = overrides.artist,
+            statusOverride = overrides.status,
+            genreOverride = overrides.genre,
+            mangaId = mangaId,
+        )
+    }
 
     /**
      * Only `is_syncing` is bound; every other column coalesces to itself. Called right after an

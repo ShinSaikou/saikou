@@ -1,4 +1,4 @@
-// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/tachiyomi/data/backup/models/BackupManga.kt (modified: yes) adds the import-only fields 600 and 604, TachiyomiSY's 800 and 804, and Saikou's 5000 to 5001
+// Vendored from upstream v0.20.4: app/src/main/java/eu/kanade/tachiyomi/data/backup/models/BackupManga.kt (modified: yes) adds the import-only fields 600 and 604, TachiyomiSY's 602 and 800 to 805, and Saikou's 5000 to 5002
 package eu.kanade.tachiyomi.data.backup.models
 
 import com.shinsaikou.source.model.UpdateStrategy
@@ -11,14 +11,17 @@ import tachiyomi.domain.manga.model.Manga
 /**
  * Modified: the [UpdateStrategy] import is the contract enum in `:source-contract`. Its entry order
  * is upstream's (`ALWAYS_UPDATE, ONLY_FETCH_ONCE`), so the ordinal-encoded field stays wire-identical.
- * [customTitle] and [customDescription] are the edited title and description that TachiyomiSY,
- * TachiyomiJ2K and Komikku write at numbers upstream does not use (R162 item 8). The import reads them
- * into the entry's overrides, and since R165 item 3 the export writes the entry's overrides there,
- * so those readers restore the edits too. [mergedEntries] and [mergeSettings] are TachiyomiSY's merged
- * entries, on a synthetic entry whose [source] is `SourceIds.SY_MERGED`: the import makes a group of
- * them (R163 item 4), and the export never fills them, since Saikou's own groups travel in
- * `Backup.mergedGroups`. [manualPosition] and [scanlatorPriority] are Saikou's own (R165 item 3), in
- * the block listed in `BackupSaikou.kt`. No field upstream knows changes meaning.
+ * [customTitle], [customArtist], [customAuthor], [customDescription], [customGenre] and
+ * [customStatus] are the edited details that TachiyomiSY, TachiyomiJ2K and Komikku write at numbers
+ * upstream does not use (R162 item 8). The import reads them into the entry's overrides, and since
+ * R165 item 3 the export writes the entry's overrides there, so those readers restore the edits too.
+ * [customStatus] is 0 when there is no edit, which is also the code of Unknown, so Saikou writes its
+ * status edit at [statusOverride] as well, where an edit to Unknown and no edit differ.
+ * [mergedEntries] and [mergeSettings] are TachiyomiSY's merged entries, on a synthetic entry whose
+ * [source] is `SourceIds.SY_MERGED`: the import makes a group of them (R163 item 4), and the export
+ * never fills them, since Saikou's own groups travel in `Backup.mergedGroups`. [manualPosition],
+ * [scanlatorPriority] and [statusOverride] are Saikou's own (R165 item 3), in the block listed in
+ * `BackupSaikou.kt`. No field upstream knows changes meaning.
  */
 @Suppress("DEPRECATION")
 @Serializable
@@ -62,12 +65,17 @@ class BackupManga(
     // TachiyomiSY's merged entries: read on import only, never written.
     @ProtoNumber(600) var mergedEntries: List<BackupMergedEntry> = emptyList(),
     @ProtoNumber(604) var mergeSettings: BackupMergeSettings? = null,
-    // TachiyomiSY's custom info, read and written: the entry's title and description overrides.
+    // TachiyomiSY's custom info, read and written: the entry's overrides. 0 is no status edit.
+    @ProtoNumber(602) var customStatus: Int = 0,
     @ProtoNumber(800) var customTitle: String? = null,
+    @ProtoNumber(801) var customArtist: String? = null,
+    @ProtoNumber(802) var customAuthor: String? = null,
     @ProtoNumber(804) var customDescription: String? = null,
+    @ProtoNumber(805) var customGenre: List<String>? = null,
     // Saikou's own block starts here.
     @ProtoNumber(5000) var manualPosition: Long = 0,
     @ProtoNumber(5001) var scanlatorPriority: List<BackupScanlatorPriority> = emptyList(),
+    @ProtoNumber(5002) var statusOverride: Int? = null,
 ) {
     fun getMangaImpl(): Manga {
         return Manga.create().copy(

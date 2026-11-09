@@ -329,6 +329,10 @@ class BackupImporterMergeTest {
                 mangasQueries.setDetailsOverride(
                     titleOverride = "Edited title",
                     descriptionOverride = "Edited text",
+                    authorOverride = null,
+                    artistOverride = null,
+                    statusOverride = null,
+                    genreOverride = null,
                     mangaId = 1L,
                 )
             }

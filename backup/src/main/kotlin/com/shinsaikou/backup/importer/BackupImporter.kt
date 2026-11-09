@@ -10,6 +10,8 @@ import com.shinsaikou.domain.extension.ExtensionStoreDuplicates
 import com.shinsaikou.domain.extension.SourceExtensionInstaller
 import com.shinsaikou.domain.extension.repository.ExtensionStoreRepository
 import com.shinsaikou.domain.manga.interactor.UpdateManga
+import com.shinsaikou.domain.manga.model.MangaDetailsOverrides
+import com.shinsaikou.domain.manga.model.detailsOverrides
 import com.shinsaikou.domain.merged.interactor.CarryMergedTracks
 import com.shinsaikou.domain.merged.interactor.ReconcileMergedRead
 import com.shinsaikou.domain.merged.repository.MergedGroupRepository
@@ -78,8 +80,8 @@ import kotlin.time.Clock
  *
  * Saikou's own data in the file (R165 item 3, `BackupSaikou.kt`) fills only what the device does not
  * hold: a manual position, a chapter's volume, a page's note, an entry's scanlator priority, a
- * custom cover, a created category's parent, as the title and description overrides do (R162 item
- * 12). A file without it, from upstream, a fork or an older Saikou, restores as it always did.
+ * custom cover, a created category's parent, as the edited details do (R162 item 12). A file
+ * without it, from upstream, a fork or an older Saikou, restores as it always did.
  */
 @Inject
 class BackupImporter(
@@ -942,17 +944,24 @@ class BackupImporter(
     }
 
     /**
-     * The edited title and description at fields 800 and 804, which TachiyomiSY and its kin write
-     * and, since R165 item 3, Saikou too, by [mergeOverride]: one path for every file. The row's
-     * latch is up on both paths, so neither the edit's clock nor the version moves, as with the
-     * notes a restore writes.
+     * The edited details in TachiyomiSY's custom info (800 the title, 801 the artist, 802 the author,
+     * 804 the description, 805 the genres, 602 the status), which it and its kin write and, since
+     * R165 item 3, Saikou too, with Saikou's status edit at 5002: one path for every file. Each edit
+     * fills only a detail the entry has not edited ([mergeOverride], [mergeGenreOverride],
+     * [fileStatusOverride]). The row's latch is up on both paths, so neither the edit's clock nor the
+     * version moves, as with the notes a restore writes.
      */
     private suspend fun restoreDetailsOverride(entry: BackupManga, dbManga: Manga?, mangaId: Long) {
-        val title = mergeOverride(dbManga?.titleOverride, entry.customTitle)
-        val description = mergeOverride(dbManga?.descriptionOverride, entry.customDescription)
-        if (title != dbManga?.titleOverride || description != dbManga?.descriptionOverride) {
-            writer.setDetailsOverride(mangaId, title, description)
-        }
+        val stored = dbManga?.detailsOverrides ?: MangaDetailsOverrides.NONE
+        val merged = MangaDetailsOverrides(
+            title = mergeOverride(stored.title, entry.customTitle),
+            description = mergeOverride(stored.description, entry.customDescription),
+            author = mergeOverride(stored.author, entry.customAuthor),
+            artist = mergeOverride(stored.artist, entry.customArtist),
+            status = stored.status ?: fileStatusOverride(entry),
+            genre = mergeGenreOverride(stored.genre, entry.customGenre),
+        )
+        if (merged != stored) writer.setDetailsOverride(mangaId, merged)
     }
 
     /**
@@ -1481,6 +1490,21 @@ class BackupImporter(
          */
         internal fun mergeOverride(stored: String?, fromFile: String?): String? =
             stored ?: fromFile?.takeUnless { it.isBlank() }
+
+        /**
+         * [mergeOverride] for the genres. The file's list is read as the Edit details dialog saves
+         * one (each trimmed, blanks and repeats dropped), so the column holds what the dialog would
+         * have written; a list that leaves none is no edit.
+         */
+        internal fun mergeGenreOverride(stored: List<String>?, fromFile: List<String>?): List<String>? =
+            stored ?: fromFile.orEmpty().map { it.trim() }.filter { it.isNotEmpty() }.distinct().ifEmpty { null }
+
+        /**
+         * The status edit a file carries: Saikou's 5002 when present, an edit to Unknown included;
+         * otherwise TachiyomiSY's 602, where 0 is no edit.
+         */
+        internal fun fileStatusOverride(entry: BackupManga): Long? =
+            (entry.statusOverride ?: entry.customStatus.takeUnless { it == 0 })?.toLong()
 
         /** True when the two rows differ only in fields a restore is not allowed to move. */
         internal fun isUnchanged(backup: Chapter, db: Chapter): Boolean =

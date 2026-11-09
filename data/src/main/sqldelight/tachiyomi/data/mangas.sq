@@ -9,8 +9,8 @@
 -- one local write of them, and the sync apply's two statements carry them. getDuplicateLibraryManga
 -- takes upstream's later guard against a blank title (triage E105). Schema version 7 (R165 item 4)
 -- adds the author, artist, status and genre overrides under the same clock; setEditedDetails is the
--- owner's one local write of all six, and setDetailsOverride stays the restore's write of the two
--- another reader's backup can carry.
+-- owner's one local write of all six, and setDetailsOverride is the restore's write of all six, which
+-- a backup carries (R167).
 
 import com.shinsaikou.source.model.UpdateStrategy;
 import kotlin.Boolean;
@@ -406,11 +406,13 @@ SET title_override = :titleOverride, description_override = :descriptionOverride
     status_override = :statusOverride, genre_override = :genreOverride
 WHERE _id = :mangaId;
 
--- A restore's write of the title and description another reader's backup carries (R162 item 12),
--- both written whole under the row's latch; the other overrides stay as they are.
+-- A restore's write of the edited details a backup carries, Saikou's or another reader's (R162 item
+-- 12, R167), all six written whole under the row's latch, so no clock or version moves.
 setDetailsOverride:
 UPDATE mangas
-SET title_override = :titleOverride, description_override = :descriptionOverride
+SET title_override = :titleOverride, description_override = :descriptionOverride,
+    author_override = :authorOverride, artist_override = :artistOverride,
+    status_override = :statusOverride, genre_override = :genreOverride
 WHERE _id = :mangaId;
 
 rewriteSourceId:

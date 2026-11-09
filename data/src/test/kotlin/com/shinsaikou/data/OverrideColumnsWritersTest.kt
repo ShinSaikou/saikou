@@ -20,10 +20,10 @@ import kotlin.io.path.readText
  * `setEditedDetails`, which only the repository runs, through `MangaRepository.setDetailsOverride`,
  * which only `SetMangaDetailsOverride` calls, so no screen writes them another way; the sync apply's
  * two statements write what a merge returned, under the row's latch, and `SyncStoreImpl` reads them
- * for the wire. A restore runs the one other statement, `setDetailsOverride`, which writes the title
- * and description alone (R162 item 12): it fills an override the entry lacks from another reader's
- * backup fields 800 and 804, through `BackupDatabaseWriter` under the row's latch, so no clock or
- * version moves. SQL reaches the database only through the `.sq` files' named statements or a raw
+ * for the wire. A restore runs the one other statement, `setDetailsOverride`, which writes all six
+ * (R162 item 12, R167): it fills an override the entry lacks from the edits a backup carries, Saikou's
+ * or another reader's, through `BackupDatabaseWriter` under the row's latch, so no clock or version
+ * moves. SQL reaches the database only through the `.sq` files' named statements or a raw
  * string in Kotlin, so the statements and the Kotlin main sources that name the columns are listed,
  * as are the schema's own objects.
  */

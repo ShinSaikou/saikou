@@ -33,8 +33,8 @@ import tachiyomi.core.common.extensions.JsonObjectEmptyBytes
 import java.io.File
 
 /**
- * R165 item 3: what the owner made in Saikou travels inside the `.tachibk`, in TachiyomiSY's 800 and
- * 804 and in Saikou's own block, and a file without it restores as it always did. The library is
+ * R165 item 3: what the owner made in Saikou travels inside the `.tachibk`, in TachiyomiSY's custom
+ * info (602 and 800 to 805) and in Saikou's own block, and a file without it restores as it always did. The library is
  * written with SQL, exported through the real exporter and restored through the real importer into
  * a second database. [UpstreamBackup] is a copy of upstream v0.20.4's models with nothing added, so
  * what upstream reads of a Saikou file is checked on the wire.
@@ -67,6 +67,14 @@ class SaikouBackupDataTest {
             row(env, ONE)["description_override"] shouldBe "Edited text"
             row(env, ONE)["title"] shouldBe "Title 21"
             row(env, TWO)["title_override"].shouldBeNull()
+            // The other four edits, an edit to Unknown (0) among them, in the column's joined form.
+            row(env, ONE)["author_override"] shouldBe "Edited author"
+            row(env, ONE)["artist_override"] shouldBe "Edited artist"
+            row(env, ONE)["status_override"] shouldBe 0L
+            row(env, ONE)["genre_override"] shouldBe "Edited genre, Second genre"
+            row(env, ONE)["author"].shouldBeNull()
+            row(env, THREE)["status_override"] shouldBe 4L
+            for (column in DETAIL_EDITS) row(env, TWO)[column].shouldBeNull()
 
             // A chapter's volume, its page notes with their dates, and the scanlator priority.
             chapter(env, "$ONE/c1")["volume"] shouldBe 2.0
@@ -136,7 +144,14 @@ class SaikouBackupDataTest {
             saikou.mergedGroups.size shouldBe 1
             saikou.customCovers.size shouldBe 1
             saikou.backupManga.single { it.url == ONE }.customTitle shouldBe "Edited one"
+            saikou.backupManga.single { it.url == ONE }.customGenre shouldBe listOf("Edited genre", "Second genre")
+            saikou.backupManga.single { it.url == ONE }.statusOverride shouldBe 0
+            saikou.backupManga.single { it.url == THREE }.customStatus shouldBe 4
             upstream.backupManga.single { it.url == ONE }.title shouldBe "Title 21"
+            // Upstream's own fields keep the source's details under the edits.
+            upstream.backupManga.single { it.url == ONE }.author.shouldBeNull()
+            upstream.backupManga.single { it.url == ONE }.genre.shouldBeEmpty()
+            upstream.backupManga.single { it.url == THREE }.status shouldBe 0
 
             val asUpstream = ProtoBuf.encodeToByteArray(UpstreamBackup.serializer(), upstream)
             val saikouLessItsOwn = ProtoBuf.encodeToByteArray(Backup.serializer(), saikou.withoutSaikouData())
@@ -159,8 +174,7 @@ class SaikouBackupDataTest {
             env.rows("mangas").forEach { manga ->
                 withClue(manga["url"]) {
                     manga["manual_position"] shouldBe 0L
-                    manga["title_override"].shouldBeNull()
-                    manga["description_override"].shouldBeNull()
+                    for (column in DETAIL_EDITS) manga[column].shouldBeNull()
                 }
             }
             env.rows("chapters").forEach { it["volume"].shouldBeNull() }
@@ -176,11 +190,11 @@ class SaikouBackupDataTest {
     }
 
     /**
-     * Saikou writes the overrides at 800 and 804, which the TachiyomiSY path reads: one path, so a
-     * Saikou file's edit is filled once, and a second restore of it writes nothing.
+     * Saikou writes the overrides in TachiyomiSY's custom info, which the TachiyomiSY path reads: one
+     * path, so a Saikou file's edit is filled once, and a second restore of it writes nothing.
      */
     @Test
-    fun `Saikou's own 800 and 804 go through the TachiyomiSY path once`() = runTest {
+    fun `Saikou's own custom info goes through the TachiyomiSY path once`() = runTest {
         val bytes = exportLibrary()
         BackupTestEnvironment(File(tempDir, "to")).use { env ->
             restore(env, bytes)
@@ -188,8 +202,8 @@ class SaikouBackupDataTest {
 
             val report = restore(env, bytes)
 
-            env.rows("mangas").map { it["title_override"] to it["description_override"] } shouldBe
-                first.map { it["title_override"] to it["description_override"] }
+            env.rows("mangas").map { manga -> DETAIL_EDITS.map { manga[it] } } shouldBe
+                first.map { manga -> DETAIL_EDITS.map { manga[it] } }
             env.rows("mangas").map { it["version"] } shouldBe first.map { it["version"] }
             env.rows("bookmark_notes").size shouldBe 1
             priorities(env, ONE) shouldContainExactly listOf("Group A" to 0L, "Group B" to 1L)
@@ -205,7 +219,10 @@ class SaikouBackupDataTest {
         val bytes = exportLibrary(extraNote = true)
         BackupTestEnvironment(File(tempDir, "to")).use { env ->
             env.insertCategory(11, "Child", sort = 0, parent = null)
-            env.insertManga(31, SOURCE_A, ONE, manualPosition = 7, titleOverride = "Mine", descriptionOverride = "")
+            env.insertManga(
+                31, SOURCE_A, ONE, manualPosition = 7, titleOverride = "Mine", descriptionOverride = "",
+                authorOverride = "My author", statusOverride = 3,
+            )
             env.insertChapter(41, 31, "$ONE/c1", volume = 5.0)
             env.insertNote(41, page = 3, note = "My note", dateAdded = T)
             env.insert("scanlator_priority", mapOf("manga_id" to 31L, "scanlator" to "Group C", "priority" to 0L))
@@ -219,6 +236,8 @@ class SaikouBackupDataTest {
             row(env, ONE)["manual_position"] shouldBe 7L
             row(env, ONE)["title_override"] shouldBe "Mine"
             row(env, ONE)["description_override"] shouldBe ""
+            row(env, ONE)["author_override"] shouldBe "My author"
+            row(env, ONE)["status_override"] shouldBe 3L
             chapter(env, "$ONE/c1")["volume"] shouldBe 5.0
             priorities(env, ONE) shouldContainExactly listOf("Group C" to 0L)
             env.customCovers.files.getValue(31L).toList() shouldBe listOf<Byte>(9, 9)
@@ -226,6 +245,8 @@ class SaikouBackupDataTest {
             category(env, "Child")["parent_id"].shouldBeNull()
             // Filled: what was empty. The page with a note keeps it, the other page gets the file's.
             row(env, TWO)["manual_position"] shouldBe 1L
+            row(env, ONE)["artist_override"] shouldBe "Edited artist"
+            row(env, ONE)["genre_override"] shouldBe "Edited genre, Second genre"
             notes(env, "$ONE/c1") shouldContainExactly listOf(3L to "My note", 5L to "Another note")
             report.customCoversRestored shouldBe 0
         }
@@ -293,9 +314,11 @@ class SaikouBackupDataTest {
         env.insertCategory(12, "Child", sort = 1, parent = 11)
         env.insertManga(
             21, SOURCE_A, ONE, manualPosition = 3, titleOverride = "Edited one", descriptionOverride = "Edited text",
+            authorOverride = "Edited author", artistOverride = "Edited artist", statusOverride = 0,
+            genreOverride = "Edited genre, Second genre",
         )
         env.insertManga(22, SOURCE_B, TWO, manualPosition = 1)
-        env.insertManga(23, SOURCE_A, THREE, manualPosition = 2)
+        env.insertManga(23, SOURCE_A, THREE, manualPosition = 2, statusOverride = 4)
         env.insertChapter(41, 21, "$ONE/c1", volume = 2.0)
         env.insertChapter(42, 22, "$TWO/c1", volume = null)
         env.insertChapter(43, 23, "$THREE/c1", volume = 1.0)
@@ -334,16 +357,21 @@ class SaikouBackupDataTest {
     private fun gunzip(bytes: ByteArray): ByteArray =
         GzipSource(Buffer().write(bytes)).buffer().use { it.readByteArray() }
 
-    /** The file as upstream's models would encode it: Saikou's own fields, and 800 and 804, at their defaults. */
+    /** The file as upstream's models would encode it: Saikou's own fields, and SY's custom info, at their defaults. */
     private fun Backup.withoutSaikouData(): Backup = apply {
         mergedGroups = emptyList()
         customCovers = emptyList()
         backupCategories.forEach { it.parentOrder = null }
         backupManga.forEach { manga ->
+            manga.customStatus = 0
             manga.customTitle = null
+            manga.customArtist = null
+            manga.customAuthor = null
             manga.customDescription = null
+            manga.customGenre = null
             manga.manualPosition = 0
             manga.scanlatorPriority = emptyList()
+            manga.statusOverride = null
             manga.chapters.forEach { chapter ->
                 chapter.volume = null
                 chapter.pageNotes = emptyList()
@@ -358,6 +386,12 @@ class SaikouBackupDataTest {
         const val THREE = "/saikou/3"
         const val NINE = "/saikou/9"
         val COVER = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 1, 2, 3)
+
+        /** The six override columns. */
+        val DETAIL_EDITS = listOf(
+            "title_override", "description_override", "author_override", "artist_override", "status_override",
+            "genre_override",
+        )
 
         fun BackupTestEnvironment.insertCategory(id: Long, name: String, sort: Long, parent: Long?) = insert(
             "categories",
@@ -379,6 +413,10 @@ class SaikouBackupDataTest {
             manualPosition: Long = 0,
             titleOverride: String? = null,
             descriptionOverride: String? = null,
+            authorOverride: String? = null,
+            artistOverride: String? = null,
+            statusOverride: Long? = null,
+            genreOverride: String? = null,
         ) = insert(
             "mangas",
             mapOf(
@@ -386,7 +424,9 @@ class SaikouBackupDataTest {
                 "favorite" to true, "initialized" to 1L, "viewer" to 0L, "chapter_flags" to 0L,
                 "cover_last_modified" to 0L, "date_added" to T + id, "memo" to "{}".encodeToByteArray(),
                 "manual_position" to manualPosition, "title_override" to titleOverride,
-                "description_override" to descriptionOverride,
+                "description_override" to descriptionOverride, "author_override" to authorOverride,
+                "artist_override" to artistOverride, "status_override" to statusOverride,
+                "genre_override" to genreOverride,
             ),
         )
 

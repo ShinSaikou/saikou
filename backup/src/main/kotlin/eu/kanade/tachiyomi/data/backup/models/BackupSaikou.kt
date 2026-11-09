@@ -17,13 +17,16 @@ import kotlinx.serialization.protobuf.ProtoNumber
  * 19999. Numbers taken so far:
  *
  * - `Backup`: 5000 [BackupMergedGroup] list, 5001 [BackupCustomCover] list.
- * - `BackupManga`: 5000 manual position, 5001 [BackupScanlatorPriority] list.
+ * - `BackupManga`: 5000 manual position, 5001 [BackupScanlatorPriority] list, 5002 the status edit
+ *   (null when there is none, so an edit to Unknown, code 0, travels too).
  * - `BackupChapter`: 5000 volume, 5001 [BackupPageNote] list.
  * - `BackupCategory`: 5000 the parent's order.
  *
- * The title and description overrides are not here: they go in TachiyomiSY's own fields, 800 and 804
- * of `BackupManga`, so that SY and Komikku restore them too. The messages below are Saikou's alone, so
- * their own fields start at 1.
+ * The other overrides are not here: they go in TachiyomiSY's own fields of `BackupManga`, 800 the
+ * title, 801 the artist, 802 the author, 804 the description, 805 the genres and 602 the status, so
+ * that SY and Komikku restore them too. 602 cannot tell an edit to Unknown from no edit (both are 0),
+ * which is why the status is in 5002 as well. The messages below are Saikou's alone, so their own
+ * fields start at 1.
  *
  * Nothing here is sync bookkeeping (versions, latches, tombstones, clocks, the change log) or a
  * device's downloads.
