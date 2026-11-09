@@ -112,7 +112,7 @@ Next to other readers:
 | Reads Tachiyomi extensions | Yes, lib 1.4 and 1.6 | Yes | Yes | Yes | Yes, one of several engines | No, its own sources |
 | Sync between devices | Built in: Google Drive or WebDAV | No | Google Drive, WebDAV or a SyncYomi server | Google Drive or a SyncYomi server | A self-hosted sync server | iCloud |
 | License | Apache-2.0 | Apache-2.0 | Apache-2.0 | Apache-2.0 | Apache-2.0 | GPL-3.0 |
-| Latest release | 0.1.3, 2026-11-07 | v0.21.3, 2026-10-25 | v1.14.1, 2026-07-17 | 1.13.2, 2026-07-13 | v0.9.9, 2026-10-12 | v0.9-4, 2026-10-16 |
+| Latest release | 0.1.4, 2026-11-09 | v0.21.3, 2026-10-25 | v1.14.1, 2026-07-17 | 1.13.2, 2026-07-13 | v0.9.9, 2026-10-12 | v0.9-4, 2026-10-16 |
 
 <sub>Features as each project documents them (checked 2026-09-10); licenses and releases read from
 each project's GitHub repository on 2026-10-30.</sub>

@@ -7,6 +7,8 @@ release may change behaviour.
 
 ## Unreleased
 
+## 0.1.4 - 2026-11-09
+
 ### Added
 
 - **Auto-scroll in long strip** in Settings > Experimental, off by default, adds a play button to
@@ -43,15 +45,14 @@ release may change behaviour.
   Chapters already downloaded stay as they are, and both kinds read, delete, migrate and export
   alike. Restoring a backup that has the setting on turns it on; a backup restored before this
   version leaves it off.
-- **Upcoming** opens on a calendar of the month, as in Mihon. A day with releases predicted has a dot
+- **Upcoming** opens on a calendar of the month. A day with releases predicted has a dot
   for each entry, up to three, and tapping it scrolls the list to that day. The arrows beside the
   month's name turn to the month before or after. On a tablet the calendar sits beside the list.
-- **Upcoming** has Mihon's **Filter** button: pick categories to include or exclude, and only their
+- **Upcoming** has a **Filter** button: pick categories to include or exclude, and only their
   entries are listed and marked on the calendar. The button lights up while a filter is on. Each day
   in the list shows its count in a badge, and the help button opens the Upcoming guide.
 - An **Update library** button in the Updates bar starts a library update, as pulling the list down
   does.
-
 - **Two pages side by side** in Settings > Experimental, off by default, lets the left to right and
   right to left paged modes show two pages at once, as a printed book does. **Two pages side by
   side** in the reader settings (and in Settings > Reader) chooses Never, In landscape (the default)
@@ -68,7 +69,7 @@ release may change behaviour.
 - Backups now keep what you made in Saikou: merged entries, custom covers, edited details (title,
   description, author, artist, status and genres), sub-categories, the library's manual order, page
   notes, each entry's scanlator priority and chapter volumes. It all travels inside the same
-  `.tachibk` file, which Mihon and other readers still restore as before. A restore fills only what
+  `.tachibk` file, and other readers still restore that file as before. A restore fills only what
   the device does not have yet, so your own edits, covers and notes stay. Backups made before this
   version restore as they always did.
 
@@ -77,11 +78,8 @@ release may change behaviour.
 - Update errors show only in the Updates tab: the error button is gone from the Library bar. In
   Updates, the error button opens the list as a sheet from the bottom instead of a dialog, with
   Retry, Migrate for each source and the notice about a stopped site as before.
-- A History row works as in Mihon: tap it to resume reading, tap the cover to open the entry. The
+- Tapping a History row resumes reading, and tapping its cover opens the entry. The
   Resume button is gone, and the trash button is the row's only button.
-
-### Changed
-
 - Marking a chapter unread or removing its bookmark now reaches your other devices through sync,
   where the next sync used to bring the read mark or the bookmark back. Sync uses a new format, so
   every syncing device needs this version before it can sync again. One exception remains with
