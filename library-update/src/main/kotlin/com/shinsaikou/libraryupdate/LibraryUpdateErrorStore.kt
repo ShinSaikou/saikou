@@ -9,6 +9,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -22,7 +25,10 @@ import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.domain.manga.interactor.GetManga
 import java.io.File
+import java.io.IOException
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * One entry that failed in the last run. [at] is when it failed, in epoch milliseconds.
@@ -46,12 +52,34 @@ data class LibraryUpdateError(
 )
 
 /**
+ * Whether an error row still names an entry in the library, a live favourite, and so stays on the
+ * list. The run's [LibraryUpdateErrorStore.merge] and the Updates tab's [LibraryUpdateErrorStore.prune]
+ * both keep rows by it, so the two never disagree about a row.
+ *
+ * A row goes only when its entry is confirmed missing, no longer a favourite, or trashed. A lookup
+ * that fails keeps it: dropping it would lose a live entry's error for good. `GetManga.await` answers
+ * null for a failure as for a missing row, so the row is read through [GetManga.subscribeOrNull],
+ * which answers null only when no row has the id and throws when the read fails.
+ */
+suspend fun GetManga.keepsUpdateError(mangaId: Long): Boolean = try {
+    subscribeOrNull(mangaId).first()?.let { it.favorite && it.deletedAt == null } == true
+} catch (e: CancellationException) {
+    throw e
+} catch (e: Exception) {
+    logcat(LogPriority.WARN, e) { "Could not look up entry $mangaId, so its update error stays" }
+    true
+}
+
+/**
  * The per-manga errors of the library updates, kept in one JSON file rather than a table (contract
  * 06 decision F4). The file is rewritten whole by [merge] and [replace], never appended to. Each row
  * is its entry's last check: a run replaces only the rows of the entries it checked ([merge]), so a
- * category run or a cancelled one leaves the others' rows as they were.
+ * category run or a cancelled one leaves the others' rows as they were. [prune] drops the rows of
+ * entries that left the library between runs.
  *
- * [errors] starts empty and is filled by [load]; the file is never read on the caller's thread.
+ * [errors] starts empty and is filled by [load] or [prune]; the file is never read on the caller's
+ * thread. Every read and write of the file holds [lock], so a prune from the Updates tab and a run's
+ * merge cannot each write over the other's rows.
  */
 @SingleIn(AppScope::class)
 @Inject
@@ -67,15 +95,40 @@ class LibraryUpdateErrorStore(
     private val _errors = MutableStateFlow<List<LibraryUpdateError>>(emptyList())
     val errors: StateFlow<List<LibraryUpdateError>> = _errors.asStateFlow()
 
+    private val lock = Mutex()
+
     /** Reads the file into [errors]. Safe to call more than once. */
-    suspend fun load() {
+    suspend fun load() = lock.withLock {
         _errors.value = withContext(Dispatchers.IO) { read() }
     }
 
     /** Replaces the stored list with [failures], both on disk and in [errors]. */
-    suspend fun replace(failures: List<FlatLibraryUpdate.Failure>) {
+    suspend fun replace(failures: List<FlatLibraryUpdate.Failure>) = lock.withLock {
         val entries = failures.toErrors()
         withContext(Dispatchers.IO) { write(entries) }
+        _errors.value = entries
+    }
+
+    /**
+     * Reads the file into [errors] as [load] does, without the rows whose entry [keep] answers false
+     * for, and writes the file again when it dropped any. An entry migrated away or removed from the
+     * library leaves the list here, at once, rather than at the next run's [merge], which used to
+     * keep a migrated entry's row on the list and in the count until a Retry ran.
+     *
+     * A write that fails is logged rather than thrown: the Updates tab calls this as it opens, and
+     * [load], which it replaces there, never threw. [errors] still loses the rows, and the file keeps
+     * them until a later prune or run writes it.
+     */
+    suspend fun prune(keep: suspend (mangaId: Long) -> Boolean) = lock.withLock {
+        val previous = withContext(Dispatchers.IO) { read() }
+        val entries = previous.filter { keep(it.mangaId) }
+        if (entries.size != previous.size) {
+            try {
+                withContext(Dispatchers.IO) { write(entries) }
+            } catch (e: IOException) {
+                logcat(LogPriority.WARN, e) { "Could not write the pruned library update error list" }
+            }
+        }
         _errors.value = entries
     }
 
@@ -97,7 +150,7 @@ class LibraryUpdateErrorStore(
         checked: Set<Long>,
         asked: Set<Long> = emptySet(),
         keep: suspend (mangaId: Long) -> Boolean,
-    ) {
+    ) = lock.withLock {
         val fresh = failures.toErrors()
         val covered = checked + fresh.map { it.mangaId }
         val previous = withContext(Dispatchers.IO) { read() }
@@ -130,7 +183,7 @@ class LibraryUpdateErrorStore(
         }
     }
 
-    suspend fun clear() {
+    suspend fun clear() = lock.withLock {
         withContext(Dispatchers.IO) { file.delete() }
         _errors.value = emptyList()
     }
@@ -163,6 +216,11 @@ class LibraryUpdateErrorStore(
         }
     }
 
+    /**
+     * Written beside the file and renamed over it, so a write that fails part way, on a full disk or
+     * in a process killed mid-write, leaves the previous list whole rather than a truncated file that
+     * [read] would take for an empty one.
+     */
     private fun write(entries: List<LibraryUpdateError>) {
         val file = file
         file.parentFile?.mkdirs()
@@ -182,7 +240,13 @@ class LibraryUpdateErrorStore(
                 }
             }
         }
-        file.writeText(json.encodeToString(JsonArray.serializer(), array))
+        val partial = File(file.parentFile, "${file.name}.partial")
+        try {
+            partial.writeText(json.encodeToString(JsonArray.serializer(), array))
+            if (!partial.renameTo(file)) throw IOException("Could not move the error list into place")
+        } finally {
+            partial.delete()
+        }
     }
 
     private companion object {

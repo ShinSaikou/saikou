@@ -7,6 +7,7 @@ import com.shinsaikou.domain.error.ErrorKey
 import com.shinsaikou.domain.error.KeyedFailure
 import com.shinsaikou.source.SourceNotInstalledException
 import eu.kanade.tachiyomi.network.HttpException
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.ints.shouldBeLessThan
 import io.kotest.matchers.shouldBe
@@ -17,6 +18,7 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -114,6 +116,97 @@ class LibraryUpdateErrorStoreTest {
         fresh.merge(listOf(failure(2L, NoChaptersException())), checked = setOf(2L)) { true }
 
         fresh.errors.value.map { it.mangaId } shouldBe listOf(1L, 2L)
+    }
+
+    @Test
+    fun `prune drops the rows keep rejects from the list and the file`() = runTest {
+        store.replace((1L..3L).map { failure(it, NoChaptersException()) })
+
+        store.prune { it != 2L }
+
+        store.errors.value.map { it.mangaId } shouldBe listOf(1L, 3L)
+        LibraryUpdateErrorStore(store.context(), Json).also { it.load() }.errors.value.map { it.mangaId } shouldBe
+            listOf(1L, 3L)
+    }
+
+    /** The Updates tab's process may never have loaded the list, so prune is the load too. */
+    @Test
+    fun `prune fills the list from the file in a store that never loaded`() = runTest {
+        store.replace(listOf(failure(1L, NoChaptersException()), failure(2L, NoChaptersException())))
+        val fresh = LibraryUpdateErrorStore(store.context(), Json)
+
+        fresh.prune { true }
+
+        fresh.errors.value.map { it.mangaId } shouldBe listOf(1L, 2L)
+    }
+
+    @Test
+    fun `prune with nothing to drop does not rewrite the file`() = runTest {
+        store.replace(listOf(failure(1L, NoChaptersException())))
+        val stale = 1_000_000L
+        store.file.setLastModified(stale) shouldBe true
+
+        store.prune { true }
+
+        store.file.lastModified() shouldBe stale
+        store.errors.value.map { it.mangaId } shouldBe listOf(1L)
+    }
+
+    /** The Updates tab calls prune as it opens, so a write that fails must not crash it. */
+    @Test
+    fun `prune whose write fails does not throw and keeps the old rows in the file`() = runTest {
+        store.replace((1L..3L).map { failure(it, NoChaptersException()) })
+        val directory = store.file.parentFile!!
+        directory.setWritable(false)
+        try {
+            // A root test JVM can still create files in a read-only directory, so the failure cannot be set up.
+            assumeTrue(!directory.canWrite(), "the directory stays writable, probably running as root")
+
+            store.prune { it != 2L }
+
+            store.errors.value.map { it.mangaId } shouldBe listOf(1L, 3L)
+            LibraryUpdateErrorStore(store.context(), Json).also { it.load() }.errors.value.map { it.mangaId } shouldBe
+                listOf(1L, 2L, 3L)
+        } finally {
+            directory.setWritable(true)
+        }
+    }
+
+    /** A write that cannot start must leave the list it was to replace whole, and say so. */
+    @Test
+    fun `replace whose write fails throws and leaves the previous list whole`() = runTest {
+        store.replace((1L..3L).map { failure(it, NoChaptersException()) })
+        val directory = store.file.parentFile!!
+        directory.setWritable(false)
+        try {
+            assumeTrue(!directory.canWrite(), "the directory stays writable, probably running as root")
+
+            shouldThrow<IOException> { store.replace(listOf(failure(9L, NoChaptersException()))) }
+        } finally {
+            directory.setWritable(true)
+        }
+
+        LibraryUpdateErrorStore(store.context(), Json).also { it.load() }.errors.value.map { it.mangaId } shouldBe
+            listOf(1L, 2L, 3L)
+        File(directory, "last-errors.json.partial").exists() shouldBe false
+    }
+
+    @Test
+    fun `a successful replace leaves no partial file behind`() = runTest {
+        store.replace(listOf(failure(1L, NoChaptersException())))
+        store.replace(listOf(failure(2L, NoChaptersException())))
+
+        store.file.exists() shouldBe true
+        File(store.file.parentFile, "last-errors.json.partial").exists() shouldBe false
+        store.file.parentFile!!.list()!!.toList() shouldBe listOf("last-errors.json")
+    }
+
+    @Test
+    fun `prune on a missing file leaves the list empty and creates no file`() = runTest {
+        store.prune { true }
+
+        store.errors.value.shouldBeEmpty()
+        store.file.exists() shouldBe false
     }
 
     @Test

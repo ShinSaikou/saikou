@@ -201,7 +201,7 @@ class LibraryUpdateWorker @AssistedInject constructor(
 
     /** Whether an earlier run's error row still names a library entry, and so stays in the list. */
     private suspend fun isInLibrary(mangaId: Long): Boolean = withContext(Dispatchers.IO) {
-        getManga.await(mangaId)?.let { it.favorite && it.deletedAt == null } == true
+        getManga.keepsUpdateError(mangaId)
     }
 
     /** The pass reports updates by manga id; the notification needs the row for its title. */

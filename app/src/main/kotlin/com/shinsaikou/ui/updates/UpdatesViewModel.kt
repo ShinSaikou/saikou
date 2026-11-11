@@ -20,6 +20,7 @@ import com.shinsaikou.i18n.R
 import com.shinsaikou.libraryupdate.LibraryUpdateErrorStore
 import com.shinsaikou.libraryupdate.LibraryUpdateScheduler
 import com.shinsaikou.libraryupdate.LibraryUpdateWorker
+import com.shinsaikou.libraryupdate.keepsUpdateError
 import com.shinsaikou.presentation.core.viewmodel.StateViewModel
 import com.shinsaikou.source.SourceIds
 import com.shinsaikou.source.SourceManager
@@ -322,11 +323,28 @@ class UpdatesViewModel(
         viewModelScope.launch {
             // Idempotent, and the only thing that fills `errors` in a process that did not run the
             // update itself. Without it the badge is always zero on a fresh launch.
-            errorStore.load()
+            loadErrors()
             errorStore.errors.collect { errors ->
                 mutableState.update { it.copy(updateErrorCount = errors.size) }
             }
         }
+    }
+
+    /**
+     * Reads the stored errors again when the tab comes back on screen, so the count and the sheet
+     * lose an entry the owner migrated or removed from the library in the meantime. Migrate in the
+     * sheet leaves this tab for the migration and comes back here.
+     */
+    fun reloadErrors() {
+        viewModelScope.launch { loadErrors() }
+    }
+
+    /**
+     * The stored errors without the rows of entries no longer in the library, by the rule the run
+     * keeps rows by ([keepsUpdateError]), so a migrated entry is neither listed, counted nor retried.
+     */
+    private suspend fun loadErrors() {
+        errorStore.prune { mangaId -> withContext(dispatchers.io) { getManga.keepsUpdateError(mangaId) } }
     }
 
     /**
@@ -335,11 +353,11 @@ class UpdatesViewModel(
      * The store is loaded here as well as in `init`, and before the read. The error notification
      * asks for this sheet on the first frame of a cold start, when the process that ran the update
      * is long dead and nothing orders the read after the `init` load; the read could win and open
-     * the sheet empty. `load()` is idempotent, so the second call costs one small file read.
+     * the sheet empty. The load is idempotent, so the second call costs one small file read.
      */
     fun showErrors() {
         viewModelScope.launch {
-            errorStore.load()
+            loadErrors()
             val errors = errorStore.errors.value
             val groups = withContext(dispatchers.io) {
                 groupUpdateErrors(errors, sourceManager::getOrStub)

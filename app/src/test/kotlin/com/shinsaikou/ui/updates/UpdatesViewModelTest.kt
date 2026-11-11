@@ -39,6 +39,7 @@ import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -164,8 +165,14 @@ class UpdatesViewModelTest {
         every { downloadQueue.subscribe() } returns queueFlow
         every { getCategories.subscribe() } returns categoriesFlow
         every { libraryUpdateScheduler.isRunning } returns isRunningFlow
-        coEvery { errorStore.load() } returns Unit
+        // As the real prune over the mocked flow: it keeps the rows whose entry `keep` accepts.
+        coEvery { errorStore.prune(any()) } coAnswers {
+            val keep = firstArg<suspend (Long) -> Boolean>()
+            errorsFlow.value = errorsFlow.value.filter { keep(it.mangaId) }
+        }
         every { errorStore.errors } returns errorsFlow
+        // Every entry is a live favourite unless a test says otherwise; a later stub for an id wins.
+        every { getManga.subscribeOrNull(any()) } returns flowOf(Manga.create().copy(favorite = true))
     }
 
     @AfterEach
@@ -576,14 +583,107 @@ class UpdatesViewModelTest {
         advanceUntilIdle()
 
         // The store starts empty in a process that did not run the update, so the read is what
-        // fills it: a badge that never calls load() is a badge that is always zero.
-        coVerify(exactly = 1) { errorStore.load() }
+        // fills it: a badge that never reads the file is a badge that is always zero.
+        coVerify(exactly = 1) { errorStore.prune(any()) }
         viewModel.state.value.updateErrorCount shouldBe 1
 
         errorsFlow.value = errorsFlow.value + updateError(mangaId = 2L, title = "Bellows", sourceId = 20L)
         advanceUntilIdle()
 
         viewModel.state.value.updateErrorCount shouldBe 2
+    }
+
+    /** An error row whose entry was migrated or removed is not counted, listed or retried. */
+    @Test
+    fun `an error row whose entry is no longer a favourite is left out of the count`() = runTest(testDispatcher) {
+        errorsFlow.value = listOf(
+            updateError(mangaId = 1L, title = "Anvil", sourceId = 10L),
+            updateError(mangaId = 2L, title = "Migrated", sourceId = 10L),
+            updateError(mangaId = 3L, title = "Trashed", sourceId = 10L),
+            updateError(mangaId = 4L, title = "Gone", sourceId = 10L),
+        )
+        every { getManga.subscribeOrNull(2L) } returns flowOf(Manga.create().copy(id = 2L, favorite = false))
+        every { getManga.subscribeOrNull(3L) } returns flowOf(Manga.create().copy(id = 3L, favorite = true, deletedAt = 5L))
+        every { getManga.subscribeOrNull(4L) } returns flowOf(null)
+
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        viewModel.state.value.updateErrorCount shouldBe 1
+    }
+
+    @Test
+    fun `showErrors leaves out the rows of entries that left the library`() = runTest(testDispatcher) {
+        errorsFlow.value = listOf(
+            updateError(mangaId = 1L, title = "Anvil", sourceId = 10L),
+            updateError(mangaId = 2L, title = "Migrated", sourceId = 10L),
+        )
+        every { getManga.subscribeOrNull(2L) } returns flowOf(Manga.create().copy(id = 2L, favorite = false))
+        every { sourceManager.getOrStub(10L) } returns namedSource("Almanac")
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        viewModel.showErrors()
+        advanceUntilIdle()
+
+        val dialog = viewModel.state.value.dialog as UpdatesViewModel.Dialog.ErrorList
+        dialog.groups.single().errors.map { it.title } shouldContainExactly listOf("Anvil")
+    }
+
+    @Test
+    fun `reloadErrors drops an entry that left the library since the first read`() = runTest(testDispatcher) {
+        errorsFlow.value = listOf(
+            updateError(mangaId = 1L, title = "Anvil", sourceId = 10L),
+            updateError(mangaId = 2L, title = "Bellows", sourceId = 10L),
+        )
+        val viewModel = viewModel()
+        advanceUntilIdle()
+        viewModel.state.value.updateErrorCount shouldBe 2
+
+        every { getManga.subscribeOrNull(2L) } returns flowOf(Manga.create().copy(id = 2L, favorite = false))
+        viewModel.reloadErrors()
+        advanceUntilIdle()
+
+        viewModel.state.value.updateErrorCount shouldBe 1
+    }
+
+    @Test
+    fun `a row whose lookup fails stays in the count and the sheet`() = runTest(testDispatcher) {
+        errorsFlow.value = listOf(
+            updateError(mangaId = 1L, title = "Anvil", sourceId = 10L),
+            updateError(mangaId = 2L, title = "Bellows", sourceId = 10L),
+        )
+        every { getManga.subscribeOrNull(2L) } returns flow { throw IllegalStateException("fixture: db") }
+        every { sourceManager.getOrStub(10L) } returns namedSource("Almanac")
+
+        val viewModel = viewModel()
+        advanceUntilIdle()
+        viewModel.showErrors()
+        advanceUntilIdle()
+
+        viewModel.state.value.updateErrorCount shouldBe 2
+        val dialog = viewModel.state.value.dialog as UpdatesViewModel.Dialog.ErrorList
+        dialog.groups.single().errors.map { it.title } shouldContainExactly listOf("Anvil", "Bellows")
+    }
+
+    @Test
+    fun `Retry after a prune does not start an update over the removed entry`() = runTest(testDispatcher) {
+        errorsFlow.value = listOf(
+            updateError(mangaId = 4L, title = "Fixture 4", sourceId = 1L),
+            updateError(mangaId = 9L, title = "Fixture 9", sourceId = 2L),
+        )
+        every { getManga.subscribeOrNull(4L) } returns flowOf(Manga.create().copy(id = 4L, favorite = false))
+        coEvery { libraryUpdateScheduler.startNow(mangaIds = any()) } returns true
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        viewModel.events.test {
+            viewModel.retryErrors()
+            advanceUntilIdle()
+
+            awaitItem() shouldBe UpdatesViewModel.Event.Snackbar(R.string.library_update_entries_started)
+        }
+        coVerify(exactly = 1) { libraryUpdateScheduler.startNow(null, false, listOf(9L)) }
     }
 
     @Test
@@ -657,7 +757,7 @@ class UpdatesViewModelTest {
             updateError(mangaId = 1L, title = "Anvil", sourceId = 10L),
             updateError(mangaId = 2L, title = "Bellows", sourceId = 10L),
         )
-        coEvery { errorStore.load() } coAnswers {
+        coEvery { errorStore.prune(any()) } coAnswers {
             delay(100)
             errorsFlow.value = stored
         }

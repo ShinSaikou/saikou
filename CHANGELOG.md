@@ -7,6 +7,13 @@ release may change behaviour.
 
 ## Unreleased
 
+### Fixed
+
+- An entry you migrate, or remove from your library, leaves the Updates tab's error list and its
+  count as soon as you are back on the tab. It used to stay listed, and in the count, until a Retry
+  or the next library update.
+- The calendar icon in the Updates bar lines up with the icons beside it. It sat slightly low.
+
 ## 0.1.4 - 2026-11-09
 
 ### Added

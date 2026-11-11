@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -46,6 +47,8 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.shinsaikou.i18n.R
 import com.shinsaikou.domain.preferences.LibraryUpdateRestrictions
@@ -124,6 +127,9 @@ fun UpdatesScreen(showErrorsOnArrival: Boolean = false, onErrorsShown: () -> Uni
     // accident and the gesture that already means "undo that" has to be the way out.
     BackHandler(enabled = state.selectionMode, onBack = viewModel::clearSelection)
 
+    // A migration started from the error sheet, or an entry removed elsewhere, ends back here.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.reloadErrors() }
+
     LaunchedEffect(showErrorsOnArrival) {
         if (showErrorsOnArrival) {
             viewModel.showErrors()
@@ -163,6 +169,9 @@ fun UpdatesScreen(showErrorsOnArrival: Boolean = false, onErrorsShown: () -> Uni
                             label = stringResource(R.string.upcoming_title),
                             icon = Icons.Outlined.CalendarMonth,
                             onClick = { navigator.open(Route.Upcoming) },
+                            // The glyph's rings stand above its box, so centred by its bounds the box
+                            // sits 1 dp below the other icons' middle; lifted that much, it lines up.
+                            iconModifier = Modifier.offset(y = (-1).dp),
                         )
                         // Upstream's bar ends with the library update, the same run the pull starts.
                         TopBarAction(

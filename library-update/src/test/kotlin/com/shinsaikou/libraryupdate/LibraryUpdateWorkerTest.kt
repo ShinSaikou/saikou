@@ -35,6 +35,7 @@ import io.mockk.unmockkStatic
 import io.mockk.verify
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -124,6 +125,9 @@ class LibraryUpdateWorkerTest {
         )
         // Entry 4 left the library since that run.
         coEvery { getManga.await(any()) } answers { firstArg<Long>().takeIf { it != 4L }?.let { item(it).manga } }
+        every { getManga.subscribeOrNull(any()) } answers {
+            flowOf(firstArg<Long>().takeIf { it != 4L }?.let { item(it).manga })
+        }
         coEvery { update.run(5L, false, false, null, any()) } returns FlatLibraryUpdate.Outcome(
             updated = emptyMap(),
             failures = listOf(FlatLibraryUpdate.Failure(item(3L).manga, raised)),
@@ -157,6 +161,7 @@ class LibraryUpdateWorkerTest {
             listOf(1L, 2L, 3L, 4L).map { FlatLibraryUpdate.Failure(item(it).manga, IOException("fixture: earlier")) },
         )
         coEvery { getManga.await(any()) } answers { item(firstArg()).manga }
+        every { getManga.subscribeOrNull(any()) } answers { flowOf(item(firstArg()).manga) }
         // Entry 1 is passed over, entry 2 updates and entry 3 fails again.
         coEvery { update.run(null, false, false, setOf(1L, 2L, 3L), any()) } returns FlatLibraryUpdate.Outcome(
             updated = emptyMap(),
@@ -335,6 +340,9 @@ class LibraryUpdateWorkerTest {
             if (secondArg<Manga>().id == 2L) listOf(newChapter) else emptyList()
         }
         coEvery { getManga.await(any()) } answers { library.firstOrNull { it.id == firstArg<Long>() }?.manga }
+        every { getManga.subscribeOrNull(any()) } answers {
+            flowOf(library.firstOrNull { it.id == firstArg<Long>() }?.manga)
+        }
         val getLibraryManga = mockk<GetLibraryManga>()
         coEvery { getLibraryManga.await() } returns library
         val sourceManager = mockk<SourceManager>()

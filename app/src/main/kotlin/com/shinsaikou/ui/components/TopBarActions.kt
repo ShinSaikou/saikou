@@ -20,6 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.shinsaikou.i18n.R
 import tachiyomi.presentation.core.i18n.stringResource
@@ -37,7 +38,8 @@ import tachiyomi.presentation.core.i18n.stringResource
 /**
  * An icon button. [highlighted] tints it in the primary colour, for an action whose screen holds a
  * setting that is on (the library's filter): a filter that is on and invisible is how a list comes
- * to look half missing.
+ * to look half missing. [iconModifier] is for a glyph whose drawing is off its own centre and needs
+ * nudging to line up with its neighbours.
  */
 @Composable
 fun TopBarAction(
@@ -45,12 +47,14 @@ fun TopBarAction(
     icon: ImageVector,
     onClick: () -> Unit,
     highlighted: Boolean = false,
+    iconModifier: Modifier = Modifier,
 ) {
     TopBarTooltip(label) {
         IconButton(onClick = onClick) {
             Icon(
                 imageVector = icon,
                 contentDescription = label,
+                modifier = iconModifier,
                 tint = if (highlighted) MaterialTheme.colorScheme.primary else LocalContentColor.current,
             )
         }
