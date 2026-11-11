@@ -7,6 +7,14 @@ release may change behaviour.
 
 ## Unreleased
 
+### Added
+
+- MangaBaka as a third tracker: sign in from Settings > Tracking, then search, link and update
+  entries from the track sheet, with the status (Considering and Rereading included), chapters,
+  score in your MangaBaka rating steps, start and finish dates, and private entries. Search also
+  takes `id:` and a series' address on mangabaka.org. Signing out also ends Saikou's access on
+  MangaBaka.
+
 ### Fixed
 
 - An entry you migrate, or remove from your library, leaves the Updates tab's error list and its

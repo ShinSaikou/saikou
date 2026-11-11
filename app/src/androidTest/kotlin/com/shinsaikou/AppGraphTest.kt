@@ -75,6 +75,7 @@ import com.shinsaikou.tracking.TrackerIds
 import com.shinsaikou.tracking.TrackProgressRecorder
 import com.shinsaikou.tracking.WorkManagerDelayedTrackingScheduler
 import com.shinsaikou.tracking.anilist.Anilist
+import com.shinsaikou.tracking.mangabaka.MangaBaka
 import com.shinsaikou.tracking.myanimelist.MyAnimeList
 import com.shinsaikou.tracking.myanimelist.MyAnimeListClient
 import com.shinsaikou.ui.backup.BackupViewModel
@@ -564,10 +565,12 @@ class AppGraphTest {
      * WorkManager; the store is one per process, since its lock is what keeps a push raised during
      * a send from being removed with it; and the client is derived from the graph's own
      * `NetworkHelper`, which still carries the challenge solver the tracker client drops. The
-     * manager holds MyAnimeList (phase 3 unit T2) and AniList (R162 item 8), by id and class, in id
-     * order. MyAnimeList is configured exactly when the build carries its client id, with no test
-     * base set, and on the fake's client once one is, with every address moved; AniList exactly
-     * when the build carries its own, whose page asks AniList for a token on the trackers' loopback.
+     * manager holds MyAnimeList (phase 3 unit T2), AniList (R162 item 8) and MangaBaka, by id and
+     * class, in id order. MyAnimeList is configured exactly when the build carries its client id, with
+     * no test base set, and on the fake's client once one is, with every address moved; AniList
+     * exactly when the build carries its own, whose page asks AniList for a token on the trackers'
+     * loopback; MangaBaka exactly when the build carries its own, whose page asks MangaBaka for a code
+     * on that loopback with an S256 challenge.
      */
     @Test
     fun theTrackingBindingsResolve() {
@@ -588,7 +591,10 @@ class AppGraphTest {
             assertSame(graph.networkHelper.client.connectionPool, tracker.connectionPool)
             assertNotNull(graph.delayedTrackingUpdate)
             assertNotNull(graph.addTracks)
-            assertEquals(listOf(TrackerIds.MYANIMELIST, TrackerIds.ANILIST), graph.trackerManager.trackers.map { it.id })
+            assertEquals(
+                listOf(TrackerIds.MYANIMELIST, TrackerIds.ANILIST, TrackerIds.MANGABAKA),
+                graph.trackerManager.trackers.map { it.id },
+            )
             val myAnimeList = graph.trackerManager.get(TrackerIds.MYANIMELIST)
             assertTrue("tracker 1 is ${myAnimeList?.javaClass?.name}", myAnimeList is MyAnimeList)
             val anilist = graph.trackerManager.get(TrackerIds.ANILIST)
@@ -599,6 +605,17 @@ class AppGraphTest {
             assertEquals(BuildConfig.ANILIST_CLIENT_ID, anilistPage.queryParameter("client_id"))
             assertEquals("token", anilistPage.queryParameter("response_type"))
             assertNull(anilistPage.queryParameter("redirect_uri"))
+            val mangaBaka = graph.trackerManager.get(TrackerIds.MANGABAKA)
+            assertTrue("tracker 11 is ${mangaBaka?.javaClass?.name}", mangaBaka is MangaBaka)
+            assertEquals(BuildConfig.MANGABAKA_CLIENT_ID.isNotBlank(), (mangaBaka as MangaBaka).isConfigured)
+            val mangaBakaPkce = Pkce.generate()
+            val mangaBakaPage = mangaBaka.authorizationUrl(REDIRECT, "state", mangaBakaPkce)
+            assertEquals("https://mangabaka.org/auth/oauth2/authorize", mangaBakaPage.newBuilder().query(null).build().toString())
+            assertEquals(BuildConfig.MANGABAKA_CLIENT_ID, mangaBakaPage.queryParameter("client_id"))
+            assertEquals("code", mangaBakaPage.queryParameter("response_type"))
+            assertEquals(REDIRECT, mangaBakaPage.queryParameter("redirect_uri"))
+            assertEquals(mangaBakaPkce.challenge, mangaBakaPage.queryParameter("code_challenge"))
+            assertEquals("S256", mangaBakaPage.queryParameter("code_challenge_method"))
             assertSame(graph.myAnimeListTestBase, graph.myAnimeListTestBase)
             val previous = graph.myAnimeListTestBase.value
             try {
@@ -656,8 +673,8 @@ class AppGraphTest {
      * Tracking settings' view model built the way its section builds it (phase 3 unit T1), through
      * the graph's factory, as [theSyncSettingsViewModelBuildsThroughTheViewModelMap] builds Sync's.
      * Its rows are the configured trackers: MyAnimeList's exactly when the build carries its client
-     * id (phase 3 unit T2), with no test base set, and AniList's exactly when the build carries its
-     * own (R162 item 8), compared against `BuildConfig` as Drive's offer is.
+     * id (phase 3 unit T2), with no test base set, and AniList's (R162 item 8) and MangaBaka's
+     * exactly when the build carries their own, compared against `BuildConfig` as Drive's offer is.
      */
     @Test
     fun theTrackingSettingsViewModelBuildsThroughTheViewModelMap() {
@@ -677,6 +694,7 @@ class AppGraphTest {
             val expected = listOfNotNull(
                 TrackerIds.MYANIMELIST.takeIf { BuildConfig.MAL_CLIENT_ID.isNotBlank() },
                 TrackerIds.ANILIST.takeIf { BuildConfig.ANILIST_CLIENT_ID.isNotBlank() },
+                TrackerIds.MANGABAKA.takeIf { BuildConfig.MANGABAKA_CLIENT_ID.isNotBlank() },
             )
             assertEquals(expected, (built as TrackingSettingsViewModel).state.value.trackers.map { it.id })
         } finally {

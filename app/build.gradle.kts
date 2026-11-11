@@ -91,6 +91,11 @@ android {
         // (http://127.0.0.1:18796/callback). Its implicit grant needs no secret, so the id is all
         // there is. Empty when absent, and then AniList stays in the graph but offers no sign-in.
         buildConfigField("String", "ANILIST_CLIENT_ID", secret("saikou.anilist.client.id", "SAIKOU_ANILIST_CLIENT_ID").orEmpty().asJavaString())
+        // The MangaBaka client the owner registers, a public "Native App" client whose redirect is
+        // exactly the trackers' loopback (http://127.0.0.1:18796/callback). PKCE stands in for a
+        // secret, so the id is all there is. Empty when absent, and then MangaBaka stays in the graph
+        // but offers no sign-in.
+        buildConfigField("String", "MANGABAKA_CLIENT_ID", secret("saikou.mangabaka.client.id", "SAIKOU_MANGABAKA_CLIENT_ID").orEmpty().asJavaString())
 
         // Phase 0 runs on x86_64 emulators and the owner's devices are arm64. Shipping the other
         // two ABIs added 22.7 MB of native code no target device can load.

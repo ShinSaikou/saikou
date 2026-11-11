@@ -52,7 +52,8 @@ and keep your library in step across devices through your own Google Drive or We
   downloads folder from a compatible reader.
 * Sync of the library, categories, reading progress, history, bookmarks and tracking between
   devices, through Google Drive's private app folder or a WebDAV server you run.
-* Tracker support: [MyAnimeList](https://myanimelist.net/) and [AniList](https://anilist.co/).
+* Tracker support: [MyAnimeList](https://myanimelist.net/), [AniList](https://anilist.co/) and
+  [MangaBaka](https://mangabaka.org/).
 * Backup and restore in the `.tachibk` format, with a report of missing sources and trackers
   before anything is restored.
 * Library updates, history, statistics, an app lock, a secure screen option and a choice of themes.

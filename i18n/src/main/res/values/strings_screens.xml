@@ -589,6 +589,9 @@
     <string name="track_status_rereading">Rereading</string>
     <!-- AniList's word for its rereading status, as AniList and upstream show it. -->
     <string name="track_status_repeating">Repeating</string>
+    <!-- MangaBaka's two statuses no other tracker here has, in MangaBaka's words: its on-hold, and a series being weighed up. -->
+    <string name="track_status_paused">Paused</string>
+    <string name="track_status_considering">Considering</string>
 
     <!--
       The track sheet on the manga screen and the library's tracker filter (phase 3 unit T3), upstream's

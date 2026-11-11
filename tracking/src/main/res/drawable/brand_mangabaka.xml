@@ -1,0 +1,20 @@
+<!--
+  Saikou's own mark for MangaBaka, in brand_anilist's square form: MangaBaka's dark teal behind a
+  four-pointed yellow star on a violet disc, colours taken from MangaBaka's icon. Upstream ships a
+  raster of that icon, which is an illustration and has no vector form.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="192dp"
+    android:height="192dp"
+    android:viewportWidth="192"
+    android:viewportHeight="192">
+  <path
+      android:pathData="M0,0h192v192H0z"
+      android:fillColor="#1d3b3f"/>
+  <path
+      android:pathData="M96,30a66,66 0,1 1,0 132a66,66 0,1 1,0 -132z"
+      android:fillColor="#4b3a6e"/>
+  <path
+      android:pathData="M96,40Q103.5,88.5 152,96Q103.5,103.5 96,152Q88.5,103.5 40,96Q88.5,88.5 96,40z"
+      android:fillColor="#f6e05e"/>
+</vector>
