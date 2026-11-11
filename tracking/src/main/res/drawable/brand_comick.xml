@@ -1,0 +1,16 @@
+<!--
+  A neutral placeholder for Comick, in brand_anilist's square form: a light bookmark on slate. It is
+  not Comick's mark, which this tree has no vector of; swap it for Comick's own once one is at hand.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="192dp"
+    android:height="192dp"
+    android:viewportWidth="192"
+    android:viewportHeight="192">
+  <path
+      android:pathData="M0,0h192v192H0z"
+      android:fillColor="#2b2f36"/>
+  <path
+      android:pathData="M66,40h60a8,8 0,0 1,8 8v104l-38,-26l-38,26V48a8,8 0,0 1,8 -8z"
+      android:fillColor="#e8eaed"/>
+</vector>

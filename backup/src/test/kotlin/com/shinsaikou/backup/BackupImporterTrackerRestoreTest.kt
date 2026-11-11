@@ -56,9 +56,9 @@ class BackupImporterTrackerRestoreTest {
     }
 
     /**
-     * Upstream v0.21.0 numbers a new tracker 12. No tracker of that id is built here, but its rows
-     * are a known service's, kept and written back out as the rows of every other upstream id are,
-     * not skipped as an unknown tracker's.
+     * Upstream v0.21.0 numbers a new tracker 12, Comick. No tracker is built in this module's graph,
+     * but its rows are a known service's, kept and written back out as the rows of every other
+     * upstream id are, not skipped as an unknown tracker's.
      */
     @Test
     fun `a tracking row with upstream's sync id 12 is restored and exported, not skipped`() = runTest {

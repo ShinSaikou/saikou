@@ -990,6 +990,9 @@
     <string name="error_tracker_sign_in_refused_format">The tracker refused the sign-in (%1$s). Sign in again</string>
     <string name="error_tracker_sign_in_refused">The tracker refused the sign-in. Sign in again</string>
     <string name="error_tracker_auth_expired">The tracker no longer accepts this device\'s sign-in. Sign in again</string>
+    <!-- A sign-in granted without a permission Saikou needs, so nothing was stored. Comick's consent page leaves library:write off by default; the scope names stay as Comick shows them. -->
+    <string name="error_tracker_permission_library_write">The sign-in left out permission to change your library (library:write). Sign in again and turn it on</string>
+    <string name="error_tracker_permission_offline_access">The sign-in left out permission to stay signed in (offline_access). Sign in again and turn it on</string>
     <!-- Updates -->
     <!-- Upstream's Updates filter dialog (phase 4 unit UF), with upstream's English text. The Downloaded and Started rows reuse label_downloaded and label_started. -->
     <string name="categories">Categories</string>

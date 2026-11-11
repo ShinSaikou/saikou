@@ -21,6 +21,7 @@ import com.shinsaikou.tracking.FakeOAuthTracker
 import com.shinsaikou.tracking.ResumeQueuedPushes
 import com.shinsaikou.tracking.Tracker
 import com.shinsaikou.tracking.TrackerManager
+import com.shinsaikou.tracking.TrackerPermissionMissingException
 import com.shinsaikou.tracking.TrackerSignInNotifier
 import com.shinsaikou.tracking.TrackerSignInRefusedException
 import com.shinsaikou.ui.settings.TrackingSettingsViewModel.CompareRow
@@ -375,6 +376,10 @@ class TrackingSettingsViewModelTest {
             Case("denied", Problem(ErrorKey.OAUTH_DENIED, "access_denied")) { fail(LoopbackDeniedException("access_denied")) },
             Case("refused by the tracker", Problem(ErrorKey.TRACKER_SIGN_IN_REFUSED, "invalid_grant")) { tracker ->
                 tracker.exchange = { throw TrackerSignInRefusedException(tracker.id, "invalid_grant") }
+                callback()
+            },
+            Case("a permission left off", Problem(ErrorKey.TRACKER_PERMISSION_MISSING, "library:write")) { tracker ->
+                tracker.exchange = { throw TrackerPermissionMissingException(tracker.id, "library:write") }
                 callback()
             },
             Case("tracker unreachable", Problem(ErrorKey.GENERIC, "IOException")) { tracker ->

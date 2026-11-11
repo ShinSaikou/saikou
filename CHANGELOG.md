@@ -14,6 +14,11 @@ release may change behaviour.
   score in your MangaBaka rating steps, start and finish dates, and private entries. Search also
   takes `id:` and a series' address on mangabaka.org. Signing out also ends Saikou's access on
   MangaBaka.
+- [Comick](https://comick.dev) as a fourth tracker: sign in from Settings > Tracking, then search,
+  link and update entries from the track sheet, with the status, chapters and a score from 0 to 10.
+  Search also takes `id:` followed by a title's Comick ID. Comick's sign-in page leaves the
+  permission to change your library off by default; if it, or the permission to stay signed in, is
+  left off, the sign-in stops and says which one to turn on.
 
 ### Fixed
 

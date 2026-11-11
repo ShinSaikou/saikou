@@ -199,6 +199,7 @@ class ErrorKeyTest {
             ErrorKey.DRIVE_UNAVAILABLE to "drive_unavailable",
             ErrorKey.TRACKER_SIGN_IN_REFUSED to "tracker_sign_in_refused",
             ErrorKey.TRACKER_AUTH_EXPIRED to "tracker_auth_expired",
+            ErrorKey.TRACKER_PERMISSION_MISSING to "tracker_permission_missing",
             ErrorKey.GENERIC to "generic",
         )
     }

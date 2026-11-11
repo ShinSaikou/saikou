@@ -96,6 +96,10 @@ android {
         // secret, so the id is all there is. Empty when absent, and then MangaBaka stays in the graph
         // but offers no sign-in.
         buildConfigField("String", "MANGABAKA_CLIENT_ID", secret("saikou.mangabaka.client.id", "SAIKOU_MANGABAKA_CLIENT_ID").orEmpty().asJavaString())
+        // The Comick client the owner registers, a public client whose redirect is the trackers'
+        // loopback (http://127.0.0.1:18796/callback). PKCE stands in for a secret, so the id is all
+        // there is. Empty when absent, and then Comick stays in the graph but offers no sign-in.
+        buildConfigField("String", "COMICK_CLIENT_ID", secret("saikou.comick.client.id", "SAIKOU_COMICK_CLIENT_ID").orEmpty().asJavaString())
 
         // Phase 0 runs on x86_64 emulators and the owner's devices are arm64. Shipping the other
         // two ABIs added 22.7 MB of native code no target device can load.

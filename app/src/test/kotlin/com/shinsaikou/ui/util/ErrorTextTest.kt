@@ -37,6 +37,7 @@ import com.shinsaikou.sync.webdav.WebDavUnreachableException
 import com.shinsaikou.sync.webdav.WebDavUrlRefusedException
 import com.shinsaikou.sync.webdav.WebDavWriteNotStoredException
 import com.shinsaikou.tracking.TrackerAuthExpiredException
+import com.shinsaikou.tracking.TrackerPermissionMissingException
 import com.shinsaikou.tracking.TrackerSignInRefusedException
 import eu.kanade.tachiyomi.network.HttpException
 import io.kotest.matchers.collections.shouldContainExactly
@@ -121,6 +122,8 @@ class ErrorTextTest {
         every { getString(R.string.error_tracker_sign_in_refused_format, "invalid_grant") } returns "tracker refused (invalid_grant)"
         every { getString(R.string.error_tracker_sign_in_refused) } returns "tracker refused"
         every { getString(R.string.error_tracker_auth_expired) } returns "tracker sign in again"
+        every { getString(R.string.error_tracker_permission_library_write) } returns "turn on library:write"
+        every { getString(R.string.error_tracker_permission_offline_access) } returns "turn on offline_access"
     }
 
     /**
@@ -138,6 +141,8 @@ class ErrorTextTest {
         Case(GoogleUnavailableException(null, IOException("fixture: dropped")), ErrorKey.GOOGLE_UNAVAILABLE, "google did not answer"),
         Case(TrackerSignInRefusedException(1L, "invalid_grant"), ErrorKey.TRACKER_SIGN_IN_REFUSED, "tracker refused (invalid_grant)"),
         Case(TrackerAuthExpiredException(1L), ErrorKey.TRACKER_AUTH_EXPIRED, "tracker sign in again"),
+        Case(TrackerPermissionMissingException(12L, "library:write"), ErrorKey.TRACKER_PERMISSION_MISSING, "turn on library:write"),
+        Case(TrackerPermissionMissingException(12L, "offline_access"), ErrorKey.TRACKER_PERMISSION_MISSING, "turn on offline_access"),
     )
 
     /**
@@ -381,6 +386,9 @@ class ErrorTextTest {
         ErrorText.of(resources, ErrorKey.OAUTH_DENIED, null) shouldBe "denied"
         ErrorText.of(resources, ErrorKey.GOOGLE_AUTH_REFUSED, null) shouldBe "google refused"
         ErrorText.of(resources, ErrorKey.TRACKER_SIGN_IN_REFUSED, null) shouldBe "tracker refused"
+        // A scope no text names reads as a refused sign-in.
+        ErrorText.of(resources, ErrorKey.TRACKER_PERMISSION_MISSING, null) shouldBe "tracker refused"
+        ErrorText.of(resources, ErrorKey.TRACKER_PERMISSION_MISSING, "library:read") shouldBe "tracker refused"
     }
 
     /** A site stopped by name reads with its host; one that names no host, and a row stored without a detail, read without. */

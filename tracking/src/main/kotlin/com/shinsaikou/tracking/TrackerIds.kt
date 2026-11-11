@@ -27,10 +27,11 @@ object TrackerIds {
     const val MANGABAKA: Long = 11L
 
     /**
-     * Upstream v0.21.0's tracker for a reading site's own lists; the site's name is omitted. Until it
-     * was known here, a restore skipped its rows as an unknown tracker's and never wrote them back out.
+     * Comick, the tracking site at comick.dev, which stopped hosting chapters in late 2025 and keeps
+     * only the owner's lists. Reading sites with similar names are not it. Upstream v0.21.0 numbered
+     * it 12; before it was known here, a restore skipped its rows as an unknown tracker's.
      */
-    const val SITE_TRACKER_12: Long = 12L
+    const val COMICK: Long = 12L
 
     val ALL: Set<Long> = setOf(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 10L, 11L, 12L)
 

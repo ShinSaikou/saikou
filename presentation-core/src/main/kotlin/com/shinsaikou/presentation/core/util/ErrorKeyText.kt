@@ -32,7 +32,8 @@ object ErrorKeyText {
      * [detail] is a [KeyedFailure]'s own: the host of a site the library update stopped asking,
      * the WebDAV status code, the host a redirect names, the
      * reason an address was refused, the loopback port in use, an OAuth `error` code, Google
-     * Drive's status and error reason, or the code a tracker refused a sign-in with. A key whose
+     * Drive's status and error reason, the code a tracker refused a sign-in with, or the scope a
+     * tracker's sign-in left out. A key whose
      * text needs one reads without it when it is absent or unreadable.
      */
     fun text(resources: Resources, key: ErrorKey, httpCode: Int?, detail: String? = null): String = when (key) {
@@ -91,6 +92,13 @@ object ErrorKeyText {
         ErrorKey.TRACKER_SIGN_IN_REFUSED -> detail?.let { resources.getString(R.string.error_tracker_sign_in_refused_format, it) }
             ?: resources.getString(R.string.error_tracker_sign_in_refused)
         ErrorKey.TRACKER_AUTH_EXPIRED -> resources.getString(R.string.error_tracker_auth_expired)
+        ErrorKey.TRACKER_PERMISSION_MISSING -> resources.getString(
+            when (detail) {
+                SCOPE_LIBRARY_WRITE -> R.string.error_tracker_permission_library_write
+                SCOPE_OFFLINE_ACCESS -> R.string.error_tracker_permission_offline_access
+                else -> R.string.error_tracker_sign_in_refused
+            },
+        )
         ErrorKey.GENERIC -> resources.getString(R.string.error_generic)
     }
 
@@ -98,4 +106,9 @@ object ErrorKeyText {
     // cannot see the enum. A detail naming neither reads as "not a web address".
     private const val URL_REFUSED_CLEARTEXT = "CLEARTEXT"
     private const val URL_REFUSED_NOT_A_BASE_URL = "NOT_A_BASE_URL"
+
+    // The scopes a tracker's sign-in can leave out, as `:tracking` stores them for
+    // TRACKER_PERMISSION_MISSING. Any other reads as a refused sign-in.
+    private const val SCOPE_LIBRARY_WRITE = "library:write"
+    private const val SCOPE_OFFLINE_ACCESS = "offline_access"
 }

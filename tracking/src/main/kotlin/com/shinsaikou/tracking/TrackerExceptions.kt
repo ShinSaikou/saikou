@@ -17,6 +17,18 @@ class TrackerSignInRefusedException(val trackerId: Long, val error: String) :
 }
 
 /**
+ * A tracker's token endpoint granted a sign-in without a permission Saikou asked for, so nothing
+ * was stored. [scope] is the missing permission as the service names it (Comick's `library:write`
+ * or `offline_access`), which the screen reads to say what to turn on.
+ */
+class TrackerPermissionMissingException(val trackerId: Long, val scope: String) :
+    IOException("Tracker $trackerId granted the sign-in without $scope"),
+    KeyedFailure {
+    override val errorKey: ErrorKey get() = ErrorKey.TRACKER_PERMISSION_MISSING
+    override val errorDetail: String get() = scope
+}
+
+/**
  * A tracker no longer honours the stored sign-in: its token endpoint answered a refresh with 400 or
  * 401 (Q13). The tracker sets `trackAuthExpired` (`BaseTracker.setAuthExpired`) before it throws
  * this, so the retry worker keeps the push for the next sign-in instead of retrying it, and settings

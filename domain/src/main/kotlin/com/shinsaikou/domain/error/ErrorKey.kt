@@ -161,6 +161,13 @@ enum class ErrorKey(val id: String) {
     TRACKER_AUTH_EXPIRED("tracker_auth_expired"),
 
     /**
+     * A tracker's sign-in was granted without a permission Saikou asked for, so nothing was stored.
+     * Its detail is the permission's scope as the service names it (Comick's `library:write` or
+     * `offline_access`), which picks the text that says what to turn on.
+     */
+    TRACKER_PERMISSION_MISSING("tracker_permission_missing"),
+
+    /**
      * Anything not named above. Its text is the generic one. The failure's own [message], when it has
      * one, takes that text's place on a screen and goes under it in the library update error list.
      */

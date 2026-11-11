@@ -53,6 +53,7 @@ set. None of these is needed to build the app or run the unit tests.
 | `saikou.compat.seed` | `SAIKOU_COMPAT_SEED` | compat job | default 20260911 |
 | `saikou.anilist.client.id` | `SAIKOU_ANILIST_CLIENT_ID` | Gradle | the AniList API client's id; register its redirect as exactly `http://127.0.0.1:18796/callback`, since the sign-in page doesn't send one and AniList uses the registered address. Blank leaves AniList without a sign-in |
 | `saikou.mangabaka.client.id` | `SAIKOU_MANGABAKA_CLIENT_ID` | Gradle | the MangaBaka OAuth client's id, a public "Native App" client whose redirect is exactly `http://127.0.0.1:18796/callback`. Blank leaves MangaBaka without a sign-in |
+| `saikou.comick.client.id` | `SAIKOU_COMICK_CLIENT_ID` | Gradle | the Comick OAuth client's id, a public client whose redirect is exactly `http://127.0.0.1:18796/callback`. Blank leaves Comick without a sign-in |
 | `saikou.forbidden.words.file` | `SAIKOU_FORBIDDEN_WORDS_FILE` | scan | absolute path of the forbidden-word regex list, kept outside the repository |
 | `saikou.upstream.package` | `SAIKOU_UPSTREAM_PACKAGE` | comparison benches | application id of the upstream app the benches compare against |
 | `saikou.upstream.scheme` | `SAIKOU_UPSTREAM_SCHEME` | `library_update_seed.sh` | its deep link scheme, without `://` |
@@ -98,7 +99,7 @@ or unknown value fails the configuration rather than turning signing on.
 | `:library-update` | the library update worker |
 | `:backup` | `.tachibk` import and export |
 | `:sync` | Google Drive sync |
-| `:tracking` | MyAnimeList, AniList and MangaBaka |
+| `:tracking` | MyAnimeList, AniList, MangaBaka and Comick |
 | `:presentation-core` | shared Compose components and themes |
 | `:core:common`, `:core:archive`, `:core:metadata` | shared plumbing, archives, ComicInfo |
 | `:i18n` | string resources |

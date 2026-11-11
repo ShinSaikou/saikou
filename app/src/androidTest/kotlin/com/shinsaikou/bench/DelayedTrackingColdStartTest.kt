@@ -134,7 +134,10 @@ class DelayedTrackingColdStartTest {
         const val TITLE = "Tracking cold start"
         const val CHAPTER = 5.0
 
-        /** A known id no tracker in the graph has: the owner's scope ships MyAnimeList, AniList and MangaBaka. */
+        /**
+         * A known id no tracker in the graph has: the owner's scope ships MyAnimeList, AniList,
+         * MangaBaka and Comick.
+         */
         const val TRACKER_ID = TrackerIds.KITSU
         const val TIMEOUT_MILLIS = 60_000L
     }
