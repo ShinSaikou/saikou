@@ -7,6 +7,8 @@ release may change behaviour.
 
 ## Unreleased
 
+## 0.1.5 - 2026-11-12
+
 ### Added
 
 - MangaBaka as a third tracker: sign in from Settings > Tracking, then search, link and update
